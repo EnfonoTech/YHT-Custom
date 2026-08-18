@@ -70,16 +70,57 @@ BRANCH_USER_ROLE = "Branch User"
 MODULE_PROFILE = "Branch User"
 
 
+#: Provisioning steps, in dependency order. Each is independent, so one failing
+#: must not abort the rest — a DocumentLockedError on the Module Profile used to
+#: swallow the Property Setter and naming-series steps entirely, which is far
+#: worse than the original failure.
+PROVISIONING_STEPS = (
+	"ensure_branch_user_role",
+	"ensure_branch_custom_fields",
+	"preserve_standard_docperms",
+	"setup_branch_user_permissions",
+	"ensure_module_profile",
+	"setup_ignore_user_permissions",
+	"setup_branch_series",
+)
+
+
 def after_migrate():
-	"""Entry point wired from hooks.py."""
-	ensure_branch_user_role()
-	ensure_branch_custom_fields()
-	preserve_standard_docperms()
-	setup_branch_user_permissions()
-	ensure_module_profile()
-	setup_ignore_user_permissions()
-	setup_branch_series()
-	frappe.db.commit()
+	"""Entry point wired from hooks.py.
+
+	Runs every provisioning step, logging and continuing past any that fails.
+	The alternative — letting the first exception propagate — means a transient
+	lock on one document silently leaves the permission layer half-built.
+	"""
+	import sys
+
+	failures = []
+	for step in PROVISIONING_STEPS:
+		func = globals().get(step) or _imported(step)
+		try:
+			func()
+			frappe.db.commit()
+		except Exception as e:
+			frappe.db.rollback()
+			failures.append(f"{step}: {type(e).__name__}: {e}")
+			frappe.log_error(frappe.get_traceback(), f"yht_custom after_migrate: {step}")
+			print(f"  yht_custom after_migrate: {step} FAILED — {type(e).__name__}: {e}", file=sys.stderr)
+
+	if failures:
+		# Loud but non-fatal: migrate should still finish so the rest of the
+		# deploy completes, but nobody should be able to miss this.
+		print("\n  yht_custom after_migrate completed WITH FAILURES:", file=sys.stderr)
+		for f in failures:
+			print(f"    - {f}", file=sys.stderr)
+	return {"failures": failures}
+
+
+def _imported(name):
+	"""Resolve a step that lives in another module."""
+	return {
+		"setup_ignore_user_permissions": setup_ignore_user_permissions,
+		"setup_branch_series": setup_branch_series,
+	}[name]
 
 
 # ------------------------------------------------------------------------ role
@@ -227,12 +268,30 @@ def _upsert_custom_docperm(doctype, role, spec, permlevel=0):
 
 
 def ensure_module_profile():
-	"""A Module Profile exposing only Yht Custom, so the sidebar is not a maze."""
-	all_modules = frappe.get_all("Module Def", pluck="name")
-	blocked = [m for m in all_modules if m != "Yht Custom"]
+	"""A Module Profile exposing only Yht Custom, so the sidebar is not a maze.
+
+	Saving a Module Profile enqueues a background job to re-apply it to every
+	user, and that leaves the document locked. A later ``after_migrate`` then
+	dies with ``DocumentLockedError``. Two defences:
+
+	1. Compare first and return without saving when nothing changed — which is
+	   the normal case on every deploy after the first.
+	2. When a save IS needed, clear a stale lock rather than fail the migrate.
+	"""
+	blocked = sorted(m for m in frappe.get_all("Module Def", pluck="name") if m != "Yht Custom")
 
 	if frappe.db.exists("Module Profile", MODULE_PROFILE):
+		current = sorted(
+			frappe.get_all("Block Module", filters={"parent": MODULE_PROFILE}, pluck="module")
+		)
+		if current == blocked:
+			return  # nothing to do — no save, no lock
+
 		doc = frappe.get_doc("Module Profile", MODULE_PROFILE)
+		if doc.is_locked:
+			# The lock belongs to a finished job; holding the migrate hostage to it
+			# achieves nothing.
+			doc.unlock()
 	else:
 		doc = frappe.new_doc("Module Profile")
 		doc.module_profile_name = MODULE_PROFILE

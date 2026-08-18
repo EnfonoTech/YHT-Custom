@@ -209,3 +209,46 @@ class TestBranchGuard(FrappeTestCase):
 			self.skipTest("company has no default cost center")
 		frappe.set_user(TEST_USER)
 		self.assertIn(default_cc, get_branch_scope()["cost_centers"])
+
+
+class TestProvisioning(FrappeTestCase):
+	"""after_migrate must be resilient and idempotent — it runs on every deploy."""
+
+	def test_module_profile_is_a_noop_when_unchanged(self):
+		"""Saving a Module Profile leaves it locked, so a repeat save used to kill
+		the whole migrate with DocumentLockedError."""
+		from yht_custom.setup import MODULE_PROFILE, ensure_module_profile
+
+		ensure_module_profile()
+		frappe.db.commit()
+		before = frappe.db.get_value("Module Profile", MODULE_PROFILE, "modified")
+
+		ensure_module_profile()  # must not raise, must not touch the document
+		frappe.db.commit()
+		after = frappe.db.get_value("Module Profile", MODULE_PROFILE, "modified")
+		self.assertEqual(before, after, "second call re-saved the Module Profile")
+
+	def test_module_profile_survives_a_stale_lock(self):
+		from yht_custom.setup import MODULE_PROFILE, ensure_module_profile
+
+		ensure_module_profile()
+		frappe.db.commit()
+
+		doc = frappe.get_doc("Module Profile", MODULE_PROFILE)
+		doc.lock()
+		# force a change so the function has to save through the lock
+		frappe.db.delete("Block Module", {"parent": MODULE_PROFILE, "module": "Core"})
+		frappe.db.commit()
+		try:
+			ensure_module_profile()  # must not raise
+		finally:
+			frappe.get_doc("Module Profile", MODULE_PROFILE).unlock()
+		frappe.db.commit()
+
+	def test_after_migrate_reports_failures_instead_of_aborting(self):
+		"""A failing step must not swallow the ones after it."""
+		from yht_custom import setup
+
+		result = setup.after_migrate()
+		self.assertIn("failures", result)
+		self.assertEqual(result["failures"], [], f"after_migrate reported failures: {result['failures']}")
