@@ -11,36 +11,52 @@ isolation on write is gone and nothing else would notice.
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
+from yht_custom.branch_fields import GUARDED_PARENTS, all_scoped_pairs, get_scoped_fields
 from yht_custom.branch_guard import get_branch_scope, validate_branch_scope
-from yht_custom.setup_property_setters import (
-	IGNORE_USER_PERMISSION_FIELDS,
-	setup_ignore_user_permissions,
-)
+from yht_custom.setup_property_setters import setup_ignore_user_permissions
 
 TEST_BRANCH = "_Test YHT Guard Branch"
 TEST_USER = "_test_yht_guard_user@example.com"
 
 
 class TestPropertySetters(FrappeTestCase):
-	def test_every_listed_field_actually_exists(self):
-		"""A renamed or dropped ERPNext field would silently lose its setter."""
-		missing = []
-		for doctype, fieldname in IGNORE_USER_PERMISSION_FIELDS:
-			if not frappe.db.exists("DocType", doctype):
-				missing.append(f"{doctype} (doctype)")
-				continue
-			if not frappe.get_meta(doctype).get_field(fieldname):
-				missing.append(f"{doctype}.{fieldname}")
-		self.assertEqual(missing, [], f"fields in the list that do not exist: {missing}")
+	def test_pairs_are_derived_and_non_empty(self):
+		"""Derived from live metadata, so every pair exists by construction."""
+		pairs = all_scoped_pairs()
+		self.assertGreater(len(pairs), 30, "suspiciously few scoped fields discovered")
+		for doctype, fieldname in pairs:
+			field = frappe.get_meta(doctype).get_field(fieldname)
+			self.assertIsNotNone(field, f"{doctype}.{fieldname}")
+			self.assertEqual(field.fieldtype, "Link")
+			self.assertIn(field.options, ("Warehouse", "Cost Center"))
+
+	def test_known_v15_fields_are_discovered(self):
+		"""Fields the first hand-written list MISSED. Regression guard: each of
+		these is a field a branch user could otherwise point at another branch."""
+		expected = [
+			("Purchase Receipt", "rejected_warehouse"),
+			("Purchase Receipt Item", "rejected_warehouse"),
+			("Sales Invoice", "set_target_warehouse"),
+			("Sales Invoice", "write_off_cost_center"),
+			("Sales Order", "cost_center"),
+			("Purchase Order", "set_from_warehouse"),
+			("Delivery Note", "cost_center"),
+			("Material Request Item", "cost_center"),
+		]
+		pairs = set(all_scoped_pairs())
+		missing = [p for p in expected if p not in pairs]
+		self.assertEqual(missing, [], f"discovery missed: {missing}")
+
+	def test_quotation_has_no_warehouse_header_field(self):
+		"""The first list named Quotation.set_warehouse, which does not exist in
+		v15 — this pins the fact so it cannot creep back."""
+		self.assertEqual(get_scoped_fields("Quotation")["Warehouse"], [])
+		self.assertEqual(get_scoped_fields("Quotation Item")["Cost Center"], [])
 
 	def test_setters_are_applied(self):
 		setup_ignore_user_permissions()
 		frappe.db.commit()
-		for doctype, fieldname in IGNORE_USER_PERMISSION_FIELDS:
-			if not frappe.db.exists("DocType", doctype):
-				continue
-			if not frappe.get_meta(doctype).get_field(fieldname):
-				continue
+		for doctype, fieldname in all_scoped_pairs():
 			value = frappe.db.get_value(
 				"Property Setter",
 				{"doc_type": doctype, "field_name": fieldname, "property": "ignore_user_permissions"},
@@ -59,6 +75,18 @@ class TestPropertySetters(FrappeTestCase):
 			   group by doc_type, field_name having c > 1"""
 		)
 		self.assertEqual(dupes, (), f"duplicate Property Setters: {dupes}")
+
+	def test_setter_and_guard_cover_the_same_fields(self):
+		"""The whole point of branch_fields: a field whose link check is switched
+		off but which the guard does not validate is an unguarded hole."""
+		for doctype, _fieldname in all_scoped_pairs():
+			# every scoped doctype is either guarded directly or reached as a child
+			reachable = doctype in GUARDED_PARENTS or any(
+				doctype.startswith(parent) for parent in GUARDED_PARENTS
+			)
+			if doctype == "Item Default":
+				continue  # a master, seeded onto documents; not itself posted by a branch user
+			self.assertTrue(reachable, f"{doctype} has setters but the guard never sees it")
 
 
 class TestBranchGuard(FrappeTestCase):
@@ -160,6 +188,19 @@ class TestBranchGuard(FrappeTestCase):
 		frappe.set_user("Administrator")
 		scope = get_branch_scope()
 		self.assertFalse(scope["restricted"])
+
+	def test_out_of_scope_rejected_warehouse_is_rejected(self):
+		"""rejected_warehouse was missing from the first hand-written list — a
+		branch user could have routed rejected stock to another branch."""
+		frappe.set_user(TEST_USER)
+		doc = frappe.new_doc("Purchase Receipt")
+		doc.company = self.company
+		doc.supplier = frappe.db.get_value("Supplier", {}, "name")
+		if not doc.supplier:
+			self.skipTest("no Supplier on this site")
+		doc.set_warehouse = self.mine
+		doc.rejected_warehouse = self.theirs
+		self.assertRaises(frappe.ValidationError, validate_branch_scope, doc)
 
 	def test_company_default_cost_center_is_always_in_scope(self):
 		"""ERPNext tax templates hardcode it; excluding it fails every taxed doc."""

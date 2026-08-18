@@ -21,9 +21,7 @@ from frappe import _
 
 from yht_custom.branch_defaults import BYPASS_ROLES, _is_bypass, _user_branch_config
 
-#: Header field -> label, per doctype. Item-row fields are handled generically.
-HEADER_WAREHOUSE_FIELDS = ("set_warehouse", "set_from_warehouse", "from_warehouse", "to_warehouse")
-ITEM_WAREHOUSE_FIELDS = ("warehouse", "target_warehouse", "s_warehouse", "t_warehouse", "from_warehouse")
+from yht_custom.branch_fields import GUARD_EXCLUDE, GUARDED_PARENTS, get_scoped_fields
 
 
 def _branch_scope(user=None):
@@ -50,6 +48,31 @@ def _branch_scope(user=None):
 	return warehouses, cost_centers
 
 
+ALLOWED_BY_TARGET = {"Warehouse": 0, "Cost Center": 1}
+
+
+def _check(doc_or_row, doctype, allowed, prefix=""):
+	"""Collect scope offences on one document or child row.
+
+	Fields come from live metadata, so a field ERPNext adds in a later version is
+	guarded automatically instead of silently escaping the check.
+	"""
+	offences = []
+	fields = get_scoped_fields(doctype)
+
+	for target, permitted in (("Warehouse", allowed[0]), ("Cost Center", allowed[1])):
+		if not permitted:
+			continue
+		for fieldname in fields[target]:
+			if (doctype, fieldname) in GUARD_EXCLUDE:
+				continue
+			value = doc_or_row.get(fieldname)
+			if value and value not in permitted:
+				label = doc_or_row.meta.get_label(fieldname) if doc_or_row.meta.get_field(fieldname) else fieldname
+				offences.append((_(target), f"{prefix}{label}", value))
+	return offences
+
+
 def validate_branch_scope(doc, method=None):
 	"""Reject warehouses and cost centers outside the user's branch."""
 	if _is_bypass():
@@ -59,37 +82,13 @@ def validate_branch_scope(doc, method=None):
 	if warehouses is None:
 		return  # not a branch-mapped user
 
-	offences = []
+	allowed = (warehouses, cost_centers)
+	offences = _check(doc, doc.doctype, allowed)
 
-	# --- header warehouse fields ---
-	for fieldname in HEADER_WAREHOUSE_FIELDS:
-		if not doc.meta.has_field(fieldname):
-			continue
-		value = doc.get(fieldname)
-		if value and warehouses and value not in warehouses:
-			offences.append((_("Warehouse"), doc.meta.get_label(fieldname), value))
-
-	# --- header cost center ---
-	if doc.meta.has_field("cost_center") and cost_centers:
-		value = doc.get("cost_center")
-		if value and value not in cost_centers:
-			offences.append((_("Cost Center"), doc.meta.get_label("cost_center"), value))
-
-	# --- item rows ---
-	for row in doc.get("items") or []:
-		for fieldname in ITEM_WAREHOUSE_FIELDS:
-			if not row.meta.has_field(fieldname):
-				continue
-			value = row.get(fieldname)
-			if value and warehouses and value not in warehouses:
-				offences.append((_("Warehouse"), f"{_('Row')} {row.idx} {row.meta.get_label(fieldname)}", value))
-
-		if row.meta.has_field("cost_center") and cost_centers:
-			value = row.get("cost_center")
-			if value and value not in cost_centers:
-				offences.append(
-					(_("Cost Center"), f"{_('Row')} {row.idx} {row.meta.get_label('cost_center')}", value)
-				)
+	child_field = GUARDED_PARENTS.get(doc.doctype, "items")
+	if child_field:
+		for row in doc.get(child_field) or []:
+			offences += _check(row, row.doctype, allowed, prefix=f"{_('Row')} {row.idx} ")
 
 	if not offences:
 		return

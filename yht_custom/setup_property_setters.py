@@ -11,8 +11,7 @@ User Permission for `Khobar Store` and a document's `set_warehouse` holds
 That fires constantly in normal use, because global defaults, Item Defaults and
 existing documents all reference warehouses the user was never granted.
 
-Setting `ignore_user_permissions = 1` on those link fields stops the link-level
-block.
+`ignore_user_permissions = 1` on those link fields stops the link-level block.
 
 ## What that costs, and how it is paid for
 
@@ -27,80 +26,25 @@ acceptable, so the restriction is re-established elsewhere:
 3. Form `set_query` filters — the pickers only offer permitted values. UX, not
    enforcement.
 
-Layer 1 is what makes this safe. Never ship these Property Setters without it.
+Layer 1 is what makes this safe. **Never ship these Property Setters without it**
+— and both read their field list from `branch_fields`, so the two cannot drift.
 """
 
 import frappe
 
-#: (doctype, fieldname) pairs that reference a warehouse or cost center and must
-#: not be link-blocked. Header fields AND item-row fields — an item row carrying
-#: another branch's cost center blocks the whole document just as effectively.
-IGNORE_USER_PERMISSION_FIELDS = [
-	# --- selling ---
-	("Quotation", "set_warehouse"),
-	("Quotation Item", "warehouse"),
-	("Quotation Item", "cost_center"),
-	("Sales Order", "set_warehouse"),
-	("Sales Order Item", "warehouse"),
-	("Sales Order Item", "cost_center"),
-	("Delivery Note", "set_warehouse"),
-	("Delivery Note Item", "warehouse"),
-	("Delivery Note Item", "target_warehouse"),
-	("Delivery Note Item", "cost_center"),
-	("Sales Invoice", "set_warehouse"),
-	("Sales Invoice Item", "warehouse"),
-	("Sales Invoice Item", "cost_center"),
-	# --- buying ---
-	("Purchase Order", "set_warehouse"),
-	("Purchase Order Item", "warehouse"),
-	("Purchase Order Item", "cost_center"),
-	("Purchase Receipt", "set_warehouse"),
-	("Purchase Receipt Item", "warehouse"),
-	("Purchase Receipt Item", "cost_center"),
-	("Purchase Invoice", "set_warehouse"),
-	("Purchase Invoice Item", "warehouse"),
-	("Purchase Invoice Item", "cost_center"),
-	# --- stock ---
-	("Stock Entry", "from_warehouse"),
-	("Stock Entry", "to_warehouse"),
-	("Stock Entry Detail", "s_warehouse"),
-	("Stock Entry Detail", "t_warehouse"),
-	("Stock Entry Detail", "cost_center"),
-	("Material Request", "set_warehouse"),
-	("Material Request", "set_from_warehouse"),
-	("Material Request Item", "warehouse"),
-	("Material Request Item", "from_warehouse"),
-	# --- masters that seed the above ---
-	("Item Default", "default_warehouse"),
-	("Item Default", "buying_cost_center"),
-	("Item Default", "selling_cost_center"),
-	# --- accounting ---
-	("Payment Entry", "cost_center"),
-	("Journal Entry Account", "cost_center"),
-]
+from yht_custom.branch_fields import all_scoped_pairs
 
 
-def setup_ignore_user_permissions():
-	"""Idempotently stamp ignore_user_permissions=1 on every field above.
+def setup_ignore_user_permissions() -> dict:
+	"""Stamp ignore_user_permissions=1 on every branch-scoped link field.
 
-	``frappe.make_property_setter`` always inserts, so duplicates are handled
-	here rather than letting a second ``after_migrate`` throw.
+	Idempotent: ``frappe.make_property_setter`` always inserts, so existing rows
+	are detected and updated here rather than letting a second ``after_migrate``
+	create duplicates.
 	"""
-	applied, skipped = 0, []
+	applied, already, failed = 0, 0, []
 
-	for doctype, fieldname in IGNORE_USER_PERMISSION_FIELDS:
-		if not frappe.db.exists("DocType", doctype):
-			skipped.append(f"{doctype} (no such doctype)")
-			continue
-
-		meta = frappe.get_meta(doctype)
-		field = meta.get_field(fieldname)
-		if not field:
-			# A field ERPNext renamed or dropped between versions — worth knowing
-			# about rather than silently ignoring.
-			skipped.append(f"{doctype}.{fieldname} (no such field)")
-			continue
-
+	for doctype, fieldname in all_scoped_pairs():
 		existing = frappe.db.get_value(
 			"Property Setter",
 			{"doc_type": doctype, "field_name": fieldname, "property": "ignore_user_permissions"},
@@ -111,22 +55,33 @@ def setup_ignore_user_permissions():
 			if str(existing.value) != "1":
 				frappe.db.set_value("Property Setter", existing.name, "value", "1")
 				applied += 1
+			else:
+				already += 1
 			continue
 
-		frappe.make_property_setter(
-			doctype,
-			fieldname,
-			"ignore_user_permissions",
-			"1",
-			"Check",
-			validate_fields_for_doctype=False,
-		)
-		applied += 1
+		try:
+			# frappe.make_property_setter takes an args DICT — the positional-argument
+			# form belongs to property_setter.make_property_setter, a different
+			# function. Passing positionals here raises "got multiple values for
+			# argument 'validate_fields_for_doctype'".
+			frappe.make_property_setter(
+				{
+					"doctype": doctype,
+					"fieldname": fieldname,
+					"property": "ignore_user_permissions",
+					"value": "1",
+					"property_type": "Check",
+				},
+				validate_fields_for_doctype=False,
+			)
+			applied += 1
+		except Exception as e:
+			failed.append(f"{doctype}.{fieldname}: {type(e).__name__} {e}")
 
-	if skipped:
+	if failed:
 		frappe.log_error(
-			"yht_custom.setup_property_setters skipped:\n" + "\n".join(skipped),
+			"yht_custom.setup_property_setters failures:\n" + "\n".join(failed),
 			"Branch Property Setters",
 		)
 
-	return {"applied": applied, "skipped": skipped}
+	return {"applied": applied, "already_set": already, "failed": failed}
