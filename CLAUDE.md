@@ -139,15 +139,30 @@ accountant: SI→`CN`, DN→`DRN`, PI→`DBN`, PR→`PRN`.
     code.
 11. **`install-app hrms` needs `--force`** when orphan HR/Payroll `Module Def` rows exist —
     `add_module_defs` does a plain insert and dies on `DuplicateEntryError`.
+12. **`FrappeTestCase` rolls back after every test**, so fixtures built in `setUpClass` vanish after the first
+    one. Build them in `setUp`.
 
 ## Deploy
 
+Repo: **`git@github-yht:EnfonoTech/YHT-Custom.git`** (private). The box has a dedicated read-only deploy key at
+`/home/v15/.ssh/yht_github_deploy`, reached through the `github-yht` host alias in `/home/v15/.ssh/config`. The
+alias exists because the pre-existing `Host github.com` block points at the **yas_logistics** deploy key, and
+deploy keys are repo-scoped — using `github.com` here authenticates as the wrong repo and is denied.
+
 ```bash
-cd /home/v15/yht-bench/apps/yht_custom && sudo -u v15 git pull origin main
+cd /home/v15/yht-bench/apps/yht_custom && sudo -u v15 -H git pull upstream main
 cd /home/v15/yht-bench && sudo -u v15 bench --site yht-khobhar.enfonoerp.com migrate
 sudo -u v15 bench --site yht-khobhar.enfonoerp.com clear-cache
 sudo supervisorctl signal QUIT yht-bench-web:yht-bench-frappe-web
 ```
+
+Two things that will bite:
+
+- **The remote is `upstream`, not `origin`** — that is what `bench get-app` names it. `git pull origin main`
+  fails.
+- **`sudo -u v15` needs `-H`.** Without it HOME stays root's, ssh never reads `/home/v15/.ssh/config`, the
+  `github-yht` alias does not resolve, and the pull fails with "Could not read from remote repository" — which
+  looks like a permissions problem and is not.
 
 Add `touch /home/v15/yht-bench/sites/assets/assets.json` after any page-JS change (gotcha 8).
 
