@@ -53,6 +53,7 @@ MariaDB and box CPU/RAM are shared.
 | `branch_filters.py` | `permission_query_conditions` per doctype, keyed on branch warehouses |
 | `branch_defaults.py` | `before_validate` cost-center override + `before_insert` naming-series pick |
 | `setup_branch_series.py` | `SERIES_TARGETS` → Branch Naming Series rows + `naming_series` Property Setters |
+| `item_naming.py` | item-group-wise item code generation (`Item.before_insert`) |
 | `api/dashboard.py` | `get_dashboard_data` for the dashboard page |
 | `yht_custom/doctype/branch_configuration/` | the provisioning core |
 | `yht_custom/page/yht_dashboard/` | branch-user landing page |
@@ -141,6 +142,15 @@ accountant: SI→`CN`, DN→`DRN`, PI→`DBN`, PR→`PRN`.
     `add_module_defs` does a plain insert and dies on `DuplicateEntryError`.
 12. **`FrappeTestCase` rolls back after every test**, so fixtures built in `setUpClass` vanish after the first
     one. Build them in `setUp`.
+13. **`tabSeries` has no DocType record.** `frappe.db.get_value("Series", ...)` fails — the query builder cannot
+    resolve metadata for a bare table. Use parameterised raw SQL, as frappe's own `naming.py` does.
+14. **`StockSettings.cant_change_valuation_method()` blocks a global valuation change** while any Stock Ledger
+    Entry exists for an item with no valuation method of its own. Stamp the items first, change the setting
+    second — never the reverse.
+15. **Do NOT set `item_naming_by = "Naming Series"`.** `Item.autoname` then calls `set_name_by_naming_series`,
+    which throws on an empty `naming_series` — blocking item creation for every group without one. Item codes
+    are generated in `before_insert` instead (see `item_naming.py`), which frappe runs *before*
+    `set_new_name()`.
 
 ## Deploy
 
@@ -174,12 +184,31 @@ cd /home/v15/yht-bench && sudo -u v15 bench --site yht-khobhar.enfonoerp.com run
 
 ## Status
 
-**Step 2 (scaffold) — done.** App installs, migrates, provisions the Branch User role, the four `Branch` custom
-fields, DocPerms, Module Profile and the series machinery. Branch Configuration works end to end with tests.
+**Steps 2 and 3 — done. 21 tests, all passing** (1 skipped: the cross-company guard has nothing to test on a
+single-company site).
+
+Step 2 — app installs and migrates; `after_migrate` provisions the Branch User role, the four `Branch` custom
+fields, 35 Branch User DocPerms, the Module Profile and the series machinery. Branch Configuration works end to
+end. Branch `Kathoom Alkhobar` carries prefix `KS` with 16 series seeded.
+
+Step 3 — site settings:
+
+| Setting | Value |
+|---|---|
+| `Stock Settings.valuation_method` | `Moving Average` (all 4,053 items too, none blank) |
+| `Stock Settings.enable_stock_reservation` | `1` |
+| `Stock Settings.allow_negative_stock` | `0` |
+| `Stock Settings.item_naming_by` | `Item Code` — **deliberately unchanged**, see gotcha 15 |
+| `Accounts Settings.enable_common_party_accounting` | `1` (was already enabled) |
+| freeze dates | still `0001-01-01` — **waiting on a date from finance** |
+
+Item code generation is live but **inert until prefixes are set**: all 29 leaf item groups have an empty
+`custom_item_code_prefix`, so codes stay manual. Nothing is blocked — the mechanism is per-group and only fires
+when `item_code` is blank AND the group has a prefix. Run
+`yht_custom.item_naming.get_prefix_coverage()` for the outstanding list.
 
 **Not built yet** — tracked in `../docs/00-STUDY-AND-PLAN.md`:
 
-- Step 3: settings (Moving Average, common party accounting, stock reservation, item naming by series)
 - Step 4: warehouse/cost-center tree, `ignore_user_permissions` Property Setters (4.7), cancel-rights restriction
 - Step 5: DN-compulsory flow, **Expense Purchase Invoice (§5.2)**, sales assist, item-code generation, Saudi
   national address
