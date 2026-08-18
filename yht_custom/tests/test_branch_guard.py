@@ -235,14 +235,22 @@ class TestProvisioning(FrappeTestCase):
 		frappe.db.commit()
 
 		doc = frappe.get_doc("Module Profile", MODULE_PROFILE)
+		# lock() itself raises if the document is already locked — and on a live
+		# site it often is, left behind by the apply-to-users job. Normalise first.
+		if doc.is_locked:
+			doc.unlock()
 		doc.lock()
+		self.assertTrue(frappe.get_doc("Module Profile", MODULE_PROFILE).is_locked)
+
 		# force a change so the function has to save through the lock
 		frappe.db.delete("Block Module", {"parent": MODULE_PROFILE, "module": "Core"})
 		frappe.db.commit()
 		try:
 			ensure_module_profile()  # must not raise
 		finally:
-			frappe.get_doc("Module Profile", MODULE_PROFILE).unlock()
+			fresh = frappe.get_doc("Module Profile", MODULE_PROFILE)
+			if fresh.is_locked:
+				fresh.unlock()
 		frappe.db.commit()
 
 	def test_after_migrate_reports_failures_instead_of_aborting(self):
