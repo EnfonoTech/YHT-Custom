@@ -16,21 +16,22 @@ TEST_USER = "_test_yht_branch_user@example.com"
 
 
 class TestBranchConfiguration(FrappeTestCase):
-	@classmethod
-	def setUpClass(cls):
-		super().setUpClass()
-		cls.company = frappe.db.get_value("Company", {}, "name")
-		if not cls.company:
-			raise frappe.ValidationError("No Company on this site; cannot run Branch Configuration tests.")
+	# Fixtures are built in setUp, NOT setUpClass: FrappeTestCase wraps each test
+	# in a transaction and tearDown rolls it back, which would take class-level
+	# inserts with it and leave every test after the first without its Branch.
+	def setUp(self):
+		self.company = frappe.db.get_value("Company", {}, "name")
+		if not self.company:
+			self.skipTest("no Company on this site")
 
-		cls.warehouses = frappe.get_all(
-			"Warehouse", filters={"company": cls.company, "is_group": 0}, pluck="name", limit=2
+		self.warehouses = frappe.get_all(
+			"Warehouse", filters={"company": self.company, "is_group": 0}, pluck="name", limit=2
 		)
-		cls.cost_centers = frappe.get_all(
-			"Cost Center", filters={"company": cls.company, "is_group": 0}, pluck="name", limit=1
+		self.cost_centers = frappe.get_all(
+			"Cost Center", filters={"company": self.company, "is_group": 0}, pluck="name", limit=1
 		)
-		if not cls.warehouses or not cls.cost_centers:
-			raise frappe.ValidationError("Need at least one leaf Warehouse and Cost Center to run these tests.")
+		if not self.warehouses or not self.cost_centers:
+			self.skipTest("need at least one leaf Warehouse and Cost Center")
 
 		if not frappe.db.exists("Branch", TEST_BRANCH):
 			frappe.get_doc({"doctype": "Branch", "branch": TEST_BRANCH}).insert(ignore_permissions=True)
