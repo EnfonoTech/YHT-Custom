@@ -136,10 +136,25 @@ BRANCH_CUSTOM_FIELDS = [
 ]
 
 
+#: Prefix that drives item-group-wise item code generation (see item_naming.py).
+ITEM_GROUP_CUSTOM_FIELDS = [
+	{
+		"fieldname": "custom_item_code_prefix",
+		"label": "Item Code Prefix",
+		"fieldtype": "Data",
+		"insert_after": "item_group_name",
+		"description": "Letter prefix for auto-generated item codes in this group, e.g. <code>BV</code> gives <code>BV-0001</code>. Leave empty to keep entering item codes by hand.",
+	},
+]
+
+
 def ensure_branch_custom_fields():
 	from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
-	create_custom_fields({"Branch": BRANCH_CUSTOM_FIELDS}, ignore_validate=True)
+	create_custom_fields(
+		{"Branch": BRANCH_CUSTOM_FIELDS, "Item Group": ITEM_GROUP_CUSTOM_FIELDS},
+		ignore_validate=True,
+	)
 
 
 # ----------------------------------------------------------------- permissions

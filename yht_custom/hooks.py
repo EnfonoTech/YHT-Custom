@@ -19,7 +19,9 @@ app_include_css = "/assets/yht_custom/css/yht_custom.css?v=1"
 
 # Prefer doctype_js over app_include_js: it takes effect without a `bench build`,
 # which matters because builds are limited to the maintenance window.
-doctype_js = {}
+doctype_js = {
+	"Item": "public/js/item_code_from_group.js",
+}
 doctype_list_js = {}
 
 # ------------------------------------------------------------------- home pages
@@ -58,6 +60,12 @@ _BRANCH_DEFAULT_EVENTS = {
 }
 
 doc_events = {
+	# Item code generation — before_insert, because frappe runs it BEFORE
+	# set_new_name() and ERPNext's Item.autoname ends with name = item_code.
+	"Item": {"before_insert": "yht_custom.item_naming.set_item_code_from_group"},
+}
+
+doc_events.update({
 	doctype: dict(_BRANCH_DEFAULT_EVENTS)
 	for doctype in (
 		"Sales Invoice",
@@ -73,7 +81,7 @@ doc_events = {
 		"Material Request",
 		"Stock Reconciliation",
 	)
-}
+})
 
 # -------------------------------------------------------------------- fixtures
 # A fixture needs BOTH the entry here AND the record itself — a name missing from
@@ -91,6 +99,7 @@ fixtures = [
 					"Branch-custom_branch_name_ar",
 					"Branch-custom_letter_head",
 					"Branch-custom_naming_series_table",
+					"Item Group-custom_item_code_prefix",
 				],
 			]
 		],
