@@ -27,7 +27,7 @@ before the client has decided all 28 prefixes.
 import frappe
 from frappe import _
 from frappe.model.naming import getseries
-from frappe.utils import cstr
+from frappe.utils import cint, cstr
 
 #: Digits in the numeric part. 4 gives 9,999 items per group; the largest group
 #: here holds 498.
@@ -59,8 +59,13 @@ def peek_next_code(item_group: str) -> str:
 	prefix = get_group_prefix(item_group)
 	if not prefix:
 		return ""
-	current = frappe.db.get_value("Series", _series_key(prefix), "current") or 0
-	return f"{prefix}-{str(int(current) + 1).zfill(CODE_DIGITS)}"
+
+	# Raw parameterised SQL, not frappe.db.get_value: `tabSeries` is a bare table
+	# with no DocType record behind it, so the query builder cannot resolve
+	# metadata for it. Frappe's own naming.py talks to tabSeries the same way.
+	row = frappe.db.sql("SELECT `current` FROM `tabSeries` WHERE `name` = %s", (_series_key(prefix),))
+	current = cint(row[0][0]) if row and row[0][0] is not None else 0
+	return f"{prefix}-{str(current + 1).zfill(CODE_DIGITS)}"
 
 
 def generate_code(item_group: str) -> str:
