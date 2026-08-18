@@ -53,6 +53,9 @@ MariaDB and box CPU/RAM are shared.
 | `branch_filters.py` | `permission_query_conditions` per doctype, keyed on branch warehouses |
 | `branch_defaults.py` | `before_validate` cost-center override + `before_insert` naming-series pick |
 | `setup_branch_series.py` | `SERIES_TARGETS` → Branch Naming Series rows + `naming_series` Property Setters |
+| `branch_fields.py` | **metadata-derived** list of branch-scoped warehouse / cost-center link fields — the single source of truth shared by the setters and the guard |
+| `branch_guard.py` | server-side `validate` scope enforcement — the boundary that makes the Property Setters safe |
+| `setup_property_setters.py` | `ignore_user_permissions` on every scoped field |
 | `item_naming.py` | item-group-wise item code generation (`Item.before_insert`) |
 | `api/dashboard.py` | `get_dashboard_data` for the dashboard page |
 | `yht_custom/doctype/branch_configuration/` | the provisioning core |
@@ -67,8 +70,17 @@ All five are required. Skipping any one breaks the others.
 2. **Custom DocPerm** — which doctypes a Branch User may touch (`setup.BRANCH_USER_PERMISSIONS`)
 3. **`permission_query_conditions`** — SQL list filtering (`branch_filters`)
 4. **Cost-center override** at `before_validate` — replaces a cost center the user cannot see
-5. **`ignore_user_permissions` Property Setters** — on every field that legitimately references another
-   branch's warehouse or cost center. **Not yet applied — Step 4.7.**
+5. **`ignore_user_permissions` Property Setters** (`setup_property_setters`) — on every field that legitimately
+   references another branch's warehouse or cost center. 63 of them, derived from live metadata.
+
+**Layer 5 removes the write-side restriction along with the form-opening block, so layer 3½ exists:**
+`branch_guard.validate_branch_scope` on `validate` rejects any warehouse or cost centre outside the user's
+branch. That is the real boundary — it holds on the desk, `frappe.client.save`, imports and Server Scripts.
+Client-side `set_query` filters (`branch_user_forms.js`) are UX only and enforce nothing.
+
+**Both the setters and the guard read `branch_fields.all_scoped_pairs()`.** Never hard-code that list: the first
+version named two fields that do not exist in v15 and missed 27 that do, and every field in the setter list but
+not the guard list is one a branch user can point at another branch with nothing checking it.
 
 ### Branch Configuration
 
@@ -151,6 +163,16 @@ accountant: SI→`CN`, DN→`DRN`, PI→`DBN`, PR→`PRN`.
     which throws on an empty `naming_series` — blocking item creation for every group without one. Item codes
     are generated in `before_insert` instead (see `item_naming.py`), which frappe runs *before*
     `set_new_name()`.
+16. **`frappe.make_property_setter` takes an args DICT.** The positional form belongs to
+    `property_setter.make_property_setter`, a different function — passing positionals raises "got multiple
+    values for argument 'validate_fields_for_doctype'".
+17. **Saving a Module Profile leaves it locked** (it enqueues an apply-to-users job), so the next
+    `after_migrate` dies with `DocumentLockedError`. Compare first and skip the save when nothing changed; clear
+    a stale lock when a save is genuinely needed. `doc.lock()` also raises if already locked.
+18. **`block_modules` does NOT affect permissions** — it is absent from `permissions.py` and only trims the desk
+    sidebar. Do not reach for a Module Profile to restrict access.
+19. **A role inserted moments ago is not in the user's cached permission set.** `frappe.clear_cache(user=...)`
+    before `frappe.set_user(...)`, or every read comes back as a bare `PermissionError`.
 
 ## Deploy
 
