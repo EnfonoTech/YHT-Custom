@@ -1,0 +1,53 @@
+{
+ "charts": [],
+ "content": "[{\"id\":\"yht_head\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">Branch</span>\",\"col\":12}},{\"id\":\"yht_sc\",\"type\":\"card\",\"data\":{\"card_name\":\"Sales\",\"col\":4}},{\"id\":\"yht_pc\",\"type\":\"card\",\"data\":{\"card_name\":\"Purchase\",\"col\":4}},{\"id\":\"yht_rc\",\"type\":\"card\",\"data\":{\"card_name\":\"Reports\",\"col\":4}}]",
+ "creation": "2026-08-19 02:00:00.000000",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "retail",
+ "idx": 0,
+ "is_hidden": 0,
+ "label": "Branch User",
+ "links": [
+  {"hidden": 0, "is_query_report": 0, "label": "Sales", "link_count": 5, "onboard": 0, "type": "Card Break"},
+  {"dependencies": "", "hidden": 0, "is_query_report": 0, "label": "Sales Invoice", "link_count": 0, "link_to": "Sales Invoice", "link_type": "DocType", "onboard": 1, "type": "Link"},
+  {"dependencies": "", "hidden": 0, "is_query_report": 0, "label": "Quotation", "link_count": 0, "link_to": "Quotation", "link_type": "DocType", "onboard": 1, "type": "Link"},
+  {"dependencies": "", "hidden": 0, "is_query_report": 0, "label": "Sales Order", "link_count": 0, "link_to": "Sales Order", "link_type": "DocType", "onboard": 0, "type": "Link"},
+  {"dependencies": "", "hidden": 0, "is_query_report": 0, "label": "Delivery Note", "link_count": 0, "link_to": "Delivery Note", "link_type": "DocType", "onboard": 1, "type": "Link"},
+  {"dependencies": "", "hidden": 0, "is_query_report": 0, "label": "Customer", "link_count": 0, "link_to": "Customer", "link_type": "DocType", "onboard": 1, "type": "Link"},
+
+  {"hidden": 0, "is_query_report": 0, "label": "Purchase", "link_count": 3, "onboard": 0, "type": "Card Break"},
+  {"dependencies": "", "hidden": 0, "is_query_report": 0, "label": "Purchase Receipt", "link_count": 0, "link_to": "Purchase Receipt", "link_type": "DocType", "onboard": 0, "type": "Link"},
+  {"dependencies": "", "hidden": 0, "is_query_report": 0, "label": "Purchase Invoice", "link_count": 0, "link_to": "Purchase Invoice", "link_type": "DocType", "onboard": 0, "type": "Link"},
+  {"dependencies": "", "hidden": 0, "is_query_report": 0, "label": "Payment Entry", "link_count": 0, "link_to": "Payment Entry", "link_type": "DocType", "onboard": 0, "type": "Link"},
+
+  {"hidden": 0, "is_query_report": 0, "label": "Reports", "link_count": 5, "onboard": 0, "type": "Card Break"},
+  {"dependencies": "", "hidden": 0, "is_query_report": 0, "label": "Item", "link_count": 0, "link_to": "Item", "link_type": "DocType", "onboard": 0, "type": "Link"},
+  {"dependencies": "", "hidden": 0, "is_query_report": 1, "label": "Stock Balance", "link_count": 0, "link_to": "Stock Balance", "link_type": "Report", "onboard": 0, "type": "Link"},
+  {"dependencies": "", "hidden": 0, "is_query_report": 1, "label": "Stock Ledger", "link_count": 0, "link_to": "Stock Ledger", "link_type": "Report", "onboard": 0, "type": "Link"},
+  {"dependencies": "", "hidden": 0, "is_query_report": 1, "label": "Accounts Receivable Summary", "link_count": 0, "link_to": "Accounts Receivable Summary", "link_type": "Report", "onboard": 0, "type": "Link"},
+  {"dependencies": "", "hidden": 0, "is_query_report": 1, "label": "General Ledger", "link_count": 0, "link_to": "General Ledger", "link_type": "Report", "onboard": 0, "type": "Link"}
+ ],
+ "modified": "2026-08-19 02:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Yht Custom",
+ "name": "Branch User",
+ "number_cards": [],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [],
+ "roles": [{"role": "Branch User"}],
+ "sequence_id": 10.0,
+ "shortcuts": [
+  {"color": "Blue", "doc_view": "List", "label": "Sales Invoice", "link_to": "Sales Invoice", "type": "DocType"},
+  {"color": "Grey", "doc_view": "List", "label": "Quotation", "link_to": "Quotation", "type": "DocType"},
+  {"color": "Green", "doc_view": "List", "label": "Delivery Note", "link_to": "Delivery Note", "type": "DocType"},
+  {"color": "Orange", "doc_view": "List", "label": "Customer", "link_to": "Customer", "type": "DocType"},
+  {"color": "Cyan", "doc_view": "List", "label": "Payment Entry", "link_to": "Payment Entry", "type": "DocType"}
+ ],
+ "title": "Branch User"
+}

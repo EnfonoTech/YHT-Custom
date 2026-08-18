@@ -1,0 +1,23 @@
+{
+ "content": null,
+ "creation": "2026-08-19 02:00:00.000000",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2026-08-19 02:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Yht Custom",
+ "name": "yht-dashboard",
+ "owner": "Administrator",
+ "page_name": "yht-dashboard",
+ "roles": [
+  {"role": "Branch User"},
+  {"role": "Stock User"},
+  {"role": "System Manager"}
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 0,
+ "title": "Branch Dashboard"
+}

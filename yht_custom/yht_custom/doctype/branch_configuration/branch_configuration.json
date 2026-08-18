@@ -1,0 +1,141 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:branch",
+ "creation": "2026-08-19 02:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "branch",
+  "column_break_main",
+  "company",
+  "section_warehouse",
+  "warehouse_help",
+  "warehouse",
+  "section_cost_center",
+  "cost_center_help",
+  "cost_center",
+  "section_mode_of_payment",
+  "mode_of_payment_help",
+  "mode_of_payment",
+  "section_user",
+  "user_help",
+  "user"
+ ],
+ "fields": [
+  {
+   "fieldname": "branch",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Branch",
+   "options": "Branch",
+   "reqd": 1,
+   "unique": 1,
+   "description": "One Branch Configuration per Branch. Create the Branch master first."
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_warehouse",
+   "fieldtype": "Section Break",
+   "label": "Warehouses"
+  },
+  {
+   "fieldname": "warehouse_help",
+   "fieldtype": "HTML",
+   "options": "<p class=\"text-muted small\">The <b>first row</b> becomes the user's default warehouse. Every row grants access.</p>"
+  },
+  {
+   "fieldname": "warehouse",
+   "fieldtype": "Table",
+   "label": "Warehouse",
+   "options": "Branch Configuration Warehouse"
+  },
+  {
+   "fieldname": "section_cost_center",
+   "fieldtype": "Section Break",
+   "label": "Cost Centers"
+  },
+  {
+   "fieldname": "cost_center_help",
+   "fieldtype": "HTML",
+   "options": "<p class=\"text-muted small\">The <b>first row</b> becomes the user's default cost center.</p>"
+  },
+  {
+   "fieldname": "cost_center",
+   "fieldtype": "Table",
+   "label": "Cost Center",
+   "options": "Branch Configuration Cost Center"
+  },
+  {
+   "fieldname": "section_mode_of_payment",
+   "fieldtype": "Section Break",
+   "label": "Modes of Payment"
+  },
+  {
+   "fieldname": "mode_of_payment_help",
+   "fieldtype": "HTML",
+   "options": "<p class=\"text-muted small\">Cash / Bank allowlist for this branch's users. Leave empty to apply no restriction.</p>"
+  },
+  {
+   "fieldname": "mode_of_payment",
+   "fieldtype": "Table",
+   "label": "Mode of Payment",
+   "options": "Branch Configuration Mode of Payment"
+  },
+  {
+   "fieldname": "section_user",
+   "fieldtype": "Section Break",
+   "label": "Users"
+  },
+  {
+   "fieldname": "user_help",
+   "fieldtype": "HTML",
+   "options": "<p class=\"text-muted small\">Saving provisions User Permissions, upgrades Website Users to System Users, assigns the role and applies the Module Profile.</p>"
+  },
+  {
+   "fieldname": "user",
+   "fieldtype": "Table",
+   "label": "User",
+   "options": "Branch Configuration User"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-19 02:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Yht Custom",
+ "name": "Branch Configuration",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
