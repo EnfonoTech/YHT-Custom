@@ -49,6 +49,12 @@ def _escaped_list(values) -> str:
 	return ", ".join(frappe.db.escape(v) for v in values)
 
 
+#: MoM 2.5 — "Cancelled documents hidden from branch users". Appended to every
+#: branch filter rather than bolted on per doctype.
+def _hide_cancelled(doctype: str) -> str:
+	return f"`tab{doctype}`.`docstatus` != 2"
+
+
 def _warehouse_or_owner(doctype: str, header_fields: list[str], item_doctype: str | None, user: str) -> str:
 	"""Standard shape: header warehouse matches, an item row matches, or own doc.
 
@@ -70,7 +76,8 @@ def _warehouse_or_owner(doctype: str, header_fields: list[str], item_doctype: st
 		)
 
 	clauses.append(f"`tab{doctype}`.`owner` = {safe_user}")
-	return "(" + " OR ".join(clauses) + ")"
+	scope = "(" + " OR ".join(clauses) + ")"
+	return f"{scope} AND {_hide_cancelled(doctype)}"
 
 
 def _owner_only(doctype: str, user: str) -> str:
@@ -81,7 +88,7 @@ def _owner_only(doctype: str, user: str) -> str:
 		return ""
 	if not frappe.db.exists("Branch Configuration User", {"user": user}):
 		return ""
-	return f"`tab{doctype}`.`owner` = {frappe.db.escape(user)}"
+	return f"`tab{doctype}`.`owner` = {frappe.db.escape(user)} AND {_hide_cancelled(doctype)}"
 
 
 # --------------------------------------------------------------- per-doctype
@@ -130,6 +137,7 @@ def stock_entry_query(user):
 		"SELECT DISTINCT `parent` FROM `tabStock Entry Detail`"
 		" WHERE `s_warehouse` IN ({wh}) OR `t_warehouse` IN ({wh}))"
 		" OR `tabStock Entry`.`owner` = {user})"
+		" AND `tabStock Entry`.`docstatus` != 2"
 	).format(wh=wh, user=frappe.db.escape(user))
 
 
@@ -150,7 +158,7 @@ def payment_entry_query(user):
 	safe_user = frappe.db.escape(user)
 	warehouses = get_branch_warehouses(user)
 	if not warehouses:
-		return f"`tabPayment Entry`.`owner` = {safe_user}"
+		return f"`tabPayment Entry`.`owner` = {safe_user} AND `tabPayment Entry`.`docstatus` != 2"
 
 	wh = _escaped_list(warehouses)
 	return (
@@ -159,4 +167,5 @@ def payment_entry_query(user):
 		"SELECT DISTINCT per.`parent` FROM `tabPayment Entry Reference` per"
 		" INNER JOIN `tabSales Invoice Item` sii ON sii.`parent` = per.`reference_name`"
 		" WHERE per.`reference_doctype` = 'Sales Invoice' AND sii.`warehouse` IN ({wh})))"
+		" AND `tabPayment Entry`.`docstatus` != 2"
 	).format(user=safe_user, wh=wh)

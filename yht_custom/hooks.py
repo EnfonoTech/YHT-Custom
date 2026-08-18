@@ -14,6 +14,7 @@ required_apps = ["frappe/erpnext"]
 # one of these changes, or the deploy is invisible to anyone already loaded.
 app_include_js = [
 	"/assets/yht_custom/js/branch_user_restrict.js?v=1",
+	"/assets/yht_custom/js/branch_user_forms.js?v=1",
 ]
 app_include_css = "/assets/yht_custom/css/yht_custom.css?v=1"
 
@@ -57,6 +58,9 @@ permission_query_conditions = {
 _BRANCH_DEFAULT_EVENTS = {
 	"before_validate": "yht_custom.branch_defaults.apply_branch_defaults",
 	"before_insert": "yht_custom.branch_defaults.set_naming_series_from_branch",
+	# The boundary that makes the ignore_user_permissions Property Setters safe.
+	# Runs on validate so it catches the desk, REST, imports and Server Scripts.
+	"validate": "yht_custom.branch_guard.validate_branch_scope",
 }
 
 doc_events = {

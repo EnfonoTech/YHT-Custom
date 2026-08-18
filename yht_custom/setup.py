@@ -10,6 +10,7 @@ change an implementer made on the site.
 import frappe
 
 from yht_custom.setup_branch_series import setup_branch_series
+from yht_custom.setup_property_setters import setup_ignore_user_permissions
 
 #: What a Branch User may touch. Per the MoM document set — Quotation, Sales
 #: Order, Delivery Note, Sales Invoice, Purchase Receipt, Purchase Invoice,
@@ -76,6 +77,7 @@ def after_migrate():
 	preserve_standard_docperms()
 	setup_branch_user_permissions()
 	ensure_module_profile()
+	setup_ignore_user_permissions()
 	setup_branch_series()
 	frappe.db.commit()
 
