@@ -104,6 +104,26 @@
 	color: var(--text-muted, #8492a6);
 }
 
+/* Opens in a new tab on purpose: an operator checking the guide mid-invoice should not
+   lose the form they were filling in. */
+.yht-dash .yht-guide {
+	padding: 6px 14px;
+	margin-right: 10px;
+	border-radius: 20px;
+	font-size: var(--text-sm, 13px);
+	font-weight: 600;
+	white-space: nowrap;
+	text-decoration: none;
+	color: var(--primary, #2490ef);
+	border: 1px solid var(--primary, #2490ef);
+}
+
+.yht-dash .yht-guide:hover {
+	text-decoration: none;
+	color: var(--primary, #2490ef);
+	background: var(--bg-light-gray, #f4f6f9);
+}
+
 .yht-dash .yht-date {
 	padding: 6px 14px;
 	border-radius: 20px;

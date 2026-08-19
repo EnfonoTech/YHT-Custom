@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kathoom Alkhobar — ERP User Guide</title>
+<style>
+  /* Enfono Brand Core tier — this is a hosted web page, not a generated .docx, so it uses
+     Brand Core (green / sage / charcoal) rather than the Document Ink tier.
+     Brand green #78BE9B is 2.18:1 on white and NEVER sets text: green text uses ramp 700
+     #3F8361 (4.54:1, AA) or 800 #2F6249 (7.08:1, AAA). Charcoal on green 500 is 7.03:1 and is
+     the correct pairing for text on a green fill. Montserrat for everything typeset. */
+  :root {
+    --charcoal: #252525;
+    --green-500: #78BE9B;
+    --green-600: #53AC80;
+    --green-700: #3F8361;
+    --green-800: #2F6249;
+    --sage: #ACD7A7;
+    --paper: #ffffff;
+    --wash: #f6f8f7;
+    --rule: #e2e6e4;
+    --muted: #5d6461;
+    --warn: #8a5a12;
+    --warn-bg: #fdf7ec;
+    --stop: #8f2c22;
+    --stop-bg: #fcf1f0;
+    --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: Montserrat, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: var(--charcoal); background: var(--wash);
+    line-height: 1.7; -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── running header / footer, the document standard's items 4 and 5 ── */
+  .runhead {
+    position: sticky; top: 0; z-index: 20;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    padding: 12px 28px; background: var(--paper);
+    border-bottom: 3px solid var(--green-500);
+  }
+  .runhead .who { font-weight: 700; letter-spacing: -.2px; }
+  .runhead .doc { font-size: 13px; color: var(--muted); }
+  .runfoot {
+    display: flex; justify-content: space-between; gap: 16px;
+    padding: 18px 28px; font-size: 12.5px; color: var(--muted);
+    background: var(--charcoal); color: #cfd4d1; border-top: 3px solid var(--green-500);
+  }
+
+  .wrap { display: flex; align-items: flex-start; }
+  nav.toc {
+    width: 300px; flex-shrink: 0; position: sticky; top: 58px;
+    height: calc(100vh - 58px); overflow-y: auto;
+    background: var(--paper); border-right: 1px solid var(--rule); padding: 18px 0 60px;
+  }
+  nav.toc .part {
+    margin: 18px 20px 6px; padding-top: 12px; border-top: 1px solid var(--rule);
+    font-size: 10.5px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+    color: var(--green-800);
+  }
+  nav.toc .part:first-child { border-top: 0; margin-top: 6px; padding-top: 0; }
+  nav.toc a {
+    display: block; padding: 7px 20px; color: var(--charcoal); text-decoration: none;
+    font-size: 13.5px; border-left: 3px solid transparent;
+  }
+  nav.toc a:hover { background: var(--wash); }
+  nav.toc a.active { background: var(--wash); border-left-color: var(--green-600); font-weight: 600; }
+
+  main { flex: 1; min-width: 0; padding: 30px 44px 80px; max-width: 1000px; }
+
+  /* ── cover / title block ── */
+  .cover {
+    background: var(--charcoal); color: var(--paper);
+    border-radius: 14px; padding: 40px 44px; margin-bottom: 26px;
+  }
+  .cover .type {
+    font-size: 11.5px; letter-spacing: 2.4px; text-transform: uppercase;
+    color: var(--green-500); font-weight: 700;
+  }
+  .cover h1 { font-size: 34px; letter-spacing: -.6px; margin: 10px 0 6px; line-height: 1.2; }
+  .cover .sub { color: #b9c0bc; font-size: 15px; }
+  .cover .meta {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 14px 26px; margin-top: 26px; padding-top: 22px; border-top: 1px solid #3d3d3d;
+    font-size: 13.5px;
+  }
+  .cover .meta b { display: block; color: var(--green-500); font-size: 10.5px;
+    letter-spacing: 1.2px; text-transform: uppercase; margin-bottom: 3px; }
+  .conf { display: inline-block; margin-top: 22px; padding: 5px 12px; border-radius: 20px;
+    background: rgba(120,190,155,.16); color: var(--green-500);
+    font-size: 11.5px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; }
+
+  section { margin-bottom: 40px; scroll-margin-top: 74px; }
+  section > h2 {
+    font-size: 21px; letter-spacing: -.3px; padding-bottom: 9px; margin-bottom: 15px;
+    border-bottom: 2px solid var(--rule);
+  }
+  h3 { font-size: 15.5px; margin: 22px 0 9px; }
+  p, li { font-size: 14.5px; }
+  p { margin-bottom: 12px; }
+  ul, ol { margin: 0 0 14px 22px; }
+  li { margin-bottom: 6px; }
+  a { color: var(--green-700); }
+
+  .partbreak {
+    margin: 46px 0 26px; padding: 26px 30px; border-radius: 14px;
+    background: var(--green-500); color: var(--charcoal);
+  }
+  .partbreak .lbl { font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; }
+  .partbreak h2 { font-size: 27px; border: 0; margin: 6px 0 4px; padding: 0; letter-spacing: -.4px; }
+  .partbreak p { margin: 0; font-size: 14.5px; }
+
+  ol.steps { counter-reset: s; list-style: none; margin-left: 0; }
+  ol.steps > li { counter-increment: s; position: relative; padding-left: 38px; margin-bottom: 12px; }
+  ol.steps > li::before {
+    content: counter(s); position: absolute; left: 0; top: 2px;
+    width: 25px; height: 25px; border-radius: 50%;
+    background: var(--green-700); color: #fff; font-size: 12px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  figure { margin: 18px 0 22px; }
+  figure img {
+    width: 100%; display: block; border: 1px solid var(--rule); border-radius: 10px;
+    background: var(--paper);
+  }
+  figcaption { margin-top: 8px; font-size: 12.5px; color: var(--muted); }
+  figcaption b { color: var(--charcoal); }
+
+  .note, .tip, .warn, .stop {
+    border-radius: 8px; padding: 13px 16px; margin: 14px 0; font-size: 14px;
+    border-left: 4px solid;
+  }
+  .note { background: var(--wash); border-color: var(--green-600); }
+  .tip  { background: #f1f8f4; border-color: var(--green-700); }
+  .warn { background: var(--warn-bg); border-color: var(--warn); }
+  .stop { background: var(--stop-bg); border-color: var(--stop); }
+  .note b, .tip b, .warn b, .stop b { display: block; margin-bottom: 3px; }
+
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 13.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { background: var(--wash); font-weight: 700; font-size: 12.5px; }
+  tbody tr:last-child td { border-bottom: 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: #eef1ef; padding: 1.5px 5px; border-radius: 4px; }
+  .ui { font-weight: 600; color: var(--green-800); }
+
+  @media (max-width: 940px) {
+    .wrap { flex-direction: column; }
+    nav.toc { width: 100%; position: static; height: auto; border-right: 0;
+      border-bottom: 1px solid var(--rule); }
+    main { padding: 22px 18px 60px; }
+  }
+  @media print {
+    nav.toc, .runhead { display: none; }
+    body { background: #fff; }
+    section { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<header class="runhead">
+  <span class="who">Kathoom Alkhobar Trading Co.</span>
+  <span class="doc">ERP User Guide — v1.0</span>
+</header>
+
+<div class="wrap">
+<nav class="toc">
+  <div class="part">Document</div>
+  <a href="#control">Document control</a>
+  <a href="#how-to-read">How to read this</a>
+
+  <div class="part">Part A · Branch user</div>
+  <a href="#a-signin">What your login can see</a>
+  <a href="#a-dashboard">Your dashboard</a>
+  <a href="#a-back">Getting back to it</a>
+  <a href="#a-deliver">Deliver first, then bill</a>
+  <a href="#a-pricing">Deciding the price</a>
+  <a href="#a-payment">Cash or credit</a>
+  <a href="#a-collect">Collecting the money</a>
+  <a href="#a-returns">Returns</a>
+  <a href="#a-purchase">Receiving goods</a>
+  <a href="#a-expense">Expense bills</a>
+  <a href="#a-reports">Your reports</a>
+  <a href="#a-cannot">What you cannot do</a>
+
+  <div class="part">Part B · Administrator</div>
+  <a href="#b-branch">Branch Configuration</a>
+  <a href="#b-modes">Payment modes</a>
+  <a href="#b-series">Numbering series</a>
+  <a href="#b-prefix">Item code prefixes</a>
+  <a href="#b-print">Print formats</a>
+  <a href="#b-perms">Permissions &amp; scoping</a>
+  <a href="#b-deploy">Deploying a change</a>
+  <a href="#b-open">Open items before go-live</a>
+</nav>
+
+<main>
+
+<div class="cover">
+  <div class="type">User Guide</div>
+  <h1>Kathoom Alkhobar ERP</h1>
+  <div class="sub">Branch operations and administration on ERPNext v15 with <code style="background:rgba(255,255,255,.12);color:#cfe8db">yht_custom</code></div>
+  <div class="meta">
+    <div><b>Prepared for</b>Kathoom Alkhobar Trading Co.</div>
+    <div><b>Prepared by</b>Enfono Technologies</div>
+    <div><b>Version</b>1.0</div>
+    <div><b>Date</b>August 2026</div>
+    <div><b>System</b>yht-khobhar.enfonoerp.com</div>
+    <div><b>Audience</b>Branch operators · Administrators</div>
+  </div>
+  <span class="conf">Confidential</span>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<section id="control">
+  <h2>Document control</h2>
+  <table>
+    <tbody>
+      <tr><th style="width:210px">Document</th><td>Kathoom Alkhobar ERP — User Guide</td></tr>
+      <tr><th>Client</th><td>Kathoom Alkhobar Trading Co. (KATHOOM ALKHOBAR TRADING CO.)</td></tr>
+      <tr><th>System</th><td>ERPNext 15 · <code>yht_custom</code> · <code>ksa_compliance</code> · <code>hrms</code></td></tr>
+      <tr><th>Scope</th><td>Branch operations (Part A) and administration (Part B)</td></tr>
+      <tr><th>Status</th><td>Pre-go-live. Written against the UAT system.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Version history</h3>
+  <table>
+    <thead><tr><th style="width:90px">Version</th><th style="width:130px">Date</th><th>Change</th></tr></thead>
+    <tbody>
+      <tr><td>1.0</td><td>August 2026</td><td>First issue. Branch and administrator parts, written and screenshotted against the live UAT system.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<section id="how-to-read">
+  <h2>How to read this</h2>
+  <p>Two parts. <b>Part A</b> is for anyone raising documents at a branch — read it start to
+  finish once, then use it to look things up. <b>Part B</b> is for whoever administers the
+  system; it assumes Part A.</p>
+  <p>Every screenshot is from the live system, and every rule was checked against it rather
+  than written from memory. Where something is deliberately not switched on yet, it says so
+  instead of pretending otherwise.</p>
+  <div class="note">
+    <b>If the screen disagrees with this page, trust the screen.</b>
+    Then tell us, because it means this page needs a new version.
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<div class="partbreak">
+  <div class="lbl">Part A</div>
+  <h2>Branch user</h2>
+  <p>Everything a branch operator needs, in the order you will need it.</p>
+</div>
+
+<section id="a-signin">
+  <h2>A1 · What your login can see</h2>
+  <p>Your login is tied to <b>one branch</b>, and everything follows from that.</p>
+  <table>
+    <thead><tr><th>Setting</th><th>Your value</th><th>What it decides</th></tr></thead>
+    <tbody>
+      <tr><td>Branch</td><td>Kathoom Alkhobar</td><td>Which documents appear in your lists</td></tr>
+      <tr><td>Warehouse</td><td><code>Stores - KATC</code></td><td>Which stock you can move and see</td></tr>
+      <tr><td>Cost centre</td><td><code>Buying And Selling - KATC</code></td><td>Filled in for you — you never pick it</td></tr>
+      <tr><td>Company</td><td>KATHOOM ALKHOBAR TRADING CO.</td><td>Filled in for you</td></tr>
+      <tr><td>Selling price list</td><td>Kathoom Selling Price</td><td>Where your selling rates come from</td></tr>
+      <tr><td>Buying price list</td><td>Kathoom Buying Price</td><td>Where your purchase rates come from</td></tr>
+    </tbody>
+  </table>
+  <div class="note">
+    <b>Your lists are already filtered.</b>
+    A list shows your branch's documents only, so a total on your screen is your branch's
+    total. Cancelled documents are hidden from you entirely — if a document has vanished
+    rather than gone red, it was cancelled.
+  </div>
+  <div class="tip">
+    <b>Screens are deliberately shorter than standard ERPNext.</b>
+    Cost centre, Project, Currency and the Currency-and-Price-List block are hidden because
+    this business does not use them: one company, one currency, no project accounting. Nothing
+    is missing — it is filled in behind the scenes.
+  </div>
+</section>
+
+<section id="a-dashboard">
+  <h2>A2 · Your dashboard</h2>
+  <p>You land here when you sign in. It is your home screen, built for one job: see where the
+  branch stands, then start work in one click.</p>
+  <figure>
+    <img src="img/01-dashboard.jpg" alt="The Branch Dashboard">
+    <figcaption><b>Figure A2.1</b> — The Branch Dashboard. Five figures, your drafts, then tiles to start work.</figcaption>
+  </figure>
+
+  <h3>The five cards</h3>
+  <table>
+    <thead><tr><th>Card</th><th>What it means</th><th>Use it to</th></tr></thead>
+    <tbody>
+      <tr><td>Sales Today</td><td>Submitted invoices dated today</td><td>Check the day is being billed as it happens</td></tr>
+      <tr><td>Sales This Month</td><td>Submitted invoices, 1st to today</td><td>Track the month</td></tr>
+      <tr><td>Invoices This Month</td><td>How many, not how much</td><td>Spot an unusual month</td></tr>
+      <tr><td>Overdue</td><td>Money owed <b>past its due date</b></td><td>Decide who to phone today</td></tr>
+      <tr><td>Outstanding</td><td>All money owed, due or not</td><td>See total exposure</td></tr>
+    </tbody>
+  </table>
+  <div class="note">
+    <b>Overdue is the one to watch.</b>
+    Outstanding includes invoices that are not late yet, so it always looks large. Figures are
+    shortened — <code>1.4M</code> means 1.4 million riyals. For the exact amount, open the report.
+  </div>
+
+  <h3>Needs attention</h3>
+  <figure>
+    <img src="img/02-needs-attention.jpg" alt="The Needs Attention panel">
+    <figcaption><b>Figure A2.2</b> — Three live columns. A red bar down the left of an unpaid invoice means it is past its due date.</figcaption>
+  </figure>
+  <div class="tip">
+    <b>Delivery Notes To Bill is your daily safety net.</b>
+    Anything sitting there is stock that has left the branch and has not been invoiced yet.
+    That column should be short by the end of the day.
+  </div>
+</section>
+
+<section id="a-back">
+  <h2>A3 · Getting back to it</h2>
+  <p>Two ways, both available from any screen:</p>
+  <ul>
+    <li>Click <span class="ui">&larr; Dashboard</span> in the top bar, to the right of the search box.</li>
+    <li>Click the <b>Yaser Hameed logo</b> in the top-left corner.</li>
+  </ul>
+  <div class="note">
+    <b>You do not need the browser Back button.</b>
+    Either route above returns you cleanly. Browser Back can drop you onto a half-loaded
+    screen or into a form you had started editing.
+  </div>
+  <p>If you land somewhere your role does not cover, you are not shown an error page — an
+  orange message names the screen and you are returned to the dashboard. That is not a fault
+  and you have not broken anything.</p>
+</section>
+
+<section id="a-deliver">
+  <h2>A4 · Deliver first, then bill</h2>
+  <div class="stop">
+    <b>The single most important rule on this system.</b>
+    Stock leaves the branch on a <b>Delivery Note</b>. A <b>Sales Invoice</b> only bills what
+    has already left. One movement, one record — never both on one document.
+  </div>
+  <p>Standard ERPNext lets you tick <span class="ui">Update Stock</span> on an invoice and move
+  stock from there. That is switched off here on purpose, and the invoice tells you so:</p>
+  <figure>
+    <img src="img/03-update-stock-locked.jpg" alt="Update Stock disabled on a new Sales Invoice">
+    <figcaption><b>Figure A4.1</b> — <span class="ui">Update Stock</span> is locked off, with the reason underneath: <i>Stock is delivered on a Delivery Note. Create the Delivery Note first, then bill it.</i></figcaption>
+  </figure>
+  <p>The reason is that it keeps the stock ledger and the sales ledger honest. When stock and
+  money move on one document, correcting one quietly corrupts the other.</p>
+
+  <h3>Step 1 — the Delivery Note</h3>
+  <ol class="steps">
+    <li>From the submitted Sales Order: <span class="ui">Create &rarr; Delivery Note</span>. Items, quantities and rates carry over.</li>
+    <li>No order? Dashboard &rarr; <span class="ui">Delivery Note</span> &rarr; <span class="ui">+ Add</span>.</li>
+    <li>Check the quantity actually going out. Change it here if it differs — this is the record of what physically left.</li>
+    <li><span class="ui">Submit</span>. Stock leaves <code>Stores - KATC</code> at this moment.</li>
+    <li><span class="ui">Print</span> — customer copy and office copy, with a signature block.</li>
+  </ol>
+  <figure>
+    <img src="img/06-delivery-note.jpg" alt="A submitted Delivery Note">
+    <figcaption><b>Figure A4.2</b> — A submitted Delivery Note. Once submitted it is locked; there are no edits.</figcaption>
+  </figure>
+  <div class="warn">
+    <b>A submitted Delivery Note is locked.</b>
+    A delivery line also cannot carry a zero rate, and the system will not let you go into
+    negative stock. Get the quantity right before you submit. If it is wrong afterwards, that
+    needs a return document — ask your manager.
+  </div>
+
+  <h3>Step 2 — the Sales Invoice</h3>
+  <ol class="steps">
+    <li>Open the submitted Delivery Note &rarr; <span class="ui">Create &rarr; Sales Invoice</span>.</li>
+    <li>The items arrive already linked to the delivery. Do not retype them.</li>
+    <li>Set <span class="ui">Payment Mode</span> — see <a href="#a-payment">A6</a>.</li>
+    <li>Check <span class="ui">Payment Due Date</span>, which fills in from the customer's terms.</li>
+    <li><span class="ui">Submit</span>.</li>
+  </ol>
+  <div class="tip">
+    <b>Always start from the Delivery Note.</b>
+    Building the invoice from the delivery keeps the two linked, so <b>Delivery Notes To Bill</b>
+    on your dashboard clears correctly. An invoice typed from scratch bills the customer fine
+    but leaves that delivery sitting in the column forever, looking unbilled.
+  </div>
+</section>
+
+<section id="a-pricing">
+  <h2>A5 · Deciding the price</h2>
+  <p>You are never guessing. Two buttons sit under the items table, next to
+  <span class="ui">Add Row</span>.</p>
+  <figure>
+    <img src="img/04-price-buttons.jpg" alt="Price Assist and Show Price History under the items table">
+    <figcaption><b>Figure A5.1</b> — <span class="ui">Show Price History</span> and <span class="ui">Price Assist</span>, in the item grid footer. Click into the row you are pricing first — both work on a row.</figcaption>
+  </figure>
+
+  <h3>Price Assist</h3>
+  <ul>
+    <li><b>Price list rate</b> — the standard rate from Kathoom Selling Price</li>
+    <li><b>Last rate to this customer</b> — with the date and invoice number</li>
+    <li><b>Last rate to anyone</b> — with which customer</li>
+    <li><b>Recent range</b> — low, high and average across recent sales</li>
+    <li><b>Valuation</b> and <b>margin at your rate</b> — red if you are selling below cost</li>
+    <li><b>Stock</b> — what is available in your warehouse right now</li>
+  </ul>
+  <p>Two shortcuts fill the row for you: <span class="ui">Use price list rate</span> and
+  <span class="ui">Use last rate to this customer</span>.</p>
+
+  <h3>Show Price History</h3>
+  <p>The last 30 sales of that item — date, customer, quantity, rate, invoice. Open it when a
+  customer says "you charged me less last time". The answer is on screen in one click.</p>
+  <div class="note">
+    <b>You will get a quiet nudge.</b>
+    Type a rate that differs from the last rate to that customer and a short message says how
+    far above or below it is. It does not block you — it makes sure you meant it.
+  </div>
+  <div class="warn">
+    <b>Margin in red means you are selling below what the stock cost.</b>
+    Sometimes that is deliberate. It should never be an accident.
+  </div>
+</section>
+
+<section id="a-payment">
+  <h2>A6 · Cash or credit</h2>
+  <p>Every Sales Invoice carries a <span class="ui">Payment Mode</span>, under the payment due
+  date. It is a real decision, not a formality.</p>
+  <figure>
+    <img src="img/05-invoice-payment-mode.jpg" alt="Payment Mode on a submitted Sales Invoice">
+    <figcaption><b>Figure A6.1</b> — <span class="ui">Payment Mode</span> set to Cash, and <span class="ui">Collect Payment</span> in the toolbar of the submitted, unpaid invoice.</figcaption>
+  </figure>
+  <table>
+    <thead><tr><th>Payment Mode</th><th>Means</th><th>What happens</th></tr></thead>
+    <tbody>
+      <tr><td><b>Credit</b><br><span style="color:var(--muted);font-size:12.5px">the default</span></td>
+          <td>The customer will pay later</td>
+          <td>The amount joins their outstanding balance and shows on your dashboard until paid.</td></tr>
+      <tr><td><b>Cash</b></td><td>You are collecting now</td>
+          <td>As soon as you submit, the <span class="ui">Collect Payment</span> dialog opens.</td></tr>
+    </tbody>
+  </table>
+  <div class="stop">
+    <b>The trap: leaving it on Credit for a cash sale.</b>
+    The invoice submits perfectly happily. The money is in the drawer and the system still
+    thinks the customer owes it, so somebody chases a customer who has already paid. Set
+    Payment Mode <b>before</b> you submit.
+  </div>
+  <p>Pick the customer and two indicators appear at the top of the invoice: <b>Outstanding</b>
+  (everything they already owe) and <b>Credit limit</b>, shown only if finance has set one.
+  Going over the limit <b>warns, it does not block</b>.</p>
+  <div class="note">
+    <b>No customer has a credit limit set yet.</b>
+    The warning is built and waiting, but it cannot fire until finance sets limits, so you will
+    not see it today.
+  </div>
+</section>
+
+<section id="a-collect">
+  <h2>A7 · Collecting the money</h2>
+  <p>The dialog opens automatically after you submit a Cash invoice, and
+  <span class="ui">Collect Payment</span> reopens it any time on a submitted unpaid invoice.</p>
+  <ol class="steps">
+    <li><b>Amount Due</b> is shown at the top and cannot be edited.</li>
+    <li>Enter what was actually tendered against each mode. Cash modes are listed first.</li>
+    <li>Split it freely — part cash, part card, part transfer. <b>Tendered</b> and <b>Still due</b> update as you type.</li>
+    <li>Press <span class="ui">Record Payment</span>. One receipt is created per mode used.</li>
+  </ol>
+  <p>Your branch can tender against eight modes — two cash, six bank. They are listed in
+  <a href="#b-modes">B2</a>.</p>
+  <div class="note">
+    <b>Not collecting today after all?</b>
+    Press <span class="ui">Pay Later</span>. The invoice stays valid and unpaid; nothing is lost.
+  </div>
+  <div class="warn">
+    <b>You cannot tender more than is due.</b>
+    Over-tendering is refused rather than creating a credit somebody has to unpick. Give change
+    from the drawer, not from the system.
+  </div>
+</section>
+
+<section id="a-returns">
+  <h2>A8 · Returns and credit notes</h2>
+  <ol class="steps">
+    <li>Open the original submitted Sales Invoice &rarr; <span class="ui">Create &rarr; Return / Credit Note</span>.</li>
+    <li>Set the quantities actually returned. Rates mirror the original, including zero lines.</li>
+    <li><span class="ui">Submit</span>. The credit note takes its own number, <code>KSCN-26-…</code>.</li>
+    <li>Stock physically coming back needs a return delivery note, <code>KSDRN-26-…</code>.</li>
+  </ol>
+  <div class="note">
+    <b>A credit note never opens the payment dialog.</b>
+    On a return the money moves outward, so tendering makes no sense. A cash refund is a job
+    for your manager.
+  </div>
+</section>
+
+<section id="a-purchase">
+  <h2>A9 · Receiving goods</h2>
+  <p>Buying mirrors selling: <b>stock arrives on a Purchase Receipt</b>, and the Purchase
+  Invoice bills what already arrived.</p>
+  <ol class="steps">
+    <li>Dashboard &rarr; <span class="ui">Purchase Receipt</span> &rarr; <span class="ui">+ Add</span>.</li>
+    <li>Supplier, then the items and quantities actually received into <code>Stores - KATC</code>.</li>
+    <li><span class="ui">Submit</span>. Stock arrives at this moment.</li>
+    <li>Then <span class="ui">Create &rarr; Purchase Invoice</span> from the receipt.</li>
+  </ol>
+  <div class="warn">
+    <b>Receive what actually arrived, not what was ordered.</b>
+    Negative stock is not allowed, so a receipt entered short and corrected later blocks the
+    sale in between. Count first.
+  </div>
+</section>
+
+<section id="a-expense">
+  <h2>A10 · Expense bills</h2>
+  <p>For costs with nothing to put in stock — rent, fuel, a repair, a phone bill.</p>
+  <figure>
+    <img src="img/07-expense-invoice-new.jpg" alt="A new Purchase Invoice, before ticking Is Expense Invoice">
+    <figcaption><b>Figure A10.1</b> — A new Purchase Invoice. Ticking <span class="ui">Is Expense Invoice</span> changes the form's shape: the item columns go, because there is no item.</figcaption>
+  </figure>
+  <ol class="steps">
+    <li>Dashboard &rarr; <span class="ui">Purchase Invoice</span> &rarr; <span class="ui">+ Add</span>.</li>
+    <li>Tick <span class="ui">Is Expense Invoice</span>.</li>
+    <li>Pick the <span class="ui">Expense Head</span> — the account this cost belongs to.</li>
+    <li>Add a row per line on the supplier's bill: description and amount. <b>No item code.</b></li>
+    <li>Enter the supplier's own number in <span class="ui">Supplier Invoice No</span>.</li>
+    <li>Paid on the spot in cash? Tick <span class="ui">Is Paid</span> and choose the account.</li>
+    <li><span class="ui">Submit</span>. It takes an expense number, <code>KSEXP-26-…</code>.</li>
+  </ol>
+  <div class="stop">
+    <b>The trap: putting a stock item on an expense invoice.</b>
+    It is refused. If what you bought goes into stock, it is not an expense — use a
+    <a href="#a-purchase">Purchase Receipt</a>. Otherwise the same purchase is counted twice,
+    once as a cost and once as inventory value.
+  </div>
+  <div class="note">
+    <b>Booking and paying are two different things.</b>
+    An expense invoice always credits the supplier's account. Paying it is a separate step (or
+    the <span class="ui">Is Paid</span> tick for genuine over-the-counter cash). The old system
+    mixed these, which is why cash-paid expenses never appeared in the supplier ledger.
+  </div>
+</section>
+
+<section id="a-reports">
+  <h2>A11 · Your reports</h2>
+  <table>
+    <thead><tr><th>Report</th><th>Answers</th><th>Reach for it when</th></tr></thead>
+    <tbody>
+      <tr><td><b>Stock Balance</b></td><td>How much of each item do I have, and what is it worth?</td><td>A customer asks if you have something</td></tr>
+      <tr><td><b>Stock Ledger</b></td><td>Every movement of an item, in date order</td><td>A quantity looks wrong and you need to see why</td></tr>
+      <tr><td><b>Receivables Summary</b></td><td>Who owes us, and how late</td><td>Planning collection calls</td></tr>
+      <tr><td><b>General Ledger</b></td><td>Every entry against an account</td><td>Checking how something was booked</td></tr>
+      <tr><td><b>Customer Statement</b></td><td>One customer's full account history</td><td>A customer queries their balance</td></tr>
+    </tbody>
+  </table>
+  <figure>
+    <img src="img/08-report-receivables.jpg" alt="Accounts Receivable Summary">
+    <figcaption><b>Figure A11.1</b> — Receivables Summary. Work the age columns right to left: oldest money first.</figcaption>
+  </figure>
+  <figure>
+    <img src="img/09-report-stock-balance.jpg" alt="Stock Balance report">
+    <figcaption><b>Figure A11.2</b> — Stock Balance. What you have and what it is worth — not what anyone owes.</figcaption>
+  </figure>
+  <div class="warn">
+    <b>Do not ask Stock Balance a money question.</b>
+    It values stock, not debt. "Who owes us?" is <b>Receivables Summary</b>. Asking the wrong
+    report is the most common reason a figure looks wrong — the figure was right, the question
+    was wrong.
+  </div>
+  <p>Every report is filtered to your branch. Set the date range at the top before reading
+  anything: a report showing less than you expected is usually a date range, not missing data.</p>
+</section>
+
+<section id="a-cannot">
+  <h2>A12 · What you cannot do, and who to ask</h2>
+  <table>
+    <thead><tr><th>You cannot</th><th>Why</th><th>Ask</th></tr></thead>
+    <tbody>
+      <tr><td>Move stock on a Sales Invoice</td><td>Stock moves on a Delivery Note only</td><td>Nobody — use a Delivery Note</td></tr>
+      <tr><td>Edit a submitted Delivery Note</td><td>It records what physically left</td><td>Your manager, for a return document</td></tr>
+      <tr><td>Cancel a document</td><td>Limited to one designated person</td><td>Your manager</td></tr>
+      <tr><td>See another branch's documents</td><td>Your login is scoped to Kathoom Alkhobar</td><td>Head office</td></tr>
+      <tr><td>Pick a cost centre or company</td><td>Derived from your branch</td><td>Nobody — it is already correct</td></tr>
+      <tr><td>Put a stock item on an expense invoice</td><td>It would double-count the purchase</td><td>Nobody — use a Purchase Receipt</td></tr>
+      <tr><td>Tender more than is due</td><td>It would create a credit needing unpicking</td><td>Nobody — give change from the drawer</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<div class="partbreak">
+  <div class="lbl">Part B</div>
+  <h2>Administrator</h2>
+  <p>Configuring and maintaining the system. Assumes Part A.</p>
+</div>
+
+<section id="b-branch">
+  <h2>B1 · Branch Configuration</h2>
+  <p>One <span class="ui">Branch Configuration</span> record per branch. It is the single place
+  a branch's behaviour is defined, and saving it provisions everything downstream.</p>
+  <figure>
+    <img src="img/20-branch-configuration.jpg" alt="The Branch Configuration record">
+    <figcaption><b>Figure B1.1</b> — <code>Branch Configuration: Kathoom Alkhobar</code>. Warehouses, cost centres, payment modes and users, in one record.</figcaption>
+  </figure>
+  <p>Saving it:</p>
+  <ul>
+    <li>creates the User Permissions that scope each listed user to the branch</li>
+    <li>upgrades Website users to System users where needed</li>
+    <li>assigns the <b>Branch User</b> role directly</li>
+    <li>applies the Module Profile that trims the desk sidebar</li>
+  </ul>
+  <div class="warn">
+    <b>The first row of Warehouses and Cost Centers is the default.</b>
+    Both are child tables and can hold more than one row. The first is what gets filled into a
+    branch user's documents, so order matters.
+  </div>
+  <div class="note">
+    <b>Adding a user here changes a real person's access.</b>
+    Add the account, save, then have that person sign out and back in — a role granted moments
+    ago is not in their cached permission set.
+  </div>
+</section>
+
+<section id="b-modes">
+  <h2>B2 · Payment modes</h2>
+  <p>The <span class="ui">Modes of Payment</span> table is the Cash/Bank allowlist for that
+  branch's users — it is what the <a href="#a-collect">Collect Payment</a> dialog offers.</p>
+  <figure>
+    <img src="img/21-branch-modes.jpg" alt="Modes of Payment on Branch Configuration">
+    <figcaption><b>Figure B2.1</b> — The eight modes seeded for Kathoom Alkhobar: two Cash, six Bank.</figcaption>
+  </figure>
+  <p>These eight were seeded automatically, and the rule matters: a mode is only offered if it
+  is <b>enabled</b> <i>and</i> has a <b>default account for the branch's company</b>.
+  Twenty-one modes are enabled on this system; only eight are usable. Offering the other
+  thirteen would let an operator allocate money and only discover the problem at submit.</p>
+  <div class="note">
+    <b>Leave the table empty to apply no restriction.</b>
+    An unconfigured branch opts out of filtering rather than losing every mode. The moment one
+    row is listed, the allowlist is authoritative — so it is all or nothing, on purpose.
+  </div>
+  <div class="warn">
+    <b>Rows you delete by hand stay deleted.</b>
+    The seeding only ever runs on a branch with an empty table. Which tills a branch may touch
+    is a human decision, and a migration has no business overruling it.
+  </div>
+</section>
+
+<section id="b-series">
+  <h2>B3 · Numbering series</h2>
+  <p>Every number starts <code>KS</code> (from <code>Branch.custom_doc_prefix</code>), then the
+  document type, the year, and a running count. <code>KSIN-26-0184</code> is the 184th sales
+  invoice of 2026.</p>
+  <table>
+    <thead><tr><th>Document</th><th>Normal</th><th>Return / credit</th></tr></thead>
+    <tbody>
+      <tr><td>Quotation</td><td><code>KSSQ-.YY.-.####</code></td><td>—</td></tr>
+      <tr><td>Sales Order</td><td><code>KSSO-.YY.-.####</code></td><td>—</td></tr>
+      <tr><td>Delivery Note</td><td><code>KSDN-.YY.-.####</code></td><td><code>KSDRN-.YY.-.####</code></td></tr>
+      <tr><td>Sales Invoice</td><td><code>KSIN-.YY.-.####</code></td><td><code>KSCN-.YY.-.####</code></td></tr>
+      <tr><td>Purchase Order</td><td><code>KSPO-.YY.-.####</code></td><td>—</td></tr>
+      <tr><td>Purchase Receipt</td><td><code>KSPR-.YY.-.####</code></td><td><code>KSPRN-.YY.-.####</code></td></tr>
+      <tr><td>Purchase Invoice</td><td><code>KSPI-.YY.-.####</code></td><td><code>KSDBN-.YY.-.####</code></td></tr>
+      <tr><td>Expense invoice</td><td><code>KSEXP-.YY.-.####</code></td><td>—</td></tr>
+      <tr><td>Payment Entry</td><td><code>KSPY-.YY.-.####</code></td><td>—</td></tr>
+      <tr><td>Journal Entry</td><td><code>KSJV-.YY.-.####</code></td><td>—</td></tr>
+      <tr><td>Material Request</td><td><code>KSMR-.YY.-.####</code></td><td>—</td></tr>
+      <tr><td>Stock Entry</td><td><code>KSSE-.YY.-.####</code></td><td>—</td></tr>
+      <tr><td>Stock Reconciliation</td><td><code>KSSR-.YY.-.####</code></td><td>—</td></tr>
+    </tbody>
+  </table>
+  <div class="note">
+    <b>A credit note is not "an invoice, return flavour".</b>
+    It gets its own series so anyone reading a ledger can tell the two apart at a glance.
+  </div>
+</section>
+
+<section id="b-prefix">
+  <h2>B4 · Item code prefixes</h2>
+  <figure>
+    <img src="img/22-item-groups.jpg" alt="The Item Group tree">
+    <figcaption><b>Figure B4.1</b> — Item Groups. Each leaf group can carry an item code prefix.</figcaption>
+  </figure>
+  <p>The mechanism generates an item code from its group's prefix. It is live and per-group.</p>
+  <div class="warn">
+    <b>No group has a prefix set yet — nought of twenty-nine.</b>
+    So item codes are typed by hand today. Fill in a prefix on a group and that group starts
+    generating codes; nothing else is blocked meanwhile. This is open item <b>B14</b>.
+  </div>
+  <div class="note">
+    <b>A code the user typed on purpose is never overwritten.</b>
+    Generation only fills a blank.
+  </div>
+</section>
+
+<section id="b-print">
+  <h2>B5 · Print formats</h2>
+  <figure>
+    <img src="img/23-print-formats.jpg" alt="The Print Format list">
+    <figcaption><b>Figure B5.1</b> — Print Formats. The four beginning <code>YHT</code> are this implementation's.</figcaption>
+  </figure>
+  <table>
+    <thead><tr><th>Doctype</th><th>Format</th><th>Doctype default?</th></tr></thead>
+    <tbody>
+      <tr><td>Delivery Note</td><td><code>YHT Delivery Note</code> — customer + office copies, signature block</td><td>Yes</td></tr>
+      <tr><td>Quotation</td><td><code>YHT Quotation</code></td><td>Yes</td></tr>
+      <tr><td>Sales Order</td><td><code>YHT Sales Order</code> — three switchable titles</td><td>Yes</td></tr>
+      <tr><td>Purchase Invoice</td><td><code>YHT Expense Invoice</code></td><td><b>No</b> — deliberately; it suits expense invoices only</td></tr>
+      <tr><td>Sales Invoice</td><td>—</td><td><b>No</b> — deliberately unset pending ZATCA onboarding</td></tr>
+    </tbody>
+  </table>
+  <div class="warn">
+    <b>Deleting print formats is how a doctype ends up with none.</b>
+    ERPNext ships no format at all for Delivery Note, Quotation or Journal Entry. Journal Entry
+    still has none here. Check what ERPNext actually provides before stripping formats.
+  </div>
+</section>
+
+<section id="b-perms">
+  <h2>B6 · Permissions and scoping</h2>
+  <p>Three layers, and they are deliberately independent:</p>
+  <table>
+    <thead><tr><th>Layer</th><th>Does</th><th>Where</th></tr></thead>
+    <tbody>
+      <tr><td>Custom DocPerm</td><td>Decides what the role may open at all</td><td><code>setup.BRANCH_USER_PERMISSIONS</code></td></tr>
+      <tr><td>Permission query conditions</td><td>Decides which rows they see in a list</td><td><code>branch_filters</code></td></tr>
+      <tr><td>Server-side scope guard</td><td>Rejects a write pointing outside the branch</td><td><code>branch_guard.validate_branch_scope</code></td></tr>
+    </tbody>
+  </table>
+  <div class="stop">
+    <b>Client-side filters enforce nothing.</b>
+    The pickers narrowed on the form are convenience only. The guard on <code>validate</code>
+    is the boundary, and it holds on the desk, the REST API, imports and Server Scripts alike.
+  </div>
+  <div class="warn">
+    <b>A field's declared Link target can lie about what gets read.</b>
+    <code>Payment Entry.party_type</code> is declared <code>Link → DocType</code>, but its
+    picker is narrowed by a query that searches <b>Party Type</b> — and that is the doctype
+    permission-checked. A branch user hit a bare <i>"No permission for Party Type"</i> because
+    an audit of declared Link targets could never have found it. When adding a doctype to the
+    role, run the smoke test rather than reasoning about field definitions.
+  </div>
+  <p>The smoke test is the check that matters — it opens every dashboard tile as a list
+  <i>and</i> as a form, runs every dashboard report, exercises every picker, and asserts the
+  claims this guide makes to you:</p>
+  <p><code>bench --site yht-khobhar.enfonoerp.com run-tests --app yht_custom --skip-before-tests</code></p>
+  <div class="stop">
+    <b>Always pass <code>--skip-before-tests</code>.</b>
+    Without it, every installed app's <code>before_tests</code> hook fires, and ERPNext's
+    deletes every <code>Item Price</code> row on the site. That has already happened once here
+    — 4,847 rows, restored from backup.
+  </div>
+</section>
+
+<section id="b-deploy">
+  <h2>B7 · Deploying a change</h2>
+  <p>All five steps matter, in this order:</p>
+  <pre style="background:var(--charcoal);color:#dfe5e2;padding:18px 20px;border-radius:10px;overflow-x:auto;font-family:var(--mono);font-size:12.5px;line-height:1.7">cd /home/v15/yht-bench/apps/yht_custom &amp;&amp; sudo -u v15 -H git pull upstream main
+cd /home/v15/yht-bench &amp;&amp; sudo -u v15 bench --site yht-khobhar.enfonoerp.com migrate
+sudo -u v15 bench --site yht-khobhar.enfonoerp.com clear-cache
+sudo -u v15 touch sites/assets/assets.json
+sudo supervisorctl signal QUIT yht-bench-web:yht-bench-frappe-web</pre>
+  <div class="warn">
+    <b>Three traps here all print the same misleading authentication error.</b>
+    The remote is <code>upstream</code>, not <code>origin</code>; <code>sudo -u v15</code> needs
+    <code>-H</code>; and the app directory must be <code>chown -R v15:v15</code> if anything has
+    run as root in it.
+  </div>
+  <div class="warn">
+    <b><code>touch sites/assets/assets.json</code> is not optional.</b>
+    The browser caches the whole dashboard page document in localStorage, and that cache only
+    clears when the build version changes — which is that file's timestamp. Without it the
+    change is invisible to anyone already signed in, forever. Clearing cache, restarting the
+    worker and a hard refresh all fail to fix it.
+  </div>
+  <div class="note">
+    <b>The bench is <code>/home/v15/yht-bench</code>, not <code>frappe-bench</code>.</b>
+    <code>frappe-bench</code> on the same box runs other clients' live sites.
+  </div>
+</section>
+
+<section id="b-open">
+  <h2>B8 · Open items before go-live</h2>
+  <table>
+    <thead><tr><th>Item</th><th>State</th><th>Needed</th></tr></thead>
+    <tbody>
+      <tr><td><b>ZATCA e-invoicing</b></td>
+          <td>Installed, <b>nought</b> ZATCA Business Settings rows, so every hook does nothing</td>
+          <td>Client CSR/OTP credentials</td></tr>
+      <tr><td><b>Item code prefixes (B14)</b></td><td>Nought of 29 leaf groups</td><td>Client decision per group</td></tr>
+      <tr><td><b>Freeze dates (B15)</b></td><td>Both <code>0001-01-01</code> — every historical period is writable</td><td>A date from YHT finance</td></tr>
+      <tr><td><b>Credit limits</b></td><td>Nought Customer Credit Limit rows, so the warning is dormant</td><td>Finance to set limits</td></tr>
+      <tr><td><b>Test account</b></td><td><code>branchtest@yht-khobhar.enfonoerp.com</code> is a project account</td><td><b>Disable before go-live</b></td></tr>
+    </tbody>
+  </table>
+  <div class="stop">
+    <b>Warn the client before ZATCA Phase 2 is switched on.</b>
+    It blocks Sales Invoice cancellation outright — corrections become credit-note-only. Anyone
+    used to cancelling a mistake needs to change habits before that day, not after. This is
+    also why the Sales Invoice print format is deliberately left unset: nobody should start
+    handing out a layout that has to change.
+  </div>
+  <div class="warn">
+    <b>Data health gates the import, not the build.</b>
+    The general ledger is out by <b>SAR 3,000</b> (one voucher, <code>KS-JV-26-0074</code>),
+    stock-versus-GL variance is <b>SAR 74,409.27</b>, and there are <b>102 negative bins</b>.
+    The agreed acceptance test is a trial-balance match, so these clear before cut-over or get
+    accepted in writing.
+  </div>
+</section>
+
+</main>
+</div>
+
+<footer class="runfoot">
+  <span>Confidential — Enfono Technologies</span>
+  <span>Kathoom Alkhobar ERP User Guide · v1.0 · August 2026</span>
+</footer>
+
+<script>
+  const links = Array.from(document.querySelectorAll("nav.toc a"));
+  const sections = links.map((a) => document.querySelector(a.getAttribute("href"))).filter(Boolean);
+  const mark = () => {
+    const y = window.scrollY + 140;
+    let current = sections[0];
+    for (const s of sections) if (s.offsetTop <= y) current = s;
+    links.forEach((a) => a.classList.toggle("active", a.getAttribute("href") === "#" + current.id));
+  };
+  window.addEventListener("scroll", mark, { passive: true });
+  mark();
+</script>
+</body>
+</html>

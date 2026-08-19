@@ -198,6 +198,8 @@ function render(page, d) {
 				<span class="yht-subtitle">${subtitle}</span>
 			</div>
 			<div class="yht-header-right">
+				<a class="yht-guide" href="/assets/yht_custom/guide/index.html" target="_blank"
+				   rel="noopener">${__("User Guide")}</a>
 				<span class="yht-date">${frappe.datetime.str_to_user(frappe.datetime.get_today())}</span>
 			</div>
 		</div>
