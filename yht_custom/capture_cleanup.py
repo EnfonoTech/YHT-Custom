@@ -1,4 +1,4 @@
-"""Remove documents a capture run created on yht-khobhar. SAFE BY DEFAULT.
+"""Remove documents a capture run created on yht-khobhar. MARKER-BASED, not heuristic.
 
 Run on the bench:
 
@@ -7,19 +7,25 @@ Run on the bench:
 
 `report` only prints. `purge` acts, and refuses anything it is not certain about.
 
-WHY THIS IS PARANOID
-A diagnostic run through `bench execute` already left one real submitted Sales Invoice
-(`KSIN-26-0591`) on this client's site — `bench execute` commits, unlike `FrappeTestCase`.
-This site also carries real client master data: 4,053 items, 428 customers, 2,338 sales
-invoices. A cleanup that guesses is worse than no cleanup.
+WHY A MARKER AND NOT "OWNER PLUS A TIME WINDOW"
+-----------------------------------------------
+The first version of this script matched on owner and creation time. Run against the real
+site it proposed removing TWELVE documents, of which ELEVEN were the client's own UAT work —
+they had been testing while impersonating the same `branchtest` account, so owner told us
+nothing and the time window told us nothing either. Exactly one document was actually the
+capture's.
 
-THE RULES, ALL OF THEM
-1. Only documents owned by the capture account, created inside the window. Never anything
-   else, whatever it looks like.
-2. Never touch a document another document references. A Delivery Note billed by an invoice,
-   an invoice with a payment against it — left alone and reported, not deleted.
+Deleting a client's testing because it shares an account with the harness is far worse than
+leaving a stray draft behind. So nothing is removed now unless the capture STAMPED it: every
+document a capture creates carries `CAPTURE_MARKER` in its `remarks`, and only documents
+carrying it are ever candidates.
+
+THE REMAINING RULES
+1. Marker present, or it is not a candidate. No exceptions, no fallbacks.
+2. Never touch a document another document references. A delivery note that has been billed,
+   an invoice with a payment against it — left alone and reported.
 3. Cancel before delete, so the GL is reversed rather than orphaned.
-4. Delete children before parents: payments, then invoices, then delivery notes.
+4. Children before parents: payments, then invoices, then delivery notes.
 5. Re-count afterwards and print it. Do not assume the delete worked.
 """
 
@@ -30,9 +36,9 @@ from frappe.utils import get_datetime
 
 CAPTURE_USER = "branchtest@yht-khobhar.enfonoerp.com"
 
-#: Only documents created at or after this instant are candidates. Set it to just before the
-#: capture run. Deliberately NOT a default of "today" — that would sweep a real day's work.
-WINDOW_START = "2026-08-19 16:00:00"
+#: The stamp every capture-created document carries in `remarks`. A document without it is
+#: never a candidate, whoever owns it and whenever it was made.
+CAPTURE_MARKER = "ENFONO-CAPTURE-DO-NOT-KEEP"
 
 #: Delete order matters: a payment references an invoice, an invoice references a delivery
 #: note. Children first.
@@ -55,13 +61,19 @@ REFERRERS = {
 
 
 def _candidates():
+    """Only documents the capture stamped. Both conditions, never either alone."""
     out = []
     for doctype in ORDER:
         if not frappe.db.exists("DocType", doctype):
             continue
+        if not frappe.get_meta(doctype).get_field("remarks"):
+            continue
         rows = frappe.get_all(
             doctype,
-            filters={"owner": CAPTURE_USER, "creation": [">=", WINDOW_START]},
+            filters={
+                "owner": CAPTURE_USER,
+                "remarks": ["like", f"%{CAPTURE_MARKER}%"],
+            },
             fields=["name", "docstatus", "creation"],
             order_by="creation asc",
         )
@@ -88,10 +100,10 @@ def report():
     """Print what a purge WOULD do. Changes nothing."""
     rows = _candidates()
     if not rows:
-        print(f"nothing owned by {CAPTURE_USER} created since {WINDOW_START}")
+        print(f"no documents carry the capture marker {CAPTURE_MARKER}")
         return
 
-    print(f"{len(rows)} candidate(s) owned by {CAPTURE_USER} since {WINDOW_START}:\n")
+    print(f"{len(rows)} document(s) carrying {CAPTURE_MARKER}:\n")
     for row in rows:
         blockers = _blockers(row["doctype"], row["name"])
         verdict = "WOULD KEEP — referenced by " + ", ".join(blockers) if blockers else "would remove"
@@ -103,7 +115,7 @@ def purge():
     """Cancel then delete, skipping anything referenced. Re-counts afterwards."""
     rows = _candidates()
     if not rows:
-        print(f"nothing to purge for {CAPTURE_USER} since {WINDOW_START}")
+        print(f"nothing carries the capture marker {CAPTURE_MARKER} — nothing to purge")
         return
 
     removed, kept = [], []
