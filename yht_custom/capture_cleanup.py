@@ -36,8 +36,13 @@ from frappe.utils import get_datetime
 
 CAPTURE_USER = "branchtest@yht-khobhar.enfonoerp.com"
 
-#: The stamp every capture-created document carries in `remarks`. A document without it is
-#: never a candidate, whoever owns it and whenever it was made.
+#: The stamp every capture-created document carries. A document without it is never a
+#: candidate, whoever owns it and whenever it was made.
+#:
+#: Applied as a TAG, not as `remarks`. `remarks` does not exist on Delivery Note — querying it
+#: raises `OperationalError: Unknown column 'remarks'` — so a remarks-based marker silently
+#: skipped every delivery note a capture created and left them on the site. `_user_tags` is on
+#: every doctype, which is the only property that makes a universal marker possible.
 CAPTURE_MARKER = "ENFONO-CAPTURE-DO-NOT-KEEP"
 
 #: Delete order matters: a payment references an invoice, an invoice references a delivery
@@ -66,13 +71,11 @@ def _candidates():
     for doctype in ORDER:
         if not frappe.db.exists("DocType", doctype):
             continue
-        if not frappe.get_meta(doctype).get_field("remarks"):
-            continue
         rows = frappe.get_all(
             doctype,
             filters={
                 "owner": CAPTURE_USER,
-                "remarks": ["like", f"%{CAPTURE_MARKER}%"],
+                "_user_tags": ["like", f"%{CAPTURE_MARKER}%"],
             },
             fields=["name", "docstatus", "creation"],
             order_by="creation asc",
