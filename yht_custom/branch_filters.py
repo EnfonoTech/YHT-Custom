@@ -66,7 +66,6 @@ def _warehouse_or_owner(doctype: str, header_fields: list[str], item_doctype: st
 		return ""
 
 	wh = _escaped_list(warehouses)
-	safe_user = frappe.db.escape(user)
 	clauses = [f"`tab{doctype}`.`{f}` IN ({wh})" for f in header_fields]
 
 	if item_doctype:
@@ -75,7 +74,12 @@ def _warehouse_or_owner(doctype: str, header_fields: list[str], item_doctype: st
 			f"SELECT DISTINCT `parent` FROM `tab{item_doctype}` WHERE `warehouse` IN ({wh}))"
 		)
 
-	clauses.append(f"`tab{doctype}`.`owner` = {safe_user}")
+	# Owner falls back to the branch's whole roster, not just this user, so a
+	# colleague's draft raised before its warehouse was filled in is still visible
+	# to the branch that owns it.
+	peers = get_branch_peers(user) or [user]
+	clauses.append(f"`tab{doctype}`.`owner` IN ({_escaped_list(peers)})")
+
 	scope = "(" + " OR ".join(clauses) + ")"
 	return f"{scope} AND {_hide_cancelled(doctype)}"
 
@@ -168,8 +172,15 @@ def stock_entry_query(user):
 
 
 def quotation_query(user):
-	"""Quotations carry no warehouse, so scope them to the branch's own users."""
-	return _branch_peers_only("Quotation", user)
+	"""Scope quotations by the warehouse on their ITEM rows.
+
+	`Quotation` has no header warehouse field, which is what led to an earlier
+	owner-only filter. But `Quotation Item` does — and on this site 2,719 of 2,766
+	quotations carry one. Owner-only showed a branch user **0 of 2,766**, because
+	the historical quotations belong to staff who are not on any Branch
+	Configuration.
+	"""
+	return _warehouse_or_owner("Quotation", [], "Quotation Item", user)
 
 
 def payment_entry_query(user):

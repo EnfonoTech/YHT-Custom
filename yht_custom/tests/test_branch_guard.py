@@ -303,8 +303,14 @@ class TestBranchPeerScoping(FrappeTestCase):
 
 		self.assertEqual(get_branch_peers("_nobody_yht@example.invalid"), [])
 
-	def test_quotation_query_scopes_to_peers_not_just_owner(self):
+	def test_quotation_query_uses_the_item_warehouse(self):
+		"""Quotation has no header warehouse but Quotation Item does. Scoping on
+		the owner alone showed a branch user 0 of 2,766 quotations, because the
+		historical ones belong to staff who are not on a Branch Configuration."""
 		from yht_custom.branch_filters import quotation_query
 
 		# Administrator is unrestricted, so the fragment must be empty
 		self.assertEqual(quotation_query("Administrator"), "")
+
+		self.assertIsNone(frappe.get_meta("Quotation").get_field("set_warehouse"))
+		self.assertIsNotNone(frappe.get_meta("Quotation Item").get_field("warehouse"))
