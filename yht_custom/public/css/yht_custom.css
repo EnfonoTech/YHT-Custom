@@ -20,7 +20,11 @@
 	   container's right edge, which reads as a broken border. Filling the width
 	   matches every other desk page. The grids are auto-fill/auto-fit, so they use
 	   the extra width rather than stretching the cards. */
-	padding: 4px 0 40px;
+	/* Horizontal padding rather than a max-width: the page container's own edge is
+	   the card boundary, so content flush against it reads as a cropped border.
+	   Vertical is asymmetric on purpose — a little air at the top, room to scroll
+	   past the last row at the bottom. */
+	padding: 4px 24px 40px;
 	width: 100%;
 }
 
@@ -520,21 +524,24 @@
 /* Back-to-dashboard nav item, injected by branch_user_restrict.js.
    v15 only consults role_home_page for WEBSITE users, so a desk System User gets
    no home route back to the dashboard — hence an explicit affordance. */
-.yht-nav-home a {
+/* Deliberately sets NO colour. The item is rendered as `button.nav-link`, the same
+   shape as frappe's own notifications and Help items, so it inherits whatever the
+   active theme gives navbar buttons — white under grey_theme's dark navbar, dark
+   under stock frappe's white one. An earlier version hardcoded
+   `var(--navbar-text-color, var(--text-color))`, which resolved to the dark body
+   text colour on a dark navbar and made the only way home invisible. */
+.yht-nav-home button.nav-link {
 	display: inline-flex;
 	align-items: center;
 	gap: 0.35rem;
 	padding: 0.25rem 0.6rem;
 	border-radius: var(--border-radius);
 	font-weight: 500;
-	color: var(--navbar-text-color, var(--text-color));
-	text-decoration: none;
 	white-space: nowrap;
 }
 
-.yht-nav-home a:hover {
-	background: var(--fg-hover-color, rgba(0, 0, 0, 0.06));
-	text-decoration: none;
+.yht-nav-home button.nav-link:hover {
+	background: var(--fg-hover-color, rgba(255, 255, 255, 0.12));
 }
 
 .yht-nav-home .yht-nav-arrow {

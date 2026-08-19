@@ -90,17 +90,30 @@ function add_dashboard_link() {
 		if (!$navbar.length) return false;
 		if ($navbar.find(".yht-nav-home").length) return true;
 
+		// MARKUP MATTERS — this is `li.nav-item > button.nav-link`, deliberately the
+		// same shape as the notifications and Help items in frappe's navbar.html.
+		//
+		// The first version used `li > a`, and on this bench it rendered dark-on-dark
+		// and was effectively invisible. grey_theme colours navbar items with
+		//     .navbar .nav-item button.nav-link { color: var(--btn-default-hover-bg) !important }
+		// i.e. it targets BUTTONS. Its anchor rule, `.navbar .navbar-expand li a`, is a
+		// dead selector — `navbar-expand` sits on the SAME element as `navbar`
+		// (`<header class="navbar navbar-expand">`), never a descendant — so nothing
+		// styled the anchor, and our own `var(--navbar-text-color, var(--text-color))`
+		// fell through to the dark body text colour on a #4a5464 navbar.
+		//
+		// Matching the shape frappe and the theme already style means the item
+		// inherits the right colour under grey_theme AND under stock frappe's white
+		// navbar, with no colour of our own to keep in sync.
 		const $item = $(`
 			<li class="nav-item yht-nav-home">
-				<a href="/app/${DASHBOARD_ROUTE}" title="${__("Branch Dashboard")}">
+				<button class="btn-reset nav-link" title="${__("Branch Dashboard")}">
 					<span class="yht-nav-arrow">&larr;</span>
 					<span>${__("Dashboard")}</span>
-				</a>
+				</button>
 			</li>
 		`);
-		// Let frappe's router handle it rather than a full page load.
-		$item.find("a").on("click", function (e) {
-			e.preventDefault();
+		$item.find("button").on("click", function () {
 			frappe.set_route(DASHBOARD_ROUTE);
 		});
 		$navbar.prepend($item);
