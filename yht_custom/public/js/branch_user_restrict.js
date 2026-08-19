@@ -28,7 +28,23 @@ const ALLOWED_DOCTYPES = [
 	"Item",
 ];
 
-const ALLOWED_ROUTES = ["yht-dashboard", "query-report", "report", "print", "form", "dashboard-view"];
+//: Single-segment routes a branch user legitimately lands on. Multi-segment routes
+//: (["query-report", "Stock Balance"], ["print", ...]) are handled by the branches below and
+//: do not need to appear here — but leaving them costs nothing and documents the intent.
+//:
+//: This list is now LOAD-BEARING: anything absent from it that arrives as a lone slug is
+//: treated as a doctype the role cannot open. Add a page here before linking a branch user
+//: to it, or they will be bounced off it.
+const ALLOWED_ROUTES = [
+	"yht-dashboard",
+	"query-report",
+	"report",
+	"print",
+	"form",
+	"dashboard-view",
+	"workspace",
+	"Workspaces",
+];
 
 $(document).on("app_ready", function () {
 	if (!frappe.boot || !frappe.boot.yht_branch_restricted) return;
@@ -53,20 +69,46 @@ function enforce_route() {
 
 	const [kind, target] = route;
 
+	// ── the single-slug case ────────────────────────────────────────────────────
+	//
+	// MEASURED, because two earlier guesses at this were wrong. On a DIRECT URL load
+	// frappe.get_route() returns different shapes depending on whether the user may read
+	// the doctype:
+	//
+	//   /app/sales-invoice   (permitted)      -> ["List", "Sales Invoice", "List"]
+	//   /app/asset           (NOT permitted)  -> ["asset"]
+	//   /app/yht-dashboard   (a page)         -> ["yht-dashboard"]
+	//
+	// The router cannot expand a doctype whose meta it is not allowed to load, so it
+	// leaves the raw slug in place — and it stays that way, still ["asset"] five seconds
+	// later, so waiting for it to settle does not help either.
+	//
+	// That makes an unexpanded lone slug the permission denial itself. Anything not in
+	// ALLOWED_ROUTES is therefore a doctype this role cannot open, and gets sent home with
+	// the doctype named rather than left on a bare "Not permitted".
+	if (route.length === 1) {
+		const slug = route[0];
+		if (ALLOWED_ROUTES.includes(slug)) return;
+		bounce(frappe.model.unscrub(slug));
+		return;
+	}
+
 	if (kind === "List" || kind === "Form" || kind === "Tree") {
-		if (target && !ALLOWED_DOCTYPES.includes(target)) {
-			frappe.show_alert(
-				{ message: __("{0} is not available for your role.", [__(target)]), indicator: "orange" },
-				5
-			);
-			frappe.set_route("yht-dashboard");
-		}
+		if (target && !ALLOWED_DOCTYPES.includes(target)) bounce(target);
 		return;
 	}
 
 	if (kind === "Workspaces" && target && target !== "Branch User") {
 		frappe.set_route("yht-dashboard");
 	}
+}
+
+function bounce(label) {
+	frappe.show_alert(
+		{ message: __("{0} is not available for your role.", [__(label)]), indicator: "orange" },
+		5
+	);
+	frappe.set_route("yht-dashboard");
 }
 
 // A way back to the dashboard, on every page.
