@@ -35,29 +35,39 @@ $(document).on("app_ready", function () {
 
 	add_dashboard_link();
 
-	frappe.router.on("change", () => {
-		const route = frappe.get_route();
-		if (!route || !route.length) return;
-
-		const [kind, target] = route;
-
-		if (kind === "List" || kind === "Form" || kind === "Tree") {
-			if (target && !ALLOWED_DOCTYPES.includes(target)) {
-				frappe.show_alert(
-					{ message: __("{0} is not available for your role.", [__(target)]), indicator: "orange" },
-					5
-				);
-				frappe.set_route("yht-dashboard");
-			}
-			return;
-		}
-
-		if (kind === "Workspaces" && target && target !== "Branch User") {
-			frappe.set_route("yht-dashboard");
-		}
-	});
+	// Check the route we ARRIVED on, then every route change after it.
+	//
+	// `router.on("change")` alone was not enough, and the dry-run caught it: navigating
+	// straight to /app/asset landed there and stayed. The handler is registered during
+	// app_ready, by which time the FIRST route has already been resolved — no "change"
+	// event ever fires for it. So a typed URL, a bookmark, or simply refreshing the page
+	// while on a disallowed doctype walked right past the gate and the user met a bare
+	// "Not permitted" instead of being sent home.
+	enforce_route();
+	frappe.router.on("change", enforce_route);
 });
 
+function enforce_route() {
+	const route = frappe.get_route();
+	if (!route || !route.length) return;
+
+	const [kind, target] = route;
+
+	if (kind === "List" || kind === "Form" || kind === "Tree") {
+		if (target && !ALLOWED_DOCTYPES.includes(target)) {
+			frappe.show_alert(
+				{ message: __("{0} is not available for your role.", [__(target)]), indicator: "orange" },
+				5
+			);
+			frappe.set_route("yht-dashboard");
+		}
+		return;
+	}
+
+	if (kind === "Workspaces" && target && target !== "Branch User") {
+		frappe.set_route("yht-dashboard");
+	}
+}
 
 // A way back to the dashboard, on every page.
 //
