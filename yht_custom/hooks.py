@@ -15,6 +15,8 @@ required_apps = ["frappe/erpnext"]
 app_include_js = [
 	"/assets/yht_custom/js/branch_user_restrict.js?v=1",
 	"/assets/yht_custom/js/branch_user_forms.js?v=1",
+	"/assets/yht_custom/js/sales_flow.js?v=1",
+	"/assets/yht_custom/js/expense_invoice.js?v=1",
 ]
 app_include_css = "/assets/yht_custom/css/yht_custom.css?v=1"
 
@@ -69,6 +71,28 @@ doc_events = {
 	"Item": {"before_insert": "yht_custom.item_naming.set_item_code_from_group"},
 }
 
+# --- flow policy (Step 5) -------------------------------------------------
+# Order matters within a hook: branch defaults run first, then the flow policy
+# overrides what it must. expense_invoice.set_expense_series deliberately runs
+# after set_naming_series_from_branch so an expense invoice takes the expense
+# series rather than the branch's purchase series.
+_FLOW_EVENTS = {
+	"Sales Invoice": {"before_validate": "yht_custom.sales_flow.enforce_delivery_note_route"},
+	"Delivery Note": {
+		"validate": "yht_custom.sales_flow.validate_delivery_note",
+		"on_update_after_submit": "yht_custom.sales_flow.lock_submitted_delivery_note",
+	},
+	"Purchase Invoice": {
+		"before_validate": [
+			"yht_custom.sales_flow.enforce_purchase_receipt_route",
+			"yht_custom.expense_invoice.before_validate",
+		],
+		"validate": "yht_custom.expense_invoice.validate",
+		"before_insert": "yht_custom.expense_invoice.set_expense_series",
+		"on_submit": "yht_custom.expense_invoice.on_submit",
+	},
+}
+
 doc_events.update({
 	doctype: dict(_BRANCH_DEFAULT_EVENTS)
 	for doctype in (
@@ -87,6 +111,29 @@ doc_events.update({
 	)
 })
 
+
+def _merge_events(base: dict, extra: dict) -> dict:
+	"""Merge two doc_events maps, combining handlers on a shared event.
+
+	A plain dict.update would drop the branch hooks wherever the flow policy also
+	registers on that doctype — Purchase Invoice registers on before_validate in
+	both, and losing the branch cost-centre override there would be silent.
+	"""
+	for doctype, events in extra.items():
+		target = base.setdefault(doctype, {})
+		for event, handler in events.items():
+			handlers = handler if isinstance(handler, list) else [handler]
+			existing = target.get(event)
+			if not existing:
+				target[event] = handlers if len(handlers) > 1 else handlers[0]
+				continue
+			existing_list = existing if isinstance(existing, list) else [existing]
+			target[event] = existing_list + handlers
+	return base
+
+
+doc_events = _merge_events(doc_events, _FLOW_EVENTS)
+
 # -------------------------------------------------------------------- fixtures
 # A fixture needs BOTH the entry here AND the record itself — a name missing from
 # this filter list is silently not exported.
@@ -104,6 +151,8 @@ fixtures = [
 					"Branch-custom_letter_head",
 					"Branch-custom_naming_series_table",
 					"Item Group-custom_item_code_prefix",
+					"Purchase Invoice-custom_is_expense_invoice",
+					"Purchase Invoice-custom_expense_head",
 				],
 			]
 		],

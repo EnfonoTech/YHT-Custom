@@ -10,6 +10,7 @@ change an implementer made on the site.
 import frappe
 
 from yht_custom.setup_branch_series import setup_branch_series
+from yht_custom.expense_invoice import setup_expense_invoice
 from yht_custom.setup_property_setters import setup_ignore_user_permissions
 
 #: What a Branch User may touch. Per the MoM document set — Quotation, Sales
@@ -81,6 +82,7 @@ PROVISIONING_STEPS = (
 	"setup_branch_user_permissions",
 	"ensure_module_profile",
 	"setup_ignore_user_permissions",
+	"setup_expense_invoice",
 	"setup_branch_series",
 )
 
@@ -119,6 +121,7 @@ def _imported(name):
 	"""Resolve a step that lives in another module."""
 	return {
 		"setup_ignore_user_permissions": setup_ignore_user_permissions,
+		"setup_expense_invoice": setup_expense_invoice,
 		"setup_branch_series": setup_branch_series,
 	}[name]
 
