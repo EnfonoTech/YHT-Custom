@@ -68,20 +68,32 @@ $(document).on("app_ready", function () {
 // first allowed workspace, and clicking the logo does NOT return to the dashboard.
 // boot.py's `default_route` covers the initial load only.
 //
-// So a branch user who opened a list had no way back except the browser button.
-// This adds a persistent navbar item. It lives in the navbar rather than the page
-// head because the navbar survives route changes; a page-head button has to be
-// re-added on every render and disappears mid-navigation.
+// WHY IT DISAPPEARED THE FIRST TIME — do not reintroduce this:
+// the previous version inserted into `$(".navbar .navbar-nav").first()`. There are
+// TWO `.navbar-nav` lists in frappe's navbar.html, and the FIRST one is
+//     <ul class="nav navbar-nav d-none d-sm-flex" id="navbar-breadcrumbs">   (line 11)
+// which frappe EMPTIES AND REBUILDS on every route change. So the button survived
+// on the dashboard (no breadcrumbs there) and vanished the moment the user opened
+// any list — exactly the symptom reported. The persistent list is the second one,
+// inside `.navbar-collapse` (line 37), holding notifications / help / avatar.
+//
+// Two affordances, because operators reach for both:
+//   1. an explicit "Dashboard" item in the persistent navbar list
+//   2. the logo itself, repointed from /app to the dashboard
+
+const DASHBOARD_ROUTE = "yht-dashboard";
+
 function add_dashboard_link() {
 	const insert = () => {
-		const $navbar = $(".navbar .navbar-nav").first();
+		// NOT .first() — that is #navbar-breadcrumbs, which gets wiped per route.
+		const $navbar = $(".navbar .navbar-collapse .navbar-nav").first();
 		if (!$navbar.length) return false;
 		if ($navbar.find(".yht-nav-home").length) return true;
 
 		const $item = $(`
 			<li class="nav-item yht-nav-home">
-				<a href="/app/yht-dashboard" title="${__("Branch Dashboard")}">
-					${frappe.utils.icon("dashboard", "sm")}
+				<a href="/app/${DASHBOARD_ROUTE}" title="${__("Branch Dashboard")}">
+					<span class="yht-nav-arrow">&larr;</span>
 					<span>${__("Dashboard")}</span>
 				</a>
 			</li>
@@ -89,16 +101,37 @@ function add_dashboard_link() {
 		// Let frappe's router handle it rather than a full page load.
 		$item.find("a").on("click", function (e) {
 			e.preventDefault();
-			frappe.set_route("yht-dashboard");
+			frappe.set_route(DASHBOARD_ROUTE);
 		});
 		$navbar.prepend($item);
 		return true;
 	};
 
-	if (insert()) return;
+	const point_logo_home = () => {
+		const $brand = $(".navbar .navbar-brand.navbar-home");
+		if (!$brand.length || $brand.data("yht-rebound")) return;
+		$brand.data("yht-rebound", true).attr("href", `/app/${DASHBOARD_ROUTE}`);
+		$brand.on("click", function (e) {
+			e.preventDefault();
+			frappe.set_route(DASHBOARD_ROUTE);
+		});
+	};
+
+	const apply = () => {
+		point_logo_home();
+		return insert();
+	};
+
+	// Re-assert on every route change. The target list is persistent, so this is
+	// normally a no-op — but it is cheap, idempotent (the .yht-nav-home guard) and
+	// it means a future frappe change to the navbar cannot silently remove the only
+	// way a restricted user has of getting back.
+	frappe.router.on("change", apply);
+
+	if (apply()) return;
 	// The navbar can mount after app_ready; retry briefly rather than give up.
 	let tries = 0;
 	const timer = setInterval(() => {
-		if (insert() || ++tries > 20) clearInterval(timer);
+		if (apply() || ++tries > 20) clearInterval(timer);
 	}, 250);
 }
