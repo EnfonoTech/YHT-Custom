@@ -65,6 +65,20 @@ function shape(frm) {
 		if (frm.fields_dict[f]) frm.set_df_property(f, "hidden", is_expense ? 1 : 0);
 	});
 
+	// Every row needs a uom, not only the ones added after the box was ticked.
+	//
+	// frappe puts a blank starter row on a new form, and `shape()` stamps the expense head onto
+	// it — which makes it no longer "empty", so nothing drops it, and the CLIENT then refuses
+	// the save on its missing mandatory uom before the request is ever sent. Filling uom here
+	// lets the save through; before_validate then discards the row server-side as genuinely
+	// blank, so nothing empty posts.
+	if (is_expense) {
+		const fallback = frappe.boot.sysdefaults.stock_uom || "Nos";
+		(frm.doc.items || []).forEach((row) => {
+			if (!row.uom) frappe.model.set_value(row.doctype, row.name, "uom", fallback);
+		});
+	}
+
 	if (frm.fields_dict.items) {
 		// An expense line is a description and an account, not an item and a store.
 		["warehouse", "from_warehouse", "rejected_warehouse", "received_qty", "rejected_qty"].forEach((f) => {

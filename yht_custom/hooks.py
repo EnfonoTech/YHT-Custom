@@ -16,7 +16,7 @@ app_include_js = [
 	"/assets/yht_custom/js/branch_user_restrict.js?v=7",
 	"/assets/yht_custom/js/branch_user_forms.js?v=1",
 	"/assets/yht_custom/js/sales_flow.js?v=1",
-	"/assets/yht_custom/js/expense_invoice.js?v=3",
+	"/assets/yht_custom/js/expense_invoice.js?v=4",
 	"/assets/yht_custom/js/price_assist.js?v=2",
 	"/assets/yht_custom/js/payment_assist.js?v=3",
 ]

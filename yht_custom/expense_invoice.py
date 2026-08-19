@@ -70,6 +70,25 @@ def before_validate(doc, method=None):
 	# and silently corrupt inventory value.
 	doc.update_stock = 0
 
+	# Discard the blank starter row frappe adds to a new form.
+	#
+	# `shape()` in expense_invoice.js stamps the expense head onto every row including that
+	# one, which makes it non-empty, so ERPNext's own "drop empty rows" pass keeps it and the
+	# document posts a zero line. A row with nothing to say — no description, no item, no
+	# amount — is not an expense.
+	blank = [
+		row
+		for row in doc.get("items") or []
+		if not (row.get("item_name") or row.get("description") or row.get("item_code"))
+		and not flt(row.get("rate"))
+		and not flt(row.get("amount"))
+	]
+	for row in blank:
+		doc.get("items").remove(row)
+	if blank:
+		for idx, row in enumerate(doc.get("items") or [], start=1):
+			row.idx = idx
+
 	head = doc.get("custom_expense_head")
 	for row in doc.get("items") or []:
 		if head and not row.get("expense_account"):
