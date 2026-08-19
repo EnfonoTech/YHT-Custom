@@ -238,6 +238,7 @@ class TestCollectPayment(FrappeTestCase):
 		# `grand_total` is not the same figure on an invoice with rounding enabled, and using
 		# it here masked a real bug in the reference row's total_amount.
 		due = flt(invoice.outstanding_amount, 2)
+		self.assertGreater(due, 0, f"{invoice.name} submitted already paid — nothing to collect")
 		created = payment_assist.collect_payment(
 			invoice.name, [{"mode_of_payment": mode.parent, "amount": due}]
 		)
@@ -282,6 +283,7 @@ class TestCollectPayment(FrappeTestCase):
 		invoice = self._make_invoice(company)
 
 		due = flt(invoice.outstanding_amount, 2)
+		self.assertGreater(due, 0, f"{invoice.name} submitted already paid — nothing to split")
 		half = flt(due / 2, 2)
 		rest = flt(due - half, 2)
 		created = payment_assist.collect_payment(
@@ -309,9 +311,19 @@ class TestCollectPayment(FrappeTestCase):
 		posts — reported as skipped while the real cause sat unread. A broken
 		fixture must fail loudly, not quietly downgrade the suite.
 		"""
+		# is_pos = 0 MATTERS. 517 invoices on this site carry is_pos = 1, and copying one
+		# brings its `payments` rows with it, so the copy is fully paid the moment it submits
+		# — outstanding 0, nothing to tender, and collect_payment rightly refuses. The tests
+		# failed exactly that way once the template happened to be a POS invoice.
 		template_name = frappe.db.get_value(
 			"Sales Invoice",
-			{"docstatus": 1, "is_return": 0, "company": company, "update_stock": 0},
+			{
+				"docstatus": 1,
+				"is_return": 0,
+				"company": company,
+				"update_stock": 0,
+				"is_pos": 0,
+			},
 			"name",
 			order_by="modified desc",
 		)
@@ -337,6 +349,10 @@ class TestCollectPayment(FrappeTestCase):
 		# rightly refuses it. Clearing the table makes ERPNext regenerate it from the
 		# payment terms template on validate, which is what a real new invoice does.
 		invoice.payment_schedule = []
+		# Belt and braces alongside the is_pos filter above: a copied payment row would settle
+		# the invoice on submit and leave nothing to collect.
+		invoice.payments = []
+		invoice.is_pos = 0
 		invoice.insert()
 		# reload() between insert and submit is REQUIRED, not defensive. Something on
 		# the insert path writes the row again behind the in-memory doc, so submit()
