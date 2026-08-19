@@ -334,6 +334,29 @@ def _make_payment_entry(invoice, mode_of_payment: str, amount: float) -> str:
 	return entry.name
 
 
+def _reference_total(invoice) -> float:
+	"""The figure ERPNext expects in a reference row's ``total_amount``.
+
+	NOT bare ``grand_total``. `set_grand_total_and_outstanding_amount`
+	(payment_entry.py:3292) resolves it as::
+
+	    if party_account_currency == doc.company_currency:
+	        grand_total = doc.base_rounded_total or doc.base_grand_total
+	    else:
+	        grand_total = doc.rounded_total or doc.grand_total
+
+	Using ``grand_total`` on an invoice with rounding enabled leaves the rounding delta
+	unpaid — the end-to-end test surfaced it as exactly 0.50 still outstanding after a full
+	payment. Rebuilding a Payment Entry by hand means rebuilding this too.
+	"""
+	party_currency = frappe.get_cached_value("Account", invoice.debit_to, "account_currency")
+	company_currency = frappe.get_cached_value("Company", invoice.company, "default_currency")
+
+	if party_currency == company_currency:
+		return flt(invoice.get("base_rounded_total")) or flt(invoice.get("base_grand_total"))
+	return flt(invoice.get("rounded_total")) or flt(invoice.get("grand_total"))
+
+
 def _term_allocation_enabled(invoice) -> bool:
 	"""Does this invoice's payment terms template demand per-term allocation?
 
@@ -370,7 +393,7 @@ def _build_references(invoice, amount: float) -> list[dict]:
 		"reference_doctype": "Sales Invoice",
 		"reference_name": invoice.name,
 		"due_date": invoice.get("due_date"),
-		"total_amount": flt(invoice.grand_total),
+		"total_amount": _reference_total(invoice),
 		"outstanding_amount": flt(invoice.outstanding_amount),
 	}
 

@@ -234,8 +234,12 @@ class TestCollectPayment(FrappeTestCase):
 
 		invoice = self._make_invoice(company)
 
+		# Pay the OUTSTANDING, which is what the dialog shows as Amount Due. Paying
+		# `grand_total` is not the same figure on an invoice with rounding enabled, and using
+		# it here masked a real bug in the reference row's total_amount.
+		due = flt(invoice.outstanding_amount, 2)
 		created = payment_assist.collect_payment(
-			invoice.name, [{"mode_of_payment": mode.parent, "amount": flt(invoice.grand_total)}]
+			invoice.name, [{"mode_of_payment": mode.parent, "amount": due}]
 		)
 		self.assertEqual(len(created), 1)
 
@@ -245,7 +249,7 @@ class TestCollectPayment(FrappeTestCase):
 		self.assertEqual(entry.mode_of_payment, mode.parent)
 		self.assertEqual(entry.paid_to, mode.default_account)
 		self.assertEqual(entry.references[0].reference_name, invoice.name)
-		self.assertAlmostEqual(flt(entry.paid_amount, 2), flt(invoice.grand_total, 2), places=2)
+		self.assertAlmostEqual(flt(entry.paid_amount, 2), due, places=2)
 
 		# 45% of submitted invoices on this site use a template with term-based
 		# allocation, and ERPNext throws unless every reference row names a term.
@@ -258,9 +262,7 @@ class TestCollectPayment(FrappeTestCase):
 					"term-based allocation is on but a reference row has no payment_term",
 				)
 			self.assertAlmostEqual(
-				flt(sum(flt(r.allocated_amount) for r in entry.references), 2),
-				flt(invoice.grand_total, 2),
-				places=2,
+				flt(sum(flt(r.allocated_amount) for r in entry.references), 2), due, places=2
 			)
 
 		invoice.reload()
@@ -279,8 +281,9 @@ class TestCollectPayment(FrappeTestCase):
 
 		invoice = self._make_invoice(company)
 
-		half = flt(flt(invoice.grand_total) / 2, 2)
-		rest = flt(flt(invoice.grand_total) - half, 2)
+		due = flt(invoice.outstanding_amount, 2)
+		half = flt(due / 2, 2)
+		rest = flt(due - half, 2)
 		created = payment_assist.collect_payment(
 			invoice.name,
 			[
