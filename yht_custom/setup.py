@@ -12,6 +12,7 @@ import frappe
 from yht_custom.setup_branch_series import setup_branch_series
 from yht_custom.expense_invoice import setup_expense_invoice
 from yht_custom.form_layout import setup_form_layout
+from yht_custom.site_defaults import setup_site_defaults
 from yht_custom.setup_property_setters import setup_ignore_user_permissions
 
 #: What a Branch User may touch. Per the MoM document set — Quotation, Sales
@@ -117,6 +118,7 @@ PROVISIONING_STEPS = (
 	"setup_branch_series",
 	"setup_default_print_formats",
 	"setup_form_layout",
+	"setup_site_defaults",
 )
 
 
@@ -158,6 +160,7 @@ def _imported(name):
 		"setup_branch_series": setup_branch_series,
 		"setup_default_print_formats": setup_default_print_formats,
 		"setup_form_layout": setup_form_layout,
+		"setup_site_defaults": setup_site_defaults,
 	}[name]
 
 
