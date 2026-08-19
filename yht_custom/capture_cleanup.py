@@ -85,6 +85,39 @@ def _candidates():
     return out
 
 
+def _payments_against(tagged_invoices) -> list[dict]:
+    """Payment Entries created BY a capture, found via the invoice they settle.
+
+    `collect_payment` builds these server-side, so the capture never tags them — and without
+    them the purge correctly refuses to delete the invoice they reference, leaving both behind.
+    A payment whose only reference is a tagged capture invoice is itself capture output.
+
+    Deliberately narrow: a payment that also settles a real invoice is left alone.
+    """
+    if not tagged_invoices:
+        return []
+
+    found = []
+    rows = frappe.get_all(
+        "Payment Entry Reference",
+        filters={"reference_name": ["in", tagged_invoices], "docstatus": ["<", 2]},
+        fields=["parent"],
+        distinct=True,
+    )
+    for row in {r.parent for r in rows}:
+        others = frappe.get_all(
+            "Payment Entry Reference",
+            filters={"parent": row, "reference_name": ["not in", tagged_invoices]},
+            pluck="name",
+        )
+        if others:
+            continue
+        ds = frappe.db.get_value("Payment Entry", row, "docstatus")
+        if ds is not None and ds < 2:
+            found.append({"doctype": "Payment Entry", "name": row, "docstatus": ds})
+    return found
+
+
 def _blockers(doctype, name):
     """Every document that would be orphaned by deleting this one."""
     found = []
@@ -99,9 +132,16 @@ def _blockers(doctype, name):
     return sorted(set(found))
 
 
+def _all_targets():
+    """Tagged documents, plus the payments that exist only because of them."""
+    rows = _candidates()
+    invoices = [r["name"] for r in rows if r["doctype"] == "Sales Invoice"]
+    return _payments_against(invoices) + rows
+
+
 def report():
     """Print what a purge WOULD do. Changes nothing."""
-    rows = _candidates()
+    rows = _all_targets()
     if not rows:
         print(f"no documents carry the capture marker {CAPTURE_MARKER}")
         return
@@ -116,7 +156,7 @@ def report():
 
 def purge():
     """Cancel then delete, skipping anything referenced. Re-counts afterwards."""
-    rows = _candidates()
+    rows = _all_targets()
     if not rows:
         print(f"nothing carries the capture marker {CAPTURE_MARKER} — nothing to purge")
         return
