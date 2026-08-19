@@ -247,6 +247,22 @@ class TestCollectPayment(FrappeTestCase):
 		self.assertEqual(entry.references[0].reference_name, invoice.name)
 		self.assertAlmostEqual(flt(entry.paid_amount, 2), flt(invoice.grand_total, 2), places=2)
 
+		# 45% of submitted invoices on this site use a template with term-based
+		# allocation, and ERPNext throws unless every reference row names a term.
+		from yht_custom.api.payment_assist import _term_allocation_enabled
+
+		if _term_allocation_enabled(invoice):
+			for reference in entry.references:
+				self.assertTrue(
+					reference.payment_term,
+					"term-based allocation is on but a reference row has no payment_term",
+				)
+			self.assertAlmostEqual(
+				flt(sum(flt(r.allocated_amount) for r in entry.references), 2),
+				flt(invoice.grand_total, 2),
+				places=2,
+			)
+
 		invoice.reload()
 		self.assertAlmostEqual(flt(invoice.outstanding_amount, 2), 0.0, places=2)
 
@@ -321,3 +337,100 @@ class TestCollectPayment(FrappeTestCase):
 		invoice.reload()
 		invoice.submit()
 		return invoice
+
+
+class TestPaymentTermAllocation(FrappeTestCase):
+	"""The branch that broke the first green run.
+
+	`AS USUAL` (768 submitted invoices) and `60 Days credit` (284) both carry
+	`allocate_payment_based_on_payment_terms = 1`, so 45% of this site's invoices
+	require a `payment_term` on every Payment Entry reference row. Building the
+	entry longhand — which is what keeps Bank Account unreadable — means
+	replicating what `get_reference_as_per_payment_terms` does.
+	"""
+
+	def test_flag_is_read_from_the_template_not_accounts_settings(self):
+		"""`Accounts Settings.allocate_payment_based_on_payment_terms` is NULL on
+		this site, so a check against it would have reported "off" for all 1,052
+		invoices that actually need term allocation."""
+		from yht_custom.api.payment_assist import _term_allocation_enabled
+
+		template = frappe.db.get_value(
+			"Payment Terms Template", {"allocate_payment_based_on_payment_terms": 1}, "name"
+		)
+		if not template:
+			self.skipTest("no template with term-based allocation on this site")
+
+		invoice = frappe._dict({"payment_terms_template": template, "name": "_probe"})
+		self.assertTrue(_term_allocation_enabled(invoice))
+
+		invoice_without = frappe._dict({"payment_terms_template": None, "name": "_probe"})
+		self.assertFalse(_term_allocation_enabled(invoice_without))
+
+	def test_references_carry_a_term_when_allocation_is_on(self):
+		from yht_custom.api.payment_assist import _build_references
+
+		name = frappe.db.get_value(
+			"Sales Invoice",
+			{"docstatus": 1, "is_return": 0, "outstanding_amount": [">", 0]},
+			"name",
+		)
+		if not name:
+			self.skipTest("no unpaid submitted invoice on this site")
+
+		invoice = frappe.get_doc("Sales Invoice", name)
+		from yht_custom.api.payment_assist import _term_allocation_enabled
+
+		if not _term_allocation_enabled(invoice):
+			self.skipTest(f"{name} does not use term-based allocation")
+
+		refs = _build_references(invoice, flt(invoice.outstanding_amount))
+		self.assertTrue(refs)
+		for ref in refs:
+			self.assertTrue(ref.get("payment_term"), ref)
+		self.assertAlmostEqual(
+			flt(sum(flt(r["allocated_amount"]) for r in refs), 2),
+			flt(invoice.outstanding_amount, 2),
+			places=2,
+		)
+
+	def test_partial_tender_allocates_oldest_term_first(self):
+		from yht_custom.api.payment_assist import _build_references, _term_allocation_enabled
+
+		name = frappe.db.get_value(
+			"Sales Invoice",
+			{"docstatus": 1, "is_return": 0, "outstanding_amount": [">", 10]},
+			"name",
+		)
+		if not name:
+			self.skipTest("no unpaid submitted invoice on this site")
+
+		invoice = frappe.get_doc("Sales Invoice", name)
+		if not _term_allocation_enabled(invoice):
+			self.skipTest(f"{name} does not use term-based allocation")
+
+		refs = _build_references(invoice, 10.0)
+		self.assertAlmostEqual(
+			flt(sum(flt(r["allocated_amount"]) for r in refs), 2), 10.0, places=2
+		)
+		# Oldest first: the earliest due term is the one that receives money.
+		schedule = sorted(
+			invoice.payment_schedule, key=lambda row: (row.due_date or invoice.due_date)
+		)
+		self.assertEqual(refs[0]["payment_term"], schedule[0].payment_term)
+
+	def test_reference_has_no_term_when_allocation_is_off(self):
+		from yht_custom.api.payment_assist import _build_references
+
+		name = frappe.db.get_value(
+			"Sales Invoice",
+			{"docstatus": 1, "is_return": 0, "payment_terms_template": ["in", ["", None]]},
+			"name",
+		)
+		if not name:
+			self.skipTest("no invoice without a payment terms template on this site")
+
+		invoice = frappe.get_doc("Sales Invoice", name)
+		refs = _build_references(invoice, 1.0)
+		self.assertEqual(len(refs), 1)
+		self.assertIsNone(refs[0].get("payment_term"))
