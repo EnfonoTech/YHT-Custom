@@ -328,6 +328,12 @@ class TestCollectPayment(FrappeTestCase):
 			row.dn_detail = None
 			row.sales_order = None
 			row.so_detail = None
+
+		# copy_doc brings the payment schedule across INCLUDING paid_amount, so a copy
+		# of a settled invoice arrives looking already settled and _build_references
+		# rightly refuses it. Clearing the table makes ERPNext regenerate it from the
+		# payment terms template on validate, which is what a real new invoice does.
+		invoice.payment_schedule = []
 		invoice.insert()
 		# reload() between insert and submit is REQUIRED, not defensive. Something on
 		# the insert path writes the row again behind the in-memory doc, so submit()
