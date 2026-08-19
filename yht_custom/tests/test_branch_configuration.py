@@ -150,7 +150,7 @@ class TestBranchFilters(FrappeTestCase):
 		"""permission_query_conditions has no parameter binding — escaping is on us."""
 		from yht_custom import branch_filters
 
-		fragment = branch_filters._owner_only("Quotation", "Administrator")
+		fragment = branch_filters._branch_peers_only("Quotation", "Administrator")
 		self.assertEqual(fragment, "")
 
 
