@@ -21,6 +21,27 @@ import json
 
 import frappe
 
+#: The `Currency and Price List` accordion, emptied of anything YHT uses.
+#:
+#: MEASURED, not assumed — before this change the section still held
+#: `price_list_currency`, `plc_conversion_rate` and `ignore_pricing_rule` on all
+#: six doctypes, so it only LOOKED empty because it renders collapsed. It is
+#: hidden here rather than left collapsed because:
+#:
+#: * 0 Price Lists on this site carry a non-SAR currency, so `price_list_currency`
+#:   and `plc_conversion_rate` can only ever read SAR / 1.0
+#: * 0 Pricing Rules exist, so `ignore_pricing_rule` overrides nothing
+#:
+#: Hiding a Section Break collapses everything inside it, but the inner fields are
+#: listed too so they cannot resurface through a search, a report column or a
+#: print format — same belt-and-braces as the Time Sheet block below.
+_CURRENCY_SECTION = (
+	"currency_and_price_list",
+	"price_list_currency",
+	"plc_conversion_rate",
+	"ignore_pricing_rule",
+)
+
 #: Fields hidden across the transacting set.
 #:
 #: `project` — YHT does not run project accounting; the Accounting Dimensions
@@ -41,12 +62,25 @@ HIDE_FIELDS = {
 		"timesheets",
 		"total_billing_hours",
 		"total_billing_amount",
+		*_CURRENCY_SECTION,
 	],
-	"Sales Order": ["project", "currency", "conversion_rate"],
-	"Delivery Note": ["project", "currency", "conversion_rate"],
-	"Quotation": ["project", "currency", "conversion_rate"],
-	"Purchase Invoice": ["project", "currency", "conversion_rate"],
-	"Purchase Receipt": ["project", "currency", "conversion_rate"],
+	"Sales Order": ["project", "currency", "conversion_rate", *_CURRENCY_SECTION],
+	"Delivery Note": ["project", "currency", "conversion_rate", *_CURRENCY_SECTION],
+	"Quotation": ["project", "currency", "conversion_rate", *_CURRENCY_SECTION],
+	"Purchase Invoice": [
+		"project",
+		"currency",
+		"conversion_rate",
+		"use_transaction_date_exchange_rate",
+		*_CURRENCY_SECTION,
+	],
+	"Purchase Receipt": [
+		"project",
+		"currency",
+		"conversion_rate",
+		"use_transaction_date_exchange_rate",
+		*_CURRENCY_SECTION,
+	],
 	"Payment Entry": ["project"],
 }
 
@@ -58,6 +92,16 @@ MOVE_AFTER = {
 	"Sales Invoice": [("selling_price_list", "update_stock")],
 	"Delivery Note": [("selling_price_list", "set_warehouse")],
 	"Purchase Invoice": [("buying_price_list", "update_stock")],
+	# These three were missed the first time round, which is the whole reason the
+	# accordion could not simply be hidden: on Sales Order, Quotation and Purchase
+	# Receipt the price list was still INSIDE it, so hiding the section would have
+	# hidden the price list with it. Anchors differ because the field sets differ —
+	# `update_stock` exists only on Sales Invoice and Purchase Invoice, and
+	# Quotation has no header warehouse at all, so it anchors on the Items section
+	# break instead and lands at the top of that section.
+	"Sales Order": [("selling_price_list", "set_warehouse")],
+	"Quotation": [("selling_price_list", "items_section")],
+	"Purchase Receipt": [("buying_price_list", "set_warehouse")],
 }
 
 

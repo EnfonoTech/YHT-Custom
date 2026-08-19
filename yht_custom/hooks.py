@@ -13,13 +13,14 @@ required_apps = ["frappe/erpnext"]
 # can keep a stale copy for hours after a deploy. BUMP the ?v= counter whenever
 # one of these changes, or the deploy is invisible to anyone already loaded.
 app_include_js = [
-	"/assets/yht_custom/js/branch_user_restrict.js?v=1",
+	"/assets/yht_custom/js/branch_user_restrict.js?v=2",
 	"/assets/yht_custom/js/branch_user_forms.js?v=1",
 	"/assets/yht_custom/js/sales_flow.js?v=1",
 	"/assets/yht_custom/js/expense_invoice.js?v=1",
-	"/assets/yht_custom/js/price_assist.js?v=1",
+	"/assets/yht_custom/js/price_assist.js?v=2",
+	"/assets/yht_custom/js/payment_assist.js?v=1",
 ]
-app_include_css = "/assets/yht_custom/css/yht_custom.css?v=1"
+app_include_css = "/assets/yht_custom/css/yht_custom.css?v=2"
 
 # Prefer doctype_js over app_include_js: it takes effect without a `bench build`,
 # which matters because builds are limited to the maintenance window.
@@ -155,6 +156,7 @@ fixtures = [
 					"Purchase Invoice-custom_is_expense_invoice",
 					"Purchase Invoice-custom_expense_head",
 					"Sales Order-custom_print_as",
+					"Sales Invoice-custom_payment_mode",
 				],
 			]
 		],

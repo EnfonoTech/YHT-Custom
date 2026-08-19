@@ -3,10 +3,12 @@
 //
 // Branch-user landing page.
 //
-// TWO THINGS TO REMEMBER WHEN CHANGING THIS FILE:
+// THREE THINGS TO REMEMBER WHEN CHANGING THIS FILE:
+//
 //   1. Adding a tile is a TWO-file change — add the destination doctype to
 //      ALLOWED_DOCTYPES in public/js/branch_user_restrict.js too, or a restricted
 //      user clicking it is bounced straight back here.
+//
 //   2. No `bench build` is needed (page JS was never bundled), but browsers cache
 //      the whole page doc in localStorage under `_page:yht-dashboard`. That cache
 //      only clears when the build version changes, which is the mtime of
@@ -14,6 +16,13 @@
 //         touch sites/assets/assets.json
 //      Otherwise the change is invisible to everyone already signed in — forever.
 //      clear-cache, a worker restart and a hard refresh all fail to fix it.
+//
+//   3. Icon names MUST exist in frappe's sprite
+//      (apps/frappe/frappe/public/icons/timeless/icons.svg — 178 of them), because
+//      frappe.utils.icon() fails SILENTLY on an unknown name and leaves an empty
+//      slot. This page therefore carries its OWN inline SVG set below rather than
+//      the sprite: the sprite has no usable glyph for several of these tiles, and
+//      an inline path cannot fail silently.
 
 frappe.pages["yht-dashboard"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({
@@ -23,7 +32,7 @@ frappe.pages["yht-dashboard"].on_page_load = function (wrapper) {
 	});
 
 	page.main.addClass("yht-dashboard");
-	page.body = $('<div class="yht-dash-body"></div>').appendTo(page.main);
+	page.body = $('<div class="yht-dash"></div>').appendTo(page.main);
 
 	wrapper.yht_page = page;
 	load(page);
@@ -36,101 +45,166 @@ frappe.pages["yht-dashboard"].on_page_show = function (wrapper) {
 };
 
 function load(page) {
-	page.body.html(`<div class="text-muted p-4">${__("Loading…")}</div>`);
+	page.body.html(`
+		<div class="yht-loading">
+			<div class="yht-spinner"></div>
+			<span>${__("Loading dashboard…")}</span>
+		</div>`);
+
 	frappe.call({
 		method: "yht_custom.api.dashboard.get_dashboard_data",
 		callback(r) {
 			if (!r.message) {
-				page.body.html(`<div class="text-muted p-4">${__("No data available.")}</div>`);
+				page.body.html(`<div class="yht-empty">${__("No data available.")}</div>`);
 				return;
 			}
 			render(page, r.message);
 		},
 		error() {
 			page.body.html(
-				`<div class="text-danger p-4">${__("Could not load the dashboard. Please contact your administrator.")}</div>`
+				`<div class="yht-error">${__(
+					"Could not load the dashboard. Please contact your administrator."
+				)}</div>`
 			);
 		},
 	});
 }
 
+// ------------------------------------------------------------------ icon set
+//
+// Feather-style 24x24 stroke paths, drawn with currentColor so they follow the
+// tile's own colour in both themes. Inline rather than sprite — see note 3 above.
+
+const ICONS = {
+	invoice:
+		'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>',
+	quote:
+		'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="13" x2="13" y2="13"/>',
+	order:
+		'<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/><polyline points="9 14 11 16 15 12"/>',
+	truck:
+		'<rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>',
+	people:
+		'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+	card: '<rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/>',
+	box: '<line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
+	expense:
+		'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 12 15 15"/>',
+	tag: '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>',
+	layers:
+		'<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
+	book: '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
+	activity: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
+	ledger:
+		'<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
+	statement:
+		'<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+};
+
+function icon(name) {
+	return `<svg class="yht-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+		stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] || ""}</svg>`;
+}
+
+// ------------------------------------------------------------------- tile set
+//
+// Per the MoM document list. Material Request and inter-branch transfer are
+// deliberately absent for branch users.
+
+const ACTIONS = [
+	{ icon: "invoice", label: "Sales Invoice", desc: "Create new invoice", doctype: "Sales Invoice", mode: "new" },
+	{ icon: "quote", label: "Quotation", desc: "View quotations", doctype: "Quotation", mode: "list" },
+	{ icon: "order", label: "Sales Order", desc: "View orders", doctype: "Sales Order", mode: "list" },
+	{ icon: "truck", label: "Delivery Note", desc: "View delivery notes", doctype: "Delivery Note", mode: "list" },
+	{ icon: "people", label: "Customer", desc: "Manage customers", doctype: "Customer", mode: "list" },
+	{ icon: "card", label: "Payment Entry", desc: "Record payments", doctype: "Payment Entry", mode: "list" },
+	{ icon: "box", label: "Purchase Receipt", desc: "View receipts", doctype: "Purchase Receipt", mode: "list" },
+	{ icon: "expense", label: "Purchase Invoice", desc: "View invoices", doctype: "Purchase Invoice", mode: "list" },
+	{ icon: "tag", label: "Item", desc: "Browse items", doctype: "Item", mode: "list" },
+];
+
+const REPORTS = [
+	{ icon: "layers", label: "Stock Balance", desc: "Current stock levels", report: "Stock Balance" },
+	{ icon: "book", label: "Stock Ledger", desc: "Stock transactions", report: "Stock Ledger" },
+	{ icon: "activity", label: "Receivables Summary", desc: "Party-wise aging", report: "Accounts Receivable Summary" },
+	{ icon: "ledger", label: "General Ledger", desc: "Account transactions", report: "General Ledger" },
+	{ icon: "statement", label: "Customer Statement", desc: "Account statements", report: "General Ledger" },
+];
+
+// ---------------------------------------------------------------------- render
+
 function render(page, d) {
-	const money = (v) => format_currency(v || 0, frappe.boot.sysdefaults.currency);
-	const who = d.branch
-		? __("Branch: {0}", [frappe.utils.escape_html(d.branch)])
-		: __("All branches");
+	const currency = d.currency || frappe.boot.sysdefaults.currency;
+	const money = (v) => format_currency(v || 0, currency);
+	// KPI figures are abbreviated and carry the currency in the LABEL, not beside
+	// the number: at 32px a formatted SAR amount wraps, and a wrapped figure reads
+	// as two numbers. The exact amounts live in Needs Attention and the lists.
+	const short = (v) => short_number(v);
 
-	const stats = [
-		{ label: __("Sales Today"), value: money(d.sales_today) },
-		{ label: __("Sales This Month"), value: money(d.sales_mtd) },
-		{ label: __("Invoices This Month"), value: d.invoices_mtd || 0 },
-		{ label: __("Outstanding"), value: money(d.outstanding) },
-	];
+	const title = d.branch
+		? `${frappe.utils.escape_html(d.branch)} <span class="yht-title-suffix">${__("Branch")}</span>`
+		: __("All Branches");
+	const subtitle = d.is_branch_user && !d.is_admin ? __("Sales Dashboard") : __("Overview Dashboard");
 
-	// Tile set per the MoM document list. Material Request and inter-branch
-	// transfer are deliberately absent for branch users.
-	// Icon names MUST exist in frappe's sprite
-	// (apps/frappe/frappe/public/icons/timeless/icons.svg — 178 of them).
-	// `delivery`, `money-coins-alt` and `package` do NOT, which is why those three
-	// tiles rendered with an empty icon slot. Verified name by name against the
-	// sprite; frappe.utils.icon() fails silently on an unknown name.
-	const actions = [
-		{ icon: "file", label: __("Sales Invoice"), doctype: "Sales Invoice", mode: "new" },
-		{ icon: "small-file", label: __("Quotation"), doctype: "Quotation", mode: "list" },
-		{ icon: "list", label: __("Sales Order"), doctype: "Sales Order", mode: "list" },
-		{ icon: "stock", label: __("Delivery Note"), doctype: "Delivery Note", mode: "list" },
-		{ icon: "customer", label: __("Customer"), doctype: "Customer", mode: "list" },
-		{ icon: "money-coins-1", label: __("Payment Entry"), doctype: "Payment Entry", mode: "list" },
-		{ icon: "buying", label: __("Purchase Receipt"), doctype: "Purchase Receipt", mode: "list" },
-		{ icon: "expenses", label: __("Purchase Invoice"), doctype: "Purchase Invoice", mode: "list" },
-		{ icon: "retail", label: __("Item"), doctype: "Item", mode: "list" },
-	];
-
-	const reports = [
-		{ label: __("Stock Balance"), report: "Stock Balance", icon: "stock" },
-		{ label: __("Stock Ledger"), report: "Stock Ledger", icon: "dashboard-list" },
-		{ label: __("Receivables Summary"), report: "Accounts Receivable Summary", icon: "income" },
-		{ label: __("General Ledger"), report: "General Ledger", icon: "accounting" },
+	const kpis = [
+		{ tone: "today", label: __("Sales Today ({0})", [currency]), value: short(d.sales_today), icon: "ledger" },
+		{ tone: "month", label: __("Sales This Month ({0})", [currency]), value: short(d.sales_mtd), icon: "activity" },
+		{ tone: "count", label: __("Invoices This Month"), value: short_number(d.invoices_mtd), icon: "invoice" },
+		{ tone: "warn", label: __("Overdue ({0})", [currency]), value: short(d.overdue), icon: "card" },
+		{ tone: "danger", label: __("Outstanding ({0})", [currency]), value: short(d.outstanding), icon: "layers" },
 	];
 
 	const drafts = d.draft_counts || {};
-	const draft_chips = Object.keys(drafts)
+	const chips = Object.keys(drafts)
 		.filter((k) => drafts[k] > 0)
 		.map(
-			(k) =>
-				`<a class="yht-chip" href="/app/${frappe.router.slug(k)}?docstatus=0">
-					${frappe.utils.escape_html(__(k))} <b>${drafts[k]}</b>
-				 </a>`
+			(k) => `<a class="yht-chip" href="/app/${frappe.router.slug(k)}?docstatus=0">
+				${frappe.utils.escape_html(__(k))}<b>${drafts[k]}</b></a>`
 		)
 		.join("");
 
 	page.body.html(`
-		<div class="yht-head">
-			<div class="yht-who">${who}</div>
-			${draft_chips ? `<div class="yht-chips">${__("Drafts")}: ${draft_chips}</div>` : ""}
+		<div class="yht-header">
+			<div>
+				<h2 class="yht-title">${title}</h2>
+				<span class="yht-subtitle">${subtitle}</span>
+			</div>
+			<div class="yht-header-right">
+				<span class="yht-date">${frappe.datetime.str_to_user(frappe.datetime.get_today())}</span>
+			</div>
 		</div>
 
-		<div class="yht-stats">
-			${stats
-				.map(
-					(s) => `<div class="yht-stat">
-						<div class="yht-stat-label">${s.label}</div>
-						<div class="yht-stat-value">${s.value}</div>
-					</div>`
-				)
-				.join("")}
-		</div>
+		<div class="yht-kpi-row">${kpis.map(kpi_card).join("")}</div>
 
-		<div class="yht-section-title">${__("Documents")}</div>
-		<div class="yht-grid">
-			${actions.map(action_card).join("")}
-		</div>
+		${chips ? `<div class="yht-chips"><span class="yht-chips-label">${__("Drafts")}</span>${chips}</div>` : ""}
 
-		<div class="yht-section-title">${__("Reports")}</div>
-		<div class="yht-grid">
-			${reports.map(report_card).join("")}
-		</div>
+		<h3 class="yht-section">${__("Quick Actions")}</h3>
+		<div class="yht-grid">${ACTIONS.map(action_card).join("")}</div>
+
+		<h3 class="yht-section">${__("Reports")}</h3>
+		<div class="yht-grid">${REPORTS.map(report_card).join("")}</div>
+
+		${pending_section(d.pending || [], money)}
 	`);
+
+	// Stagger the cards in. 40ms apart is enough to read as one sweep rather than
+	// a dozen unrelated pops.
+	setTimeout(() => {
+		page.body.find(".yht-kpi, .yht-card, .yht-pending-item").each(function (i) {
+			const $el = $(this);
+			setTimeout(() => $el.addClass("yht-in"), i * 40);
+		});
+	}, 50);
+}
+
+function kpi_card(k) {
+	return `<div class="yht-kpi yht-kpi-${k.tone}">
+		<div class="yht-kpi-top">
+			<span class="yht-kpi-icon">${icon(k.icon)}</span>
+			<span class="yht-kpi-label">${k.label}</span>
+		</div>
+		<div class="yht-kpi-value">${k.value}</div>
+	</div>`;
 }
 
 function action_card(a) {
@@ -138,16 +212,88 @@ function action_card(a) {
 		a.mode === "new"
 			? `/app/${frappe.router.slug(a.doctype)}/new`
 			: `/app/${frappe.router.slug(a.doctype)}`;
-	return `<a class="yht-card" href="${route}">
-		<span class="yht-card-icon">${frappe.utils.icon(a.icon, "md")}</span>
-		<span class="yht-card-label">${frappe.utils.escape_html(a.label)}</span>
-	</a>`;
+	return card(route, a.icon, __(a.label), __(a.desc));
 }
 
 function report_card(r) {
-	const route = `/app/query-report/${encodeURIComponent(r.report)}`;
+	return card(
+		`/app/query-report/${encodeURIComponent(r.report)}`,
+		r.icon,
+		__(r.label),
+		__(r.desc)
+	);
+}
+
+function card(route, icon_name, label, desc) {
 	return `<a class="yht-card" href="${route}">
-		<span class="yht-card-icon">${frappe.utils.icon(r.icon || "chart", "md")}</span>
-		<span class="yht-card-label">${frappe.utils.escape_html(r.label)}</span>
+		<span class="yht-card-icon">${icon(icon_name)}</span>
+		<span class="yht-card-text">
+			<span class="yht-card-title">${frappe.utils.escape_html(label)}</span>
+			<span class="yht-card-desc">${frappe.utils.escape_html(desc)}</span>
+		</span>
 	</a>`;
+}
+
+function pending_section(groups, money) {
+	const live = groups.filter((g) => g.rows && g.rows.length);
+	if (!live.length) return "";
+
+	const columns = live
+		.map((group) => {
+			const rows = group.rows
+				.map((row) => {
+					const overdue =
+						row.due_date && row.due_date < frappe.datetime.get_today() ? " yht-overdue" : "";
+					return `<div class="yht-pending-item${overdue}">
+						<div class="yht-pending-main">
+							<a href="/app/${frappe.router.slug(group.doctype)}/${encodeURIComponent(row.name)}">
+								${frappe.utils.escape_html(row.name)}</a>
+							<div class="yht-pending-party">${frappe.utils.escape_html(row.party || "")}</div>
+						</div>
+						<div class="yht-pending-meta">
+							<div class="yht-pending-amount">${money(row.amount)}</div>
+							<div class="yht-pending-date">${
+								row.date ? frappe.datetime.str_to_user(row.date) : ""
+							}</div>
+						</div>
+					</div>`;
+				})
+				.join("");
+
+			const more =
+				group.total > group.rows.length
+					? `<a class="yht-pending-more" href="/app/${frappe.router.slug(group.doctype)}">${__(
+							"{0} more",
+							[group.total - group.rows.length]
+					  )}</a>`
+					: "";
+
+			return `<div class="yht-pending-col">
+				<div class="yht-pending-head">
+					${frappe.utils.escape_html(__(group.label))}
+					<span class="yht-pending-count">${group.total}</span>
+				</div>
+				<div class="yht-pending-list">${rows}${more}</div>
+			</div>`;
+		})
+		.join("");
+
+	return `<h3 class="yht-section">${__("Needs Attention")}</h3>
+		<div class="yht-pending-row">${columns}</div>`;
+}
+
+// ------------------------------------------------------------------ formatting
+//
+// KPI values are abbreviated because the full figure does not fit at 32px and a
+// wrapped number reads as two numbers. The exact amount stays available in the
+// underlying list and in the Needs Attention panel below.
+
+function short_number(value) {
+	const num = flt(value);
+	if (!num) return "0";
+	const abs = Math.abs(num);
+	const sign = num < 0 ? "-" : "";
+	if (abs >= 1e6) return `${sign}${(abs / 1e6).toFixed(1)}M`;
+	if (abs >= 1e3) return `${sign}${(abs / 1e3).toFixed(abs >= 1e5 ? 0 : 1)}K`;
+	return `${sign}${abs.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 }

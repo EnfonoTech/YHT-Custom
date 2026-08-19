@@ -1,117 +1,513 @@
-/* Branch dashboard — plain CSS on Frappe's own variables so it follows the
-   active theme instead of hardcoding colours. */
+/* Branch dashboard.
+ *
+ * Visual design follows RMAX's rmax-dash: coloured KPI accent bars, large
+ * accented figures, icon-in-tinted-square action cards with a description line,
+ * a split "needs attention" panel, staggered entrance.
+ *
+ * COLOURS ARE TOKENS, NOT HEX — and that is not a style preference.
+ * RMAX hardcodes #fff / #1a1a2e / #e8ecf1. This bench carries grey_theme 1.2.1,
+ * and a hardcoded light palette under a dark theme gives dark text on dark
+ * ground. Every colour below is a frappe CSS variable with a hex fallback, so
+ * the page follows whatever theme is active and still renders if a variable is
+ * ever renamed upstream.
+ */
 
-.yht-dash-body {
-	padding: 0 0 2rem;
+.yht-dash {
+	padding: 4px 0 40px;
+	max-width: 1260px;
 }
 
-.yht-head {
+/* ── loading / empty ───────────────────────────────────────────────── */
+
+.yht-dash .yht-loading {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 12px;
+	padding: 80px 20px;
+	color: var(--text-muted, #8492a6);
+	font-size: var(--text-md, 14px);
+}
+
+.yht-dash .yht-spinner {
+	width: 20px;
+	height: 20px;
+	border: 2px solid var(--border-color, #e0e6ed);
+	border-top-color: var(--primary, #2490ef);
+	border-radius: 50%;
+	animation: yht-spin 0.6s linear infinite;
+}
+
+@keyframes yht-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+.yht-dash .yht-empty,
+.yht-dash .yht-error {
+	text-align: center;
+	padding: 60px 20px;
+	font-size: var(--text-md, 14px);
+}
+
+.yht-dash .yht-empty {
+	color: var(--text-muted, #8492a6);
+}
+
+.yht-dash .yht-error {
+	color: var(--red-500, #e24c4c);
+}
+
+/* ── header ────────────────────────────────────────────────────────── */
+
+.yht-dash .yht-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: flex-end;
+	gap: 12px;
+	margin-bottom: 24px;
+	padding-bottom: 18px;
+	border-bottom: 1px solid var(--border-color, #e8ecf1);
+}
+
+.yht-dash .yht-title {
+	font-size: 26px;
+	font-weight: 800;
+	line-height: 1.2;
+	letter-spacing: -0.5px;
+	margin: 0;
+	color: var(--text-color, #1a1a2e);
+}
+
+.yht-dash .yht-title-suffix {
+	font-weight: 400;
+	color: var(--text-muted, #8492a6);
+}
+
+.yht-dash .yht-subtitle {
+	display: block;
+	margin-top: 4px;
+	font-size: var(--text-sm, 13px);
+	letter-spacing: 0.3px;
+	color: var(--text-muted, #8492a6);
+}
+
+.yht-dash .yht-date {
+	padding: 6px 14px;
+	border-radius: 20px;
+	font-size: var(--text-sm, 13px);
+	font-weight: 500;
+	white-space: nowrap;
+	color: var(--text-muted, #8492a6);
+	background: var(--bg-light-gray, #f4f6f9);
+}
+
+/* ── KPI cards ─────────────────────────────────────────────────────── */
+
+.yht-dash .yht-kpi-row {
+	display: grid;
+	grid-template-columns: repeat(5, 1fr);
+	gap: 14px;
+	margin-bottom: 24px;
+}
+
+.yht-dash .yht-kpi {
+	position: relative;
+	overflow: hidden;
+	padding: 20px 18px;
+	border: 1px solid var(--border-color, #e8ecf1);
+	border-radius: 14px;
+	background: var(--card-bg, #fff);
+	opacity: 0;
+	transform: translateY(12px);
+	transition: opacity 0.35s ease, transform 0.35s ease, box-shadow 0.2s ease;
+}
+
+.yht-dash .yht-kpi.yht-in {
+	opacity: 1;
+	transform: translateY(0);
+}
+
+.yht-dash .yht-kpi:hover {
+	box-shadow: var(--shadow-base, 0 4px 16px rgba(0, 0, 0, 0.06));
+}
+
+.yht-dash .yht-kpi::before {
+	content: "";
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	height: 3px;
+	background: var(--yht-tone);
+}
+
+/* One hue per KPI, so the row is scannable without reading the labels. */
+.yht-dash .yht-kpi-today {
+	--yht-tone: var(--green-500, #10b981);
+}
+.yht-dash .yht-kpi-month {
+	--yht-tone: var(--blue-500, #3b82f6);
+}
+.yht-dash .yht-kpi-count {
+	--yht-tone: var(--purple-500, #6366f1);
+}
+.yht-dash .yht-kpi-warn {
+	--yht-tone: var(--orange-500, #f59e0b);
+}
+.yht-dash .yht-kpi-danger {
+	--yht-tone: var(--red-500, #ef4444);
+}
+
+.yht-dash .yht-kpi-top {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	margin-bottom: 10px;
+}
+
+.yht-dash .yht-kpi-icon {
+	display: inline-flex;
+	color: var(--yht-tone);
+}
+
+.yht-dash .yht-kpi-icon .yht-icon {
+	width: 15px;
+	height: 15px;
+}
+
+.yht-dash .yht-kpi-label {
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.8px;
+	color: var(--text-muted, #8492a6);
+}
+
+.yht-dash .yht-kpi-value {
+	font-size: 32px;
+	font-weight: 800;
+	line-height: 1;
+	letter-spacing: -1px;
+	color: var(--yht-tone);
+}
+
+/* ── draft chips ───────────────────────────────────────────────────── */
+
+.yht-dash .yht-chips {
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
-	gap: 0.75rem 1.5rem;
-	margin-bottom: 1.25rem;
+	gap: 8px;
+	margin-bottom: 4px;
 }
 
-.yht-who {
-	font-size: var(--text-md);
-	font-weight: 600;
-	color: var(--text-color);
-}
-
-.yht-chips {
-	font-size: var(--text-sm);
-	color: var(--text-muted);
-}
-
-.yht-chip {
-	display: inline-block;
-	margin-left: 0.35rem;
-	padding: 0.15rem 0.5rem;
-	border-radius: var(--border-radius);
-	background: var(--bg-light-gray);
-	color: var(--text-color);
-	text-decoration: none;
-}
-
-.yht-chip:hover {
-	background: var(--bg-gray);
-}
-
-.yht-stats {
-	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-	gap: 0.75rem;
-	margin-bottom: 1.75rem;
-}
-
-.yht-stat {
-	padding: 1rem;
-	border: 1px solid var(--border-color);
-	border-radius: var(--border-radius-md);
-	background: var(--card-bg);
-}
-
-.yht-stat-label {
-	font-size: var(--text-sm);
-	color: var(--text-muted);
-	margin-bottom: 0.35rem;
-}
-
-.yht-stat-value {
-	font-size: var(--text-xl);
-	font-weight: 600;
-	color: var(--text-color);
-}
-
-.yht-section-title {
-	font-size: var(--text-sm);
+.yht-dash .yht-chips-label {
+	font-size: 11px;
 	font-weight: 600;
 	text-transform: uppercase;
-	letter-spacing: 0.04em;
-	color: var(--text-muted);
-	margin: 1.5rem 0 0.75rem;
+	letter-spacing: 0.8px;
+	color: var(--text-muted, #8492a6);
 }
 
-.yht-grid {
+.yht-dash .yht-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 10px;
+	border-radius: 20px;
+	font-size: var(--text-sm, 12px);
+	text-decoration: none;
+	color: var(--text-color, #1a1a2e);
+	background: var(--bg-light-gray, #f4f6f9);
+	border: 1px solid transparent;
+}
+
+.yht-dash .yht-chip:hover {
+	text-decoration: none;
+	border-color: var(--primary, #2490ef);
+	color: var(--text-color, #1a1a2e);
+}
+
+.yht-dash .yht-chip b {
+	font-weight: 700;
+}
+
+/* ── section titles ────────────────────────────────────────────────── */
+
+.yht-dash .yht-section {
+	margin: 28px 0 14px;
+	font-size: 15px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+	color: var(--text-color, #1a1a2e);
+}
+
+/* ── action / report cards ─────────────────────────────────────────── */
+
+.yht-dash .yht-grid {
 	display: grid;
-	/* 160px forced "Purchase Receipt" onto two lines and "Accounts Receivable
-	   Summary" onto three, so the tiles came out ragged. 210px fits every label
-	   in this set on one line at desk width. */
 	grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-	gap: 0.75rem;
+	gap: 10px;
 }
 
-.yht-card {
+.yht-dash .yht-card {
 	display: flex;
 	align-items: center;
-	gap: 0.65rem;
-	padding: 0.9rem 1rem;
-	min-height: 52px;
-	border: 1px solid var(--border-color);
-	border-radius: var(--border-radius-md);
-	background: var(--card-bg);
-	color: var(--text-color);
+	gap: 14px;
+	padding: 16px 18px;
+	border: 1px solid var(--border-color, #e8ecf1);
+	border-radius: 12px;
+	background: var(--card-bg, #fff);
 	text-decoration: none;
-	transition: border-color 120ms ease, box-shadow 120ms ease;
+	opacity: 0;
+	transform: translateY(8px);
+	transition: opacity 0.3s ease, transform 0.2s ease, border-color 0.2s ease,
+		box-shadow 0.2s ease;
 }
 
-.yht-card:hover {
-	border-color: var(--primary);
-	box-shadow: var(--shadow-base);
-	color: var(--text-color);
+.yht-dash .yht-card.yht-in {
+	opacity: 1;
+	transform: translateY(0);
+}
+
+.yht-dash .yht-card:hover {
 	text-decoration: none;
+	border-color: var(--primary, #2490ef);
+	box-shadow: var(--shadow-base, 0 4px 14px rgba(0, 0, 0, 0.06));
+	transform: translateY(-2px);
 }
 
-.yht-card-icon {
-	display: inline-flex;
-	color: var(--text-muted);
+.yht-dash .yht-card:active {
+	transform: translateY(0);
 }
 
-.yht-card-label {
-	font-size: var(--text-md);
-	font-weight: 500;
-	line-height: 1.25;
+.yht-dash .yht-card-icon {
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 38px;
+	height: 38px;
+	border-radius: 10px;
+	color: var(--text-muted, #5a6c7d);
+	background: var(--bg-light-gray, #f4f6f9);
+	transition: color 0.2s ease, background 0.2s ease;
+}
+
+.yht-dash .yht-card:hover .yht-card-icon {
+	color: var(--primary, #2490ef);
+	background: var(--bg-blue, #f0f7ff);
+}
+
+.yht-dash .yht-icon {
+	width: 18px;
+	height: 18px;
+}
+
+.yht-dash .yht-card-text {
+	min-width: 0;
+}
+
+.yht-dash .yht-card-title {
+	display: block;
+	font-size: var(--text-sm, 13px);
+	font-weight: 600;
+	line-height: 1.3;
+	color: var(--text-color, #1a1a2e);
+}
+
+.yht-dash .yht-card-desc {
+	display: block;
+	margin-top: 2px;
+	font-size: 11px;
+	color: var(--text-muted, #8492a6);
+}
+
+/* ── needs attention ───────────────────────────────────────────────── */
+
+.yht-dash .yht-pending-row {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+	gap: 16px;
+}
+
+.yht-dash .yht-pending-col {
+	min-width: 0;
+}
+
+.yht-dash .yht-pending-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 10px 16px;
+	font-size: var(--text-sm, 13px);
+	font-weight: 700;
+	color: var(--text-color, #1a1a2e);
+	background: var(--bg-light-gray, #f8f9fb);
+	border: 1px solid var(--border-color, #e8ecf1);
+	border-bottom: none;
+	border-radius: 10px 10px 0 0;
+}
+
+.yht-dash .yht-pending-count {
+	padding: 1px 8px;
+	border-radius: 10px;
+	font-size: 11px;
+	font-weight: 700;
+	color: var(--text-muted, #8492a6);
+	background: var(--card-bg, #fff);
+}
+
+.yht-dash .yht-pending-list {
+	max-height: 400px;
+	overflow-y: auto;
+	border: 1px solid var(--border-color, #e8ecf1);
+	border-radius: 0 0 10px 10px;
+	background: var(--card-bg, #fff);
+}
+
+.yht-dash .yht-pending-item {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 12px 16px;
+	border-bottom: 1px solid var(--border-color, #f0f3f7);
+	opacity: 0;
+	transform: translateX(-8px);
+	transition: opacity 0.3s ease, transform 0.3s ease, background 0.15s ease;
+}
+
+.yht-dash .yht-pending-item.yht-in {
+	opacity: 1;
+	transform: translateX(0);
+}
+
+.yht-dash .yht-pending-item:last-child {
+	border-bottom: 0;
+}
+
+.yht-dash .yht-pending-item:hover {
+	background: var(--bg-light-gray, #fafbfd);
+}
+
+/* Past its due date — the row that needs a phone call today. */
+.yht-dash .yht-pending-item.yht-overdue {
+	border-left: 3px solid var(--red-500, #ef4444);
+}
+
+.yht-dash .yht-pending-main {
+	min-width: 0;
+}
+
+.yht-dash .yht-pending-main a {
+	font-size: var(--text-sm, 13px);
+	font-weight: 700;
+	text-decoration: none;
+	color: var(--text-color, #1a1a2e);
+}
+
+.yht-dash .yht-pending-main a:hover {
+	color: var(--primary, #2490ef);
+	text-decoration: underline;
+}
+
+.yht-dash .yht-pending-party {
+	margin-top: 3px;
+	font-size: 12px;
+	color: var(--text-muted, #8492a6);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.yht-dash .yht-pending-meta {
+	flex-shrink: 0;
+	text-align: right;
+}
+
+.yht-dash .yht-pending-amount {
+	font-size: var(--text-sm, 13px);
+	font-weight: 600;
+	color: var(--text-color, #1a1a2e);
+}
+
+.yht-dash .yht-pending-date {
+	margin-top: 3px;
+	font-size: 12px;
+	color: var(--text-muted, #8492a6);
+}
+
+.yht-dash .yht-pending-more {
+	display: block;
+	padding: 10px 16px;
+	font-size: 12px;
+	font-weight: 600;
+	text-align: center;
+	text-decoration: none;
+	color: var(--primary, #2490ef);
+}
+
+/* ── responsive ────────────────────────────────────────────────────── */
+
+@media (max-width: 1100px) {
+	.yht-dash .yht-kpi-row {
+		grid-template-columns: repeat(3, 1fr);
+	}
+}
+
+@media (max-width: 768px) {
+	.yht-dash .yht-header {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 10px;
+	}
+	.yht-dash .yht-title {
+		font-size: 22px;
+	}
+	.yht-dash .yht-kpi-row {
+		grid-template-columns: repeat(2, 1fr);
+		gap: 10px;
+	}
+	.yht-dash .yht-kpi-value {
+		font-size: 26px;
+	}
+	.yht-dash .yht-grid {
+		grid-template-columns: repeat(2, 1fr);
+		gap: 8px;
+	}
+	.yht-dash .yht-card {
+		padding: 14px;
+		gap: 10px;
+	}
+	.yht-dash .yht-card-icon {
+		width: 34px;
+		height: 34px;
+	}
+}
+
+@media (max-width: 480px) {
+	.yht-dash .yht-kpi {
+		padding: 16px 14px;
+	}
+	.yht-dash .yht-kpi-value {
+		font-size: 22px;
+	}
+	.yht-dash .yht-grid {
+		grid-template-columns: 1fr;
+	}
+	.yht-dash .yht-pending-item {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 6px;
+	}
+	.yht-dash .yht-pending-meta {
+		text-align: left;
+	}
 }
 
 /* Back-to-dashboard nav item, injected by branch_user_restrict.js.

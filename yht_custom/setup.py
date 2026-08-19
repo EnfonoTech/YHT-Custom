@@ -136,6 +136,7 @@ PROVISIONING_STEPS = (
 	"setup_form_layout",
 	"setup_site_defaults",
 	"setup_report_roles",
+	"setup_branch_payment_modes",
 )
 
 
@@ -253,6 +254,27 @@ SALES_ORDER_CUSTOM_FIELDS = [
 	},
 ]
 
+#: Cash-or-credit, the decision the tender dialog hangs off (MoM 5.6).
+#:
+#: Defaults to Credit, not Cash. A Cash default would open the tender dialog on
+#: every invoice an operator submits, including the ones they never intended to
+#: collect against, and the safe accounting reading of "invoice raised" is that
+#: the money has not arrived yet. `allow_on_submit` because collection is decided
+#: at the counter, sometimes after the invoice is already submitted.
+SALES_INVOICE_CUSTOM_FIELDS = [
+	{
+		"fieldname": "custom_payment_mode",
+		"label": "Payment Mode",
+		"fieldtype": "Select",
+		"options": "Credit\nCash",
+		"default": "Credit",
+		"insert_after": "due_date",
+		"allow_on_submit": 1,
+		"in_standard_filter": 1,
+		"description": "Cash opens the payment dialog once the invoice is submitted.",
+	},
+]
+
 #: Prefix that drives item-group-wise item code generation (see item_naming.py).
 ITEM_GROUP_CUSTOM_FIELDS = [
 	{
@@ -273,6 +295,7 @@ def ensure_branch_custom_fields():
 			"Branch": BRANCH_CUSTOM_FIELDS,
 			"Item Group": ITEM_GROUP_CUSTOM_FIELDS,
 			"Sales Order": SALES_ORDER_CUSTOM_FIELDS,
+			"Sales Invoice": SALES_INVOICE_CUSTOM_FIELDS,
 		},
 		ignore_validate=True,
 	)
@@ -460,3 +483,66 @@ def setup_report_roles():
 		doc.append("roles", {"role": BRANCH_USER_ROLE})
 		doc.flags.ignore_permissions = True
 		doc.save()
+
+
+# ------------------------------------------------------- branch payment modes
+
+
+def setup_branch_payment_modes():
+	"""Seed each Branch Configuration's tenderable Mode of Payment list.
+
+	The child table has existed since Step 4 and was never populated — measured 0
+	rows — so ``get_branch_payment_modes`` had nothing to filter on and the tender
+	dialog would have had nothing to show.
+
+	The seed is every mode that is BOTH enabled AND carries a default account for
+	the branch's company. That pairing is not cosmetic: a mode without an account
+	for the company cannot post, because ``get_bank_cash_account`` throws. On this
+	site 21 modes are enabled and 8 are usable, so the unfiltered list would have
+	offered 13 modes that fail at submit.
+
+	Only ever ADDS. A row someone deleted by hand stays deleted, because the
+	allowlist is a human decision about which tills a branch may touch and an
+	after_migrate has no business overruling it.
+	"""
+	configs = frappe.get_all("Branch Configuration", fields=["name", "company"])
+	if not configs:
+		return
+
+	for config in configs:
+		company = config.company or frappe.defaults.get_global_default("company")
+		if not company:
+			continue
+
+		existing = set(
+			frappe.get_all(
+				"Branch Configuration Mode of Payment",
+				filters={"parent": config.name},
+				pluck="mode_of_payment",
+			)
+		)
+		if existing:
+			# Configured already — leave the human's list alone.
+			continue
+
+		usable = frappe.db.get_all(
+			"Mode of Payment Account",
+			filters={"company": company, "default_account": ["!=", ""]},
+			pluck="parent",
+		)
+		if not usable:
+			continue
+
+		enabled = frappe.get_all(
+			"Mode of Payment",
+			filters={"enabled": 1, "name": ["in", list(set(usable))]},
+			fields=["name", "type"],
+			order_by="type desc, name asc",
+		)
+		if not enabled:
+			continue
+
+		doc = frappe.get_doc("Branch Configuration", config.name)
+		for mode in enabled:
+			doc.append("mode_of_payment", {"mode_of_payment": mode.name})
+		doc.save(ignore_permissions=True)
