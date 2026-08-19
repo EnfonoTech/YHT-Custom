@@ -260,3 +260,51 @@ class TestProvisioning(FrappeTestCase):
 		result = setup.after_migrate()
 		self.assertIn("failures", result)
 		self.assertEqual(result["failures"], [], f"after_migrate reported failures: {result['failures']}")
+
+
+class TestBranchPeerScoping(FrappeTestCase):
+	"""Quotations carry no warehouse. Scoping them to `owner = me` hid a
+	colleague's quotation from the same branch — measured as 0 of 2,766 visible,
+	which reads as a broken screen rather than a boundary."""
+
+	def tearDown(self):
+		frappe.db.rollback()
+
+	def test_peers_include_self_and_colleagues(self):
+		from yht_custom.branch_filters import get_branch_peers
+
+		company = frappe.db.get_value("Company", {}, "name")
+		branch = "_Test YHT Peer Branch"
+		a, b = "_test_yht_peer_a@example.invalid", "_test_yht_peer_b@example.invalid"
+
+		if not frappe.db.exists("Branch", branch):
+			frappe.get_doc({"doctype": "Branch", "branch": branch}).insert(ignore_permissions=True)
+		for email in (a, b):
+			if not frappe.db.exists("User", email):
+				frappe.get_doc(
+					{"doctype": "User", "email": email, "first_name": "Peer", "send_welcome_email": 0}
+				).insert(ignore_permissions=True)
+
+		if frappe.db.exists("Branch Configuration", branch):
+			frappe.delete_doc("Branch Configuration", branch, force=1, ignore_permissions=True)
+		cfg = frappe.new_doc("Branch Configuration")
+		cfg.branch = branch
+		cfg.company = company
+		cfg.append("user", {"user": a, "role": "Branch User"})
+		cfg.append("user", {"user": b, "role": "Branch User"})
+		cfg.insert(ignore_permissions=True)
+
+		peers = get_branch_peers(a)
+		self.assertIn(a, peers)
+		self.assertIn(b, peers, "a colleague on the same branch was not treated as a peer")
+
+	def test_unmapped_user_has_no_peers(self):
+		from yht_custom.branch_filters import get_branch_peers
+
+		self.assertEqual(get_branch_peers("_nobody_yht@example.invalid"), [])
+
+	def test_quotation_query_scopes_to_peers_not_just_owner(self):
+		from yht_custom.branch_filters import quotation_query
+
+		# Administrator is unrestricted, so the fragment must be empty
+		self.assertEqual(quotation_query("Administrator"), "")

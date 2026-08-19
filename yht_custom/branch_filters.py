@@ -80,15 +80,41 @@ def _warehouse_or_owner(doctype: str, header_fields: list[str], item_doctype: st
 	return f"{scope} AND {_hide_cancelled(doctype)}"
 
 
-def _owner_only(doctype: str, user: str) -> str:
-	"""For doctypes with no warehouse of their own."""
+def get_branch_peers(user: str | None = None) -> list[str]:
+	"""Everyone listed on the same Branch Configuration(s) as this user.
+
+	Used for doctypes that carry no warehouse to scope by — a Quotation belongs to
+	the branch whose salesman raised it, so restricting to `owner = me` would hide
+	a colleague's quotation from the same branch and leave the team unable to see
+	its own pipeline. Measured on this site: owner-only showed a new branch user
+	**0 of 2,766 quotations**, which reads as a broken screen rather than a
+	permission boundary.
+	"""
+	user = user or frappe.session.user
+	configs = frappe.get_all("Branch Configuration User", filters={"user": user}, pluck="parent")
+	if not configs:
+		return []
+	peers = frappe.get_all("Branch Configuration User", filters={"parent": ["in", configs]}, pluck="user")
+	return sorted({p for p in peers if p} | {user})
+
+
+def _branch_peers_only(doctype: str, user: str) -> str:
+	"""Scope a warehouse-less doctype to the branch's own users."""
 	if not user or user == "Administrator":
 		return ""
 	if set(frappe.get_roles(user)) & set(BYPASS_ROLES):
 		return ""
 	if not frappe.db.exists("Branch Configuration User", {"user": user}):
 		return ""
-	return f"`tab{doctype}`.`owner` = {frappe.db.escape(user)} AND {_hide_cancelled(doctype)}"
+
+	peers = get_branch_peers(user)
+	if not peers:
+		return f"`tab{doctype}`.`owner` = {frappe.db.escape(user)} AND {_hide_cancelled(doctype)}"
+
+	return (
+		f"`tab{doctype}`.`owner` IN ({_escaped_list(peers)})"
+		f" AND {_hide_cancelled(doctype)}"
+	)
 
 
 # --------------------------------------------------------------- per-doctype
@@ -142,8 +168,8 @@ def stock_entry_query(user):
 
 
 def quotation_query(user):
-	"""Quotations carry no warehouse worth filtering on — scope to own records."""
-	return _owner_only("Quotation", user)
+	"""Quotations carry no warehouse, so scope them to the branch's own users."""
+	return _branch_peers_only("Quotation", user)
 
 
 def payment_entry_query(user):
@@ -155,17 +181,17 @@ def payment_entry_query(user):
 	if not frappe.db.exists("Branch Configuration User", {"user": user}):
 		return ""
 
-	safe_user = frappe.db.escape(user)
+	peers = _escaped_list(get_branch_peers(user) or [user])
 	warehouses = get_branch_warehouses(user)
 	if not warehouses:
-		return f"`tabPayment Entry`.`owner` = {safe_user} AND `tabPayment Entry`.`docstatus` != 2"
+		return f"`tabPayment Entry`.`owner` IN ({peers}) AND `tabPayment Entry`.`docstatus` != 2"
 
 	wh = _escaped_list(warehouses)
 	return (
-		"(`tabPayment Entry`.`owner` = {user}"
+		"(`tabPayment Entry`.`owner` IN ({peers})"
 		" OR `tabPayment Entry`.`name` IN ("
 		"SELECT DISTINCT per.`parent` FROM `tabPayment Entry Reference` per"
 		" INNER JOIN `tabSales Invoice Item` sii ON sii.`parent` = per.`reference_name`"
 		" WHERE per.`reference_doctype` = 'Sales Invoice' AND sii.`warehouse` IN ({wh})))"
 		" AND `tabPayment Entry`.`docstatus` != 2"
-	).format(user=safe_user, wh=wh)
+	).format(peers=peers, wh=wh)
