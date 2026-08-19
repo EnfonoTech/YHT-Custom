@@ -165,14 +165,17 @@ fixtures = [
 # Print formats call these. Without the hook, a print format cannot reach app
 # code at all and every format ends up duplicating the same header markup —
 # which is how the legacy site accumulated 32 Delivery Note formats.
+# The hook does NOT support "alias:path" — each function is registered under its
+# own __name__, and every app's jinja methods share ONE namespace. Hence the
+# yht_ prefix on the functions themselves.
 jinja = {
 	"methods": [
-		"yht_branch_header:yht_custom.print_helpers.branch_header_html",
-		"yht_party:yht_custom.print_helpers.party_block_html",
-		"yht_money:yht_custom.print_helpers.money",
-		"yht_date:yht_custom.print_helpers.nice_date",
-		"yht_item_ar:yht_custom.print_helpers.item_arabic_name",
-		"yht_so_title:yht_custom.print_helpers.sales_order_title",
+		"yht_custom.print_helpers.yht_branch_header",
+		"yht_custom.print_helpers.yht_party",
+		"yht_custom.print_helpers.yht_money",
+		"yht_custom.print_helpers.yht_date",
+		"yht_custom.print_helpers.yht_item_ar",
+		"yht_custom.print_helpers.yht_so_title",
 	],
 }
 

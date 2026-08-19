@@ -4,9 +4,15 @@
 """Shared Jinja helpers for the print formats.
 
 Exposed to print-format templates through the ``jinja`` hook. Keeping the header,
-the Arabic handling and the amount-in-words in one place means the five formats
-stay consistent instead of drifting apart the way the legacy site's 146 did — 32
+the Arabic handling and the money formatting in one place means the formats stay
+consistent instead of drifting apart the way the legacy site's 146 did — 32
 Delivery Note formats is not a requirement, it is the absence of one.
+
+**Every function here is deliberately prefixed ``yht_``.** The hook does NOT
+support aliasing: `frappe/utils/jinja.py::get_obj_dict_from_paths` registers each
+function under its own ``__name__``, and **every installed app's jinja methods
+land in one shared namespace**. A helper called ``money`` or ``nice_date`` would
+be one upgrade away from silently shadowing, or being shadowed by, another app's.
 """
 
 import frappe
@@ -19,7 +25,7 @@ from frappe.utils import flt, fmt_money, formatdate
 RTL_STYLE = "direction:rtl; text-align:right;"
 
 
-def branch_header_html(doc) -> str:
+def yht_branch_header(doc) -> str:
 	"""Bilingual company / branch header block.
 
 	Resolution order for the branch line: the document's own branch, then the
@@ -57,7 +63,7 @@ def branch_header_html(doc) -> str:
 	"""
 
 
-def party_block_html(doc, party_field="customer", party_name_field="customer_name") -> str:
+def yht_party(doc, party_field="customer", party_name_field="customer_name") -> str:
 	"""Bill-to block with VAT and CR where present."""
 	party = doc.get(party_field)
 	name = doc.get(party_name_field) or party or ""
@@ -79,15 +85,15 @@ def party_block_html(doc, party_field="customer", party_name_field="customer_nam
 	return "".join(rows)
 
 
-def money(value, currency=None) -> str:
+def yht_money(value, currency=None) -> str:
 	return fmt_money(flt(value), currency=currency)
 
 
-def nice_date(value) -> str:
+def yht_date(value) -> str:
 	return formatdate(value, "dd-MM-yyyy") if value else ""
 
 
-def item_arabic_name(item_code: str) -> str:
+def yht_item_ar(item_code: str) -> str:
 	"""Arabic item name if the site carries one.
 
 	The legacy data had this under three different fieldnames across doctypes
@@ -103,7 +109,7 @@ def item_arabic_name(item_code: str) -> str:
 	return ""
 
 
-def sales_order_title(doc) -> tuple[str, str]:
+def yht_so_title(doc) -> tuple[str, str]:
 	"""(English, Arabic) title for the one-document-three-titles requirement.
 
 	MoM §2.3: a single Sales Order prints as Quotation, Proforma Invoice or Sales
