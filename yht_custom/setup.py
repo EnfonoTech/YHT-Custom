@@ -8,6 +8,7 @@ change an implementer made on the site.
 """
 
 import frappe
+from frappe.utils import cint
 
 from yht_custom.setup_branch_series import setup_branch_series
 from yht_custom.expense_invoice import setup_expense_invoice
@@ -51,6 +52,20 @@ BRANCH_USER_PERMISSIONS = [
 	{"parent": "UOM", "read": 1},
 	{"parent": "Brand", "read": 1},
 	{"parent": "Mode of Payment", "read": 1},
+	# Party Type — 4 rows (Shareholder / Employee / Supplier / Customer), no sensitive content.
+	#
+	# WHY IT WAS MISSED, AND WHY A LINK-TARGET SWEEP WILL MISS IT AGAIN:
+	# `Payment Entry.party_type` and `Journal Entry Account.party_type` are declared
+	# `Link -> DocType`, NOT `Link -> Party Type`. The picker is narrowed at runtime by a
+	# wired search query,
+	#     query: "erpnext.setup.doctype.party_type.party_type.get_party_type"
+	# and `frappe.desk.search.search_link` permission-checks the doctype the QUERY
+	# searches. So a sweep that walks declared `options` sees `DocType` and never
+	# discovers Party Type at all — the declared option lies about what gets read.
+	# Symptom: a bare "No permission for Party Type" the moment a branch user opens a
+	# Payment Entry. `select` as well as `read`, because search_link wants both.
+	# test_branch_smoke.py now exercises the wired queries directly.
+	{"parent": "Party Type", "read": 1, "select": 1},
 	{"parent": "Sales Taxes and Charges Template", "read": 1},
 	{"parent": "Purchase Taxes and Charges Template", "read": 1},
 	{"parent": "Payment Terms Template", "read": 1},
@@ -110,9 +125,22 @@ BRANCH_USER_PERMISSIONS = [
 	# Tracked as the expected failure in tests/test_sales_cycle.py.
 ]
 
+#: Every permission flag a Custom DocPerm row carries that we are willing to set.
+#:
+#: `select` and `if_owner` were absent here for a while, and because
+#: `_upsert_custom_docperm` builds its values dict from THIS tuple, the two flags were
+#: read out of the standard DocPerm by `preserve_standard_docperms` and then silently
+#: thrown away. Measured damage before the fix: 5 rows across `Address` (if_owner, role
+#: All), `Customer Group` / `Territory` (select, role Customer) and `Item` / `Item Group`
+#: (select, role Desk User) — i.e. this app quietly narrowed permissions for roles that
+#: have nothing to do with branch scoping. `repair_mirrored_perm_flags` heals it.
+#:
+#: `select` also matters in its own right: `frappe.desk.search.search_link` wants it, so a
+#: role without it cannot use a Link picker even when it can read the doctype.
 PERM_FIELDS = (
 	"read", "write", "create", "submit", "cancel", "delete",
 	"report", "export", "print", "email", "share", "amend",
+	"select", "if_owner",
 )
 
 BRANCH_USER_ROLE = "Branch User"
@@ -137,6 +165,7 @@ PROVISIONING_STEPS = (
 	"setup_site_defaults",
 	"setup_report_roles",
 	"setup_branch_payment_modes",
+	"repair_mirrored_perm_flags",
 )
 
 
@@ -325,7 +354,7 @@ def preserve_standard_docperms():
 		standard = frappe.get_all(
 			"DocPerm",
 			filters={"parent": doctype},
-			fields=["role", "permlevel", *PERM_FIELDS, "if_owner", "select", "amend"],
+			fields=["role", "permlevel", *PERM_FIELDS],
 		)
 		for row in standard:
 			_upsert_custom_docperm(doctype, row.role, row, permlevel=row.permlevel)
@@ -546,3 +575,63 @@ def setup_branch_payment_modes():
 		for mode in enabled:
 			doc.append("mode_of_payment", {"mode_of_payment": mode.name})
 		doc.save(ignore_permissions=True)
+
+
+# ------------------------------------------------- repair: mirrored perm flags
+
+
+def repair_mirrored_perm_flags():
+	"""Restore `select` / `if_owner` the DocPerm mirror used to drop.
+
+	``preserve_standard_docperms`` read both flags off the standard DocPerm and handed
+	them to ``_upsert_custom_docperm``, which built its values dict from ``PERM_FIELDS``
+	— a tuple that did not contain either. So both were read and discarded, and the
+	mirrored Custom DocPerm came out more restrictive than the standard row it was
+	supposed to preserve.
+
+	Measured on this site before the fix: 5 rows — ``Address.if_owner`` (role All),
+	``Customer Group`` and ``Territory`` ``select`` (role Customer), ``Item`` and
+	``Item Group`` ``select`` (role Desk User). None of those roles has anything to do
+	with branch scoping, which is what makes it worth healing rather than shrugging at.
+
+	Only ever RAISES a flag the standard row already grants. It never clears one, so an
+	implementer who deliberately widened a Custom DocPerm keeps their change.
+	"""
+	doctypes = sorted({p["parent"] for p in BRANCH_USER_PERMISSIONS})
+	repaired = 0
+
+	for doctype in doctypes:
+		if not frappe.db.exists("DocType", doctype):
+			continue
+
+		standard = {
+			(row.role, row.permlevel): row
+			for row in frappe.get_all(
+				"DocPerm",
+				filters={"parent": doctype},
+				fields=["role", "permlevel", "select", "if_owner"],
+			)
+		}
+		if not standard:
+			continue
+
+		for row in frappe.get_all(
+			"Custom DocPerm",
+			filters={"parent": doctype},
+			fields=["name", "role", "permlevel", "select", "if_owner"],
+		):
+			source = standard.get((row.role, row.permlevel))
+			if not source:
+				continue
+			updates = {
+				field: 1
+				for field in ("select", "if_owner")
+				if cint(source.get(field)) == 1 and cint(row.get(field)) == 0
+			}
+			if updates:
+				frappe.db.set_value("Custom DocPerm", row.name, updates, update_modified=False)
+				repaired += len(updates)
+
+	if repaired:
+		print(f"  yht_custom: restored {repaired} dropped select/if_owner flag(s)")
+	return repaired
