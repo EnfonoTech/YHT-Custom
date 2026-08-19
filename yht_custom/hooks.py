@@ -153,12 +153,28 @@ fixtures = [
 					"Item Group-custom_item_code_prefix",
 					"Purchase Invoice-custom_is_expense_invoice",
 					"Purchase Invoice-custom_expense_head",
+					"Sales Order-custom_print_as",
 				],
 			]
 		],
 	},
 	{"dt": "Module Profile", "filters": [["name", "in", ["Branch User"]]]},
 ]
+
+# ---------------------------------------------------------------------- jinja
+# Print formats call these. Without the hook, a print format cannot reach app
+# code at all and every format ends up duplicating the same header markup —
+# which is how the legacy site accumulated 32 Delivery Note formats.
+jinja = {
+	"methods": [
+		"yht_branch_header:yht_custom.print_helpers.branch_header_html",
+		"yht_party:yht_custom.print_helpers.party_block_html",
+		"yht_money:yht_custom.print_helpers.money",
+		"yht_date:yht_custom.print_helpers.nice_date",
+		"yht_item_ar:yht_custom.print_helpers.item_arabic_name",
+		"yht_so_title:yht_custom.print_helpers.sales_order_title",
+	],
+}
 
 # --------------------------------------------------------------------- migrate
 after_migrate = "yht_custom.setup.after_migrate"

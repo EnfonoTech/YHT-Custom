@@ -152,3 +152,49 @@ class TestBranchFilters(FrappeTestCase):
 
 		fragment = branch_filters._owner_only("Quotation", "Administrator")
 		self.assertEqual(fragment, "")
+
+
+class TestNamingSeriesOptionsMerge(FrappeTestCase):
+	"""setup_branch_series must not delete series other steps registered.
+
+	It used to rebuild the options list from `standard + branch templates`, which
+	silently removed the expense series every time it ran.
+	"""
+
+	def tearDown(self):
+		frappe.db.rollback()
+
+	def test_existing_entries_survive_a_reseed(self):
+		from yht_custom.setup_branch_series import setup_branch_series
+
+		marker = "_TEST-KEEPME-.YY.-.####"
+		row = frappe.db.get_value(
+			"Property Setter",
+			{"doc_type": "Purchase Invoice", "field_name": "naming_series", "property": "options"},
+			["name", "value"],
+			as_dict=True,
+		)
+		if not row:
+			self.skipTest("no naming_series Property Setter on Purchase Invoice yet")
+
+		frappe.db.set_value("Property Setter", row.name, "value", (row.value or "") + "\n" + marker)
+		frappe.db.commit()
+
+		setup_branch_series()
+
+		after = frappe.db.get_value("Property Setter", row.name, "value") or ""
+		self.assertIn(marker, after.split("\n"), "reseeding deleted an unrelated series")
+
+	def test_expense_series_is_present_after_reseed(self):
+		from yht_custom.expense_invoice import EXPENSE_SERIES, setup_expense_invoice
+		from yht_custom.setup_branch_series import setup_branch_series
+
+		setup_expense_invoice()
+		setup_branch_series()
+		frappe.db.commit()
+		options = frappe.db.get_value(
+			"Property Setter",
+			{"doc_type": "Purchase Invoice", "field_name": "naming_series", "property": "options"},
+			"value",
+		) or ""
+		self.assertIn(EXPENSE_SERIES, options.split("\n"))

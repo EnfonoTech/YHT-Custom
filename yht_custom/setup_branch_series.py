@@ -123,17 +123,23 @@ def _sync_naming_series_options(doctype: str, templates: list[str]):
 	if not meta_field:
 		return
 
-	standard = [o for o in (meta_field.options or "").split("\n") if o.strip()]
-	# Keep ERPNext's own defaults available to admins, then append ours.
-	merged = list(dict.fromkeys([*standard, *templates]))
-	value = "\n".join(merged)
-
 	existing = frappe.db.get_value(
 		"Property Setter",
 		{"doc_type": doctype, "field_name": "naming_series", "property": "options"},
 		["name", "value"],
 		as_dict=True,
 	)
+
+	standard = [o for o in (meta_field.options or "").split("\n") if o.strip()]
+	# PRESERVE what is already there. Rebuilding from `standard + templates` alone
+	# silently deletes series other provisioning steps added — that is exactly how
+	# the expense series (KSEXP-) kept disappearing, because this function ran
+	# after the step that registered it. Union, and keep a stable order:
+	# ERPNext's own defaults, then this branch's templates, then anything else.
+	previous = [o for o in (existing.value or "").split("\n") if o.strip()] if existing else []
+	extras = [o for o in previous if o not in standard and o not in templates]
+	merged = list(dict.fromkeys([*standard, *templates, *extras]))
+	value = "\n".join(merged)
 	if existing:
 		if existing.value != value:
 			frappe.db.set_value("Property Setter", existing.name, "value", value)

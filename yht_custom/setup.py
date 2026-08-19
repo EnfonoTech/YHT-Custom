@@ -84,6 +84,7 @@ PROVISIONING_STEPS = (
 	"setup_ignore_user_permissions",
 	"setup_expense_invoice",
 	"setup_branch_series",
+	"setup_default_print_formats",
 )
 
 
@@ -123,6 +124,7 @@ def _imported(name):
 		"setup_ignore_user_permissions": setup_ignore_user_permissions,
 		"setup_expense_invoice": setup_expense_invoice,
 		"setup_branch_series": setup_branch_series,
+		"setup_default_print_formats": setup_default_print_formats,
 	}[name]
 
 
@@ -182,6 +184,22 @@ BRANCH_CUSTOM_FIELDS = [
 ]
 
 
+#: MoM 2.3 — one Sales Order that prints as Quotation, Proforma Invoice or Sales
+#: Order, instead of three documents that drift apart.
+SALES_ORDER_CUSTOM_FIELDS = [
+	{
+		"fieldname": "custom_print_as",
+		"label": "Print As",
+		"fieldtype": "Select",
+		"options": "Sales Order\nQuotation\nProforma Invoice",
+		"default": "Sales Order",
+		"insert_after": "order_type",
+		"allow_on_submit": 1,
+		"print_hide": 1,
+		"description": "Switches the printed title. The document itself is unchanged.",
+	},
+]
+
 #: Prefix that drives item-group-wise item code generation (see item_naming.py).
 ITEM_GROUP_CUSTOM_FIELDS = [
 	{
@@ -198,7 +216,11 @@ def ensure_branch_custom_fields():
 	from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
 	create_custom_fields(
-		{"Branch": BRANCH_CUSTOM_FIELDS, "Item Group": ITEM_GROUP_CUSTOM_FIELDS},
+		{
+			"Branch": BRANCH_CUSTOM_FIELDS,
+			"Item Group": ITEM_GROUP_CUSTOM_FIELDS,
+			"Sales Order": SALES_ORDER_CUSTOM_FIELDS,
+		},
 		ignore_validate=True,
 	)
 
@@ -304,3 +326,22 @@ def ensure_module_profile():
 		doc.append("block_modules", {"module": module})
 	doc.flags.ignore_permissions = True
 	doc.save()
+
+
+# --------------------------------------------------------- default print formats
+
+#: Our formats become the default so a user pressing Print gets the right layout
+#: without choosing. Sales Invoice is deliberately absent: ksa_compliance owns it
+#: and its ZATCA Phase 2 format carries the QR code required for compliance.
+DEFAULT_PRINT_FORMATS = {
+	"Delivery Note": "YHT Delivery Note",
+	"Quotation": "YHT Quotation",
+	"Sales Order": "YHT Sales Order",
+}
+
+
+def setup_default_print_formats():
+	for doctype, print_format in DEFAULT_PRINT_FORMATS.items():
+		if not frappe.db.exists("Print Format", print_format):
+			continue
+		frappe.db.set_value("DocType", doctype, "default_print_format", print_format, update_modified=False)
