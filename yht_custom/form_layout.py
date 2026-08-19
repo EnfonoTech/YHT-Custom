@@ -28,7 +28,20 @@ import frappe
 #: `currency` / `conversion_rate` — the company trades in SAR only. The value is
 #: still set and still posts; only the input is hidden.
 HIDE_FIELDS = {
-	"Sales Invoice": ["project", "currency", "conversion_rate"],
+	# `time_sheet_list` is ERPNext's project time-billing block — a Time Sheets
+	# grid with Activity Type / Billing Hours / Billing Amount. YHT is a trading
+	# business and bills goods, never hours, so it is pure noise on every invoice.
+	# Hiding the SECTION collapses the whole block; the three fields inside are
+	# listed too so they cannot surface via a search or a print format.
+	"Sales Invoice": [
+		"project",
+		"currency",
+		"conversion_rate",
+		"time_sheet_list",
+		"timesheets",
+		"total_billing_hours",
+		"total_billing_amount",
+	],
 	"Sales Order": ["project", "currency", "conversion_rate"],
 	"Delivery Note": ["project", "currency", "conversion_rate"],
 	"Quotation": ["project", "currency", "conversion_rate"],

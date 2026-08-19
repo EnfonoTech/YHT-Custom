@@ -395,10 +395,7 @@ def setup_default_print_formats():
 
 # ---------------------------------------------------------------- report access
 
-#: Reports the branch dashboard links to. A standard Report carries its own
-#: `roles` child table, checked independently of DocPerm — so a Branch User with
-#: read on Report and on the underlying ledger STILL gets
-#: "You don't have access to Report: <name>" until the role is added here.
+#: Reports the branch dashboard links to.
 DASHBOARD_REPORTS = (
 	"Stock Balance",
 	"Stock Ledger",
@@ -408,20 +405,51 @@ DASHBOARD_REPORTS = (
 
 
 def setup_report_roles():
-	"""Add Branch User to each dashboard report's own role list. Idempotent."""
+	"""Give Branch User access to each dashboard report.
+
+	🔴 The role must go on the **Custom Role**, not the Report's own `roles`.
+	`frappe/core/doctype/report/report.py::is_permitted` does:
+
+	    allowed = [Has Role rows for parent=<report>]
+	    custom_roles = get_custom_allowed_roles("report", <report>)
+	    if custom_roles:
+	        allowed = custom_roles          # <-- REPLACES, does not merge
+
+	All four of these reports already carry a Custom Role on this site (the legacy
+	team created them), so adding to `Report.roles` is **silently ignored** — the
+	report still refuses with "You don't have access to Report: …" while
+	`Report.roles` shows the role present. That is exactly the trap this hit.
+
+	Idempotent, and it never removes a role somebody else granted.
+	"""
 	for report in DASHBOARD_REPORTS:
 		if not frappe.db.exists("Report", report):
 			continue
-		if frappe.db.exists(
-			"Has Role", {"parent": report, "parenttype": "Report", "role": BRANCH_USER_ROLE}
-		):
+
+		custom_role = frappe.db.get_value("Custom Role", {"report": report}, "name")
+
+		if custom_role:
+			doc = frappe.get_doc("Custom Role", custom_role)
+		else:
+			# No Custom Role yet: the Report's own roles are authoritative, so add
+			# there instead of inventing a Custom Role that would then REPLACE them.
+			if frappe.db.exists(
+				"Has Role", {"parent": report, "parenttype": "Report", "role": BRANCH_USER_ROLE}
+			):
+				continue
+			frappe.get_doc(
+				{
+					"doctype": "Has Role",
+					"parent": report,
+					"parenttype": "Report",
+					"parentfield": "roles",
+					"role": BRANCH_USER_ROLE,
+				}
+			).insert(ignore_permissions=True)
 			continue
-		frappe.get_doc(
-			{
-				"doctype": "Has Role",
-				"parent": report,
-				"parenttype": "Report",
-				"parentfield": "roles",
-				"role": BRANCH_USER_ROLE,
-			}
-		).insert(ignore_permissions=True)
+
+		if any(r.role == BRANCH_USER_ROLE for r in doc.roles):
+			continue
+		doc.append("roles", {"role": BRANCH_USER_ROLE})
+		doc.flags.ignore_permissions = True
+		doc.save()
