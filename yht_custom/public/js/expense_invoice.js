@@ -65,13 +65,29 @@ function shape(frm) {
 		if (frm.fields_dict[f]) frm.set_df_property(f, "hidden", is_expense ? 1 : 0);
 	});
 
-	// Every row needs a uom, not only the ones added after the box was ticked.
+	// Drop frappe's blank starter row, and give every remaining row a uom.
 	//
-	// frappe puts a blank starter row on a new form, and `shape()` stamps the expense head onto
-	// it — which makes it no longer "empty", so nothing drops it, and the CLIENT then refuses
-	// the save on its missing mandatory uom before the request is ever sent. Filling uom here
-	// lets the save through; before_validate then discards the row server-side as genuinely
-	// blank, so nothing empty posts.
+	// frappe puts one empty row on a new child table, and `shape()` stamps the expense head
+	// onto it — which makes it non-empty, so nothing drops it, and the CLIENT then refuses the
+	// save before the request is ever sent. Filling `uom` was not enough: `item_name` is
+	// mandatory too, so the refusal just moved to
+	//     "In Items, Item Name is required in row 1."
+	// An expense invoice starts with no lines, so the honest fix is to remove the blank row
+	// rather than invent values for it.
+	//
+	// Guarded on `__islocal` and on the row being ENTIRELY blank, so a saved document is never
+	// touched and a row someone is midway through typing is never pulled out from under them.
+	if (is_expense && frm.doc.__islocal && frm.fields_dict.items) {
+		const grid = frm.fields_dict.items.grid;
+		const blank = (frm.doc.items || []).filter(
+			(row) => !row.item_code && !row.item_name && !row.description && !flt(row.rate) && !flt(row.amount)
+		);
+		if (blank.length && blank.length < (frm.doc.items || []).length + 1) {
+			blank.forEach((row) => grid.grid_rows_by_docname[row.name]?.remove());
+			frm.refresh_field("items");
+		}
+	}
+
 	if (is_expense) {
 		const fallback = frappe.boot.sysdefaults.stock_uom || "Nos";
 		(frm.doc.items || []).forEach((row) => {
