@@ -1,0 +1,223 @@
+# Copyright (c) 2026, Enfono Technologies and contributors
+# For license information, please see license.txt
+
+"""Price Assist — what should I charge for this item?
+
+MoM §2.5 asks for the last rate sold to this customer and live stock on the item
+line. This answers the whole question in one call so the salesman is not guessing
+or opening three reports:
+
+* the price list rate that ERPNext will apply
+* the last rate sold to **this** customer, and when
+* the last rate sold to **anyone**, and to whom
+* the highest and lowest rate in the recent window, so an outlier is visible
+* current stock in the user's own branch warehouses
+* valuation, and therefore the margin the proposed rate would earn
+
+Every query is scoped by the caller's branch warehouses, so a branch user sees
+their own trading history and not another branch's pricing.
+
+Existing implementations elsewhere in the estate (`sf_trading.last_selling_rate`,
+the `last_purchase_rate` app) each answer a slice of this by scraping the grid
+toolbar in JS. This is deliberately server-side: one round trip, permission
+filters applied in SQL, and no dependence on frappe's grid DOM.
+"""
+
+import frappe
+from frappe import _
+from frappe.utils import cint, flt
+
+#: How far back "recent" reaches for the high/low band and the history list.
+DEFAULT_LIMIT = 15
+
+
+def _branch_warehouses(user=None) -> list[str]:
+	"""The caller's branch warehouses, or [] meaning unrestricted."""
+	from yht_custom.branch_filters import get_branch_warehouses
+
+	return get_branch_warehouses(user or frappe.session.user)
+
+
+def _company(company=None) -> str | None:
+	return company or frappe.defaults.get_user_default("company") or frappe.db.get_single_value(
+		"Global Defaults", "default_company"
+	)
+
+
+@frappe.whitelist()
+def get_price_assist(item_code: str, customer: str | None = None, company: str | None = None,
+                     price_list: str | None = None, qty: float = 1) -> dict:
+	"""Everything needed to price one line. Read-only."""
+	if not item_code:
+		frappe.throw(_("Item Code is required"))
+
+	# A public endpoint: prove the caller may read the item and the history behind it.
+	frappe.has_permission("Item", "read", throw=True)
+	frappe.has_permission("Sales Invoice", "read", throw=True)
+
+	company = _company(company)
+	warehouses = _branch_warehouses()
+
+	item = frappe.db.get_value(
+		"Item", item_code,
+		["item_name", "stock_uom", "is_stock_item", "last_purchase_rate"],
+		as_dict=True,
+	)
+	if not item:
+		frappe.throw(_("Item {0} not found").format(item_code))
+
+	out = {
+		"item_code": item_code,
+		"item_name": item.item_name,
+		"stock_uom": item.stock_uom,
+		"currency": frappe.db.get_value("Company", company, "default_currency") if company else None,
+		"price_list": price_list or frappe.db.get_single_value("Selling Settings", "selling_price_list"),
+		"restricted_to_warehouses": warehouses,
+	}
+
+	out["price_list_rate"] = _price_list_rate(item_code, out["price_list"])
+	out["last_to_this_customer"] = _last_sale(item_code, company, warehouses, customer=customer)
+	out["last_to_anyone"] = _last_sale(item_code, company, warehouses)
+	out["band"] = _rate_band(item_code, company, warehouses)
+	out["stock"] = _stock(item_code, warehouses) if item.is_stock_item else []
+	# Valuation drives the margin hint. last_purchase_rate is a fallback for a
+	# non-stock or never-received item, where there is no valuation to read.
+	out["valuation_rate"] = _valuation(item_code, warehouses) or flt(item.last_purchase_rate)
+	out["qty"] = flt(qty) or 1
+	return out
+
+
+def _price_list_rate(item_code, price_list):
+	if not price_list:
+		return None
+	return frappe.db.get_value(
+		"Item Price",
+		{"item_code": item_code, "price_list": price_list, "selling": 1},
+		"price_list_rate",
+	) or frappe.db.get_value(
+		"Item Price", {"item_code": item_code, "price_list": price_list}, "price_list_rate"
+	)
+
+
+def _sale_conditions(warehouses, customer=None):
+	"""Shared WHERE for the sales-history queries. Parameterised throughout."""
+	where = ["si.docstatus = 1", "sii.item_code = %(item_code)s"]
+	params = {}
+	if customer:
+		where.append("si.customer = %(customer)s")
+		params["customer"] = customer
+	if warehouses:
+		# Branch scope: the item row's warehouse, or the header's when the row is blank.
+		where.append(
+			"(sii.warehouse IN %(warehouses)s"
+			" OR (IFNULL(sii.warehouse, '') = '' AND si.set_warehouse IN %(warehouses)s))"
+		)
+		params["warehouses"] = warehouses
+	return where, params
+
+
+def _last_sale(item_code, company, warehouses, customer=None):
+	where, params = _sale_conditions(warehouses, customer)
+	if company:
+		where.append("si.company = %(company)s")
+		params["company"] = company
+	params["item_code"] = item_code
+
+	rows = frappe.db.sql(
+		f"""
+		SELECT si.name AS invoice, si.posting_date, si.customer, si.customer_name,
+		       sii.rate, sii.qty, sii.uom, sii.discount_percentage, si.currency
+		FROM `tabSales Invoice Item` sii
+		INNER JOIN `tabSales Invoice` si ON si.name = sii.parent
+		WHERE {' AND '.join(where)}
+		ORDER BY si.posting_date DESC, si.creation DESC
+		LIMIT 1
+		""",
+		params,
+		as_dict=True,
+	)
+	return rows[0] if rows else None
+
+
+def _rate_band(item_code, company, warehouses, limit=DEFAULT_LIMIT):
+	"""High / low / average over the recent window, so an outlier rate is obvious."""
+	where, params = _sale_conditions(warehouses)
+	if company:
+		where.append("si.company = %(company)s")
+		params["company"] = company
+	params.update({"item_code": item_code, "limit": cint(limit)})
+
+	rows = frappe.db.sql(
+		f"""
+		SELECT sii.rate FROM `tabSales Invoice Item` sii
+		INNER JOIN `tabSales Invoice` si ON si.name = sii.parent
+		WHERE {' AND '.join(where)} AND sii.rate > 0
+		ORDER BY si.posting_date DESC, si.creation DESC
+		LIMIT %(limit)s
+		""",
+		params,
+	)
+	rates = [flt(r[0]) for r in rows]
+	if not rates:
+		return None
+	return {
+		"low": min(rates),
+		"high": max(rates),
+		"avg": sum(rates) / len(rates),
+		"samples": len(rates),
+	}
+
+
+def _stock(item_code, warehouses):
+	filters = {"item_code": item_code, "actual_qty": ["!=", 0]}
+	if warehouses:
+		filters["warehouse"] = ["in", warehouses]
+	return frappe.get_all(
+		"Bin",
+		filters=filters,
+		fields=["warehouse", "actual_qty", "reserved_qty", "projected_qty", "valuation_rate"],
+		order_by="actual_qty desc",
+	)
+
+
+def _valuation(item_code, warehouses):
+	filters = {"item_code": item_code, "actual_qty": [">", 0]}
+	if warehouses:
+		filters["warehouse"] = ["in", warehouses]
+	rows = frappe.get_all("Bin", filters=filters, fields=["stock_value", "actual_qty"])
+	total_qty = sum(flt(r.actual_qty) for r in rows)
+	if not total_qty:
+		return None
+	return sum(flt(r.stock_value) for r in rows) / total_qty
+
+
+@frappe.whitelist()
+def get_price_history(item_code: str, customer: str | None = None, company: str | None = None,
+                      limit: int = 30) -> list[dict]:
+	"""Recent sales of this item, branch-scoped. Powers the History tab."""
+	if not item_code:
+		frappe.throw(_("Item Code is required"))
+	frappe.has_permission("Sales Invoice", "read", throw=True)
+
+	company = _company(company)
+	warehouses = _branch_warehouses()
+	where, params = _sale_conditions(warehouses, customer)
+	if company:
+		where.append("si.company = %(company)s")
+		params["company"] = company
+	params.update({"item_code": item_code, "limit": cint(limit) or 30})
+
+	return frappe.db.sql(
+		f"""
+		SELECT si.name AS invoice, si.posting_date, si.customer, si.customer_name,
+		       sii.qty, sii.uom, sii.rate, sii.discount_percentage, sii.amount,
+		       sii.warehouse, si.currency
+		FROM `tabSales Invoice Item` sii
+		INNER JOIN `tabSales Invoice` si ON si.name = sii.parent
+		WHERE {' AND '.join(where)}
+		ORDER BY si.posting_date DESC, si.creation DESC
+		LIMIT %(limit)s
+		""",
+		params,
+		as_dict=True,
+	)

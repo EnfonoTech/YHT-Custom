@@ -11,6 +11,7 @@ import frappe
 
 from yht_custom.setup_branch_series import setup_branch_series
 from yht_custom.expense_invoice import setup_expense_invoice
+from yht_custom.form_layout import setup_form_layout
 from yht_custom.setup_property_setters import setup_ignore_user_permissions
 
 #: What a Branch User may touch. Per the MoM document set — Quotation, Sales
@@ -60,6 +61,36 @@ BRANCH_USER_PERMISSIONS = [
 	{"parent": "Accounts Settings", "read": 1},
 	# --- the dashboard page needs read on Page ---
 	{"parent": "Page", "read": 1},
+	# --- support masters the transacting FORMS read on load -------------------
+	# Added after a live sweep: 51 link targets reachable from the branch forms
+	# were unreadable, of which these are the ones a KSA trading flow actually
+	# touches. Granting all 51 would hand a branch operator Assets, BOMs,
+	# Timesheets, POS and the whole CRM for no reason.
+	#
+	# `Tax Category` was the reported failure — "You do not have Read or Select
+	# Permissions for Tax Category" on every Sales Invoice, because ERPNext reads
+	# the customer's tax category while setting missing values.
+	# `Item Tax Template` is read per ITEM ROW: ksa_compliance fetches
+	# `custom_zatca_item_tax_category` through it, so ZATCA needs it.
+	{"parent": "Tax Category", "read": 1},
+	{"parent": "Item Tax Template", "read": 1, "report": 1},
+	{"parent": "Payment Term", "read": 1},
+	{"parent": "Currency", "read": 1},
+	{"parent": "Incoterm", "read": 1},
+	{"parent": "Pricing Rule", "read": 1, "report": 1},
+	{"parent": "Shipping Rule", "read": 1},
+	{"parent": "Sales Person", "read": 1},
+	{"parent": "Sales Partner", "read": 1},
+	{"parent": "Purchase Order", "read": 1, "report": 1},
+	{"parent": "Material Request", "read": 1, "report": 1},
+	{"parent": "Batch", "read": 1, "report": 1},
+	{"parent": "Serial and Batch Bundle", "read": 1, "report": 1},
+	{"parent": "Driver", "read": 1},
+	# NOTE: `Bank Account` is deliberately ABSENT. Granting read there is what
+	# unblocks ERPNext's "Create > Payment" button on a Sales Invoice, but read on
+	# Bank Account exposes the account number and IBAN — there is no permlevel
+	# split on that doctype — so it is a client decision, not a code one.
+	# Tracked as the expected failure in tests/test_sales_cycle.py.
 ]
 
 PERM_FIELDS = (
@@ -85,6 +116,7 @@ PROVISIONING_STEPS = (
 	"setup_expense_invoice",
 	"setup_branch_series",
 	"setup_default_print_formats",
+	"setup_form_layout",
 )
 
 
@@ -125,6 +157,7 @@ def _imported(name):
 		"setup_expense_invoice": setup_expense_invoice,
 		"setup_branch_series": setup_branch_series,
 		"setup_default_print_formats": setup_default_print_formats,
+		"setup_form_layout": setup_form_layout,
 	}[name]
 
 
