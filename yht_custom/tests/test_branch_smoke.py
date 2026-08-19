@@ -115,31 +115,36 @@ class TestBranchTileDestinations(BranchUserContext):
 				failures.append(f"{doctype}: {type(e).__name__}")
 		self.assertEqual(failures, [], f"dashboard tiles a branch user cannot open: {failures}")
 
-	def test_every_tile_doctype_loads_its_form(self):
-		"""What the desk actually calls when a form opens.
+	def test_every_tile_doctype_opens_an_existing_record(self):
+		"""What the desk actually calls when a form opens — and where it checks permission.
 
-		`frappe.desk.form.load.getdoctype` is the real endpoint, and it runs the same
-		`has_permission("read")` the browser would hit. That is the half a list-scoping test
-		cannot see — Party Type surfaced on form open, not on a list.
+		`frappe.desk.form.load.getdoc` runs `doc.has_permission("read")` plus `get_docinfo`,
+		which is the real form-open gate. Two earlier attempts at this test were wrong and
+		both are worth recording so nobody repeats them:
 
-		An earlier version called `new_doc(dt).run_method("onload")` instead, which threw
-		`TypeError: unsupported operand type(s) for -: NoneType and float` on four selling
-		doctypes. That is not a permission signal at all — it is ERPNext's totals maths
-		running against a virgin document with no customer, company or items. Testing it
-		proved nothing and buried the real result.
+		* `new_doc(dt).run_method("onload")` threw `TypeError: NoneType - float` on four
+		  selling doctypes — that is ERPNext's totals maths on a virgin document with no
+		  customer or items, not a permission signal.
+		* `getdoctype(dt)` only assembles the meta bundle. It performs NO read check at all
+		  (the `has_permission` on load.py:43 belongs to `get_docinfo`), so it could not have
+		  caught anything — and it needs `frappe.response.docs` pre-seeded as a list or it
+		  dies on `'NoneType' object has no attribute 'extend'`.
 		"""
-		from frappe.desk.form.load import getdoctype
+		from frappe.desk.form.load import getdoc
 
 		failures = []
 		for doctype in TILE_DOCTYPES:
 			if not frappe.db.exists("DocType", doctype):
 				continue
+			name = frappe.db.get_value(doctype, {}, "name")
+			if not name:
+				continue
 			try:
-				frappe.response = frappe._dict()
-				getdoctype(doctype)
+				frappe.response = frappe._dict(docs=[], docinfo=None)
+				getdoc(doctype, name)
 			except Exception as e:
-				failures.append(f"{doctype}: {type(e).__name__}: {str(e)[:120]}")
-		self.assertEqual(failures, [], f"form-load failures: {failures}")
+				failures.append(f"{doctype} ({name}): {type(e).__name__}: {str(e)[:110]}")
+		self.assertEqual(failures, [], f"form-open failures: {failures}")
 
 	def test_every_tile_doctype_is_creatable(self):
 		"""A tile that opens a new form needs `create`, not just `read`."""
@@ -219,11 +224,7 @@ class TestBranchGuideClaims(BranchUserContext):
 			"Sales Invoice", fields=["name", "set_warehouse"], limit_page_length=0
 		)
 		scoped = {row.set_warehouse for row in invoices if row.set_warehouse}
-		allowed = set(
-			frappe.get_all(
-				"Branch Configuration Warehouse", pluck="warehouse", ignore_permissions=True
-			)
-		)
+		allowed = set(frappe.get_all("Branch Configuration Warehouse", pluck="warehouse"))
 		if scoped and allowed:
 			self.assertTrue(
 				scoped.issubset(allowed) or not allowed,
@@ -241,9 +242,9 @@ class TestBranchGuideClaims(BranchUserContext):
 		"""The guide lists eight tenderable modes. Every one must be able to post."""
 		from yht_custom.api.payment_assist import get_branch_payment_modes
 
-		company = frappe.db.get_value(
-			"Branch Configuration", {}, "company", ignore_permissions=True
-		)
+		# frappe.db.get_value bypasses permissions by design and takes no
+		# ignore_permissions argument — passing one is a TypeError, not a no-op.
+		company = frappe.db.get_value("Branch Configuration", {}, "company")
 		if not company:
 			self.skipTest("no branch configuration")
 		modes = get_branch_payment_modes(company)
