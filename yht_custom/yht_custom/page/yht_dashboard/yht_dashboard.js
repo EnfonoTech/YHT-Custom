@@ -69,23 +69,28 @@ function render(page, d) {
 
 	// Tile set per the MoM document list. Material Request and inter-branch
 	// transfer are deliberately absent for branch users.
+	// Icon names MUST exist in frappe's sprite
+	// (apps/frappe/frappe/public/icons/timeless/icons.svg — 178 of them).
+	// `delivery`, `money-coins-alt` and `package` do NOT, which is why those three
+	// tiles rendered with an empty icon slot. Verified name by name against the
+	// sprite; frappe.utils.icon() fails silently on an unknown name.
 	const actions = [
 		{ icon: "file", label: __("Sales Invoice"), doctype: "Sales Invoice", mode: "new" },
 		{ icon: "small-file", label: __("Quotation"), doctype: "Quotation", mode: "list" },
 		{ icon: "list", label: __("Sales Order"), doctype: "Sales Order", mode: "list" },
-		{ icon: "delivery", label: __("Delivery Note"), doctype: "Delivery Note", mode: "list" },
-		{ icon: "users", label: __("Customer"), doctype: "Customer", mode: "list" },
-		{ icon: "money-coins-alt", label: __("Payment Entry"), doctype: "Payment Entry", mode: "list" },
-		{ icon: "stock", label: __("Purchase Receipt"), doctype: "Purchase Receipt", mode: "list" },
-		{ icon: "file", label: __("Purchase Invoice"), doctype: "Purchase Invoice", mode: "list" },
-		{ icon: "package", label: __("Item"), doctype: "Item", mode: "list" },
+		{ icon: "stock", label: __("Delivery Note"), doctype: "Delivery Note", mode: "list" },
+		{ icon: "customer", label: __("Customer"), doctype: "Customer", mode: "list" },
+		{ icon: "money-coins-1", label: __("Payment Entry"), doctype: "Payment Entry", mode: "list" },
+		{ icon: "buying", label: __("Purchase Receipt"), doctype: "Purchase Receipt", mode: "list" },
+		{ icon: "expenses", label: __("Purchase Invoice"), doctype: "Purchase Invoice", mode: "list" },
+		{ icon: "retail", label: __("Item"), doctype: "Item", mode: "list" },
 	];
 
 	const reports = [
-		{ label: __("Stock Balance"), report: "Stock Balance" },
-		{ label: __("Stock Ledger"), report: "Stock Ledger" },
-		{ label: __("Accounts Receivable Summary"), report: "Accounts Receivable Summary" },
-		{ label: __("General Ledger"), report: "General Ledger" },
+		{ label: __("Stock Balance"), report: "Stock Balance", icon: "stock" },
+		{ label: __("Stock Ledger"), report: "Stock Ledger", icon: "dashboard-list" },
+		{ label: __("Receivables Summary"), report: "Accounts Receivable Summary", icon: "income" },
+		{ label: __("General Ledger"), report: "General Ledger", icon: "accounting" },
 	];
 
 	const drafts = d.draft_counts || {};
@@ -142,7 +147,7 @@ function action_card(a) {
 function report_card(r) {
 	const route = `/app/query-report/${encodeURIComponent(r.report)}`;
 	return `<a class="yht-card" href="${route}">
-		<span class="yht-card-icon">${frappe.utils.icon("small-file", "md")}</span>
+		<span class="yht-card-icon">${frappe.utils.icon(r.icon || "chart", "md")}</span>
 		<span class="yht-card-label">${frappe.utils.escape_html(r.label)}</span>
 	</a>`;
 }

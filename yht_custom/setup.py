@@ -62,6 +62,15 @@ BRANCH_USER_PERMISSIONS = [
 	{"parent": "Accounts Settings", "read": 1},
 	# --- the dashboard page needs read on Page ---
 	{"parent": "Page", "read": 1},
+	# --- the dashboard's report tiles ------------------------------------------
+	# A report needs BOTH: read on its `ref_doctype`'s underlying ledger, and the
+	# role listed in `Report.roles` (see setup_report_roles below). Doctype-level
+	# read alone passes has_permission and still fails the report route, which is
+	# why the tiles opened "You don't have access to Report: …".
+	{"parent": "GL Entry", "read": 1, "report": 1},
+	{"parent": "Stock Ledger Entry", "read": 1, "report": 1},
+	{"parent": "Bin", "read": 1, "report": 1},
+	{"parent": "Report", "read": 1},
 	# --- support masters the transacting FORMS read on load -------------------
 	# Added after a live sweep: 51 link targets reachable from the branch forms
 	# were unreadable, of which these are the ones a KSA trading flow actually
@@ -119,6 +128,7 @@ PROVISIONING_STEPS = (
 	"setup_default_print_formats",
 	"setup_form_layout",
 	"setup_site_defaults",
+	"setup_report_roles",
 )
 
 
@@ -381,3 +391,37 @@ def setup_default_print_formats():
 		if not frappe.db.exists("Print Format", print_format):
 			continue
 		frappe.db.set_value("DocType", doctype, "default_print_format", print_format, update_modified=False)
+
+
+# ---------------------------------------------------------------- report access
+
+#: Reports the branch dashboard links to. A standard Report carries its own
+#: `roles` child table, checked independently of DocPerm — so a Branch User with
+#: read on Report and on the underlying ledger STILL gets
+#: "You don't have access to Report: <name>" until the role is added here.
+DASHBOARD_REPORTS = (
+	"Stock Balance",
+	"Stock Ledger",
+	"Accounts Receivable Summary",
+	"General Ledger",
+)
+
+
+def setup_report_roles():
+	"""Add Branch User to each dashboard report's own role list. Idempotent."""
+	for report in DASHBOARD_REPORTS:
+		if not frappe.db.exists("Report", report):
+			continue
+		if frappe.db.exists(
+			"Has Role", {"parent": report, "parenttype": "Report", "role": BRANCH_USER_ROLE}
+		):
+			continue
+		frappe.get_doc(
+			{
+				"doctype": "Has Role",
+				"parent": report,
+				"parenttype": "Report",
+				"parentfield": "roles",
+				"role": BRANCH_USER_ROLE,
+			}
+		).insert(ignore_permissions=True)

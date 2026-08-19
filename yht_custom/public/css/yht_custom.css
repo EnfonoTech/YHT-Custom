@@ -75,7 +75,10 @@
 
 .yht-grid {
 	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+	/* 160px forced "Purchase Receipt" onto two lines and "Accounts Receivable
+	   Summary" onto three, so the tiles came out ragged. 210px fits every label
+	   in this set on one line at desk width. */
+	grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
 	gap: 0.75rem;
 }
 
@@ -84,6 +87,7 @@
 	align-items: center;
 	gap: 0.65rem;
 	padding: 0.9rem 1rem;
+	min-height: 52px;
 	border: 1px solid var(--border-color);
 	border-radius: var(--border-radius-md);
 	background: var(--card-bg);
@@ -107,4 +111,25 @@
 .yht-card-label {
 	font-size: var(--text-md);
 	font-weight: 500;
+	line-height: 1.25;
+}
+
+/* Back-to-dashboard nav item, injected by branch_user_restrict.js.
+   v15 only consults role_home_page for WEBSITE users, so a desk System User gets
+   no home route back to the dashboard — hence an explicit affordance. */
+.yht-nav-home a {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35rem;
+	padding: 0.25rem 0.6rem;
+	border-radius: var(--border-radius);
+	font-weight: 500;
+	color: var(--navbar-text-color, var(--text-color));
+	text-decoration: none;
+	white-space: nowrap;
+}
+
+.yht-nav-home a:hover {
+	background: var(--fg-hover-color, rgba(0, 0, 0, 0.06));
+	text-decoration: none;
 }
