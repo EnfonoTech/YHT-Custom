@@ -65,9 +65,18 @@ function shape(frm) {
 				frm.fields_dict.items.grid.update_docfield_property(f, "hidden", is_expense ? 1 : 0);
 			}
 		});
+		// `update_docfield_property(fieldname, property, value)` — in that order.
+		//
+		// This line used to read `update_docfield_property("in_list_view", 1)`, passing the
+		// PROPERTY as the fieldname and never using the loop variable at all. frappe's
+		// implementation THROWS on a fieldname it cannot resolve (`throw \`field ${fieldname}
+		// not found\``), so ticking Is Expense Invoice raised an exception every single time,
+		// the grid was never reshaped, and the form could not be completed. Found while
+		// capturing the expense-invoice training video: the save failed with a bare
+		// "Missing Fields" modal that named nothing.
 		["item_name", "expense_account", "rate", "amount"].forEach((f) => {
 			if (frm.get_docfield("items", f)) {
-				frm.fields_dict.items.grid.update_docfield_property("in_list_view", 1);
+				frm.fields_dict.items.grid.update_docfield_property(f, "in_list_view", 1);
 			}
 		});
 	}
