@@ -115,21 +115,42 @@ class TestBranchTileDestinations(BranchUserContext):
 				failures.append(f"{doctype}: {type(e).__name__}")
 		self.assertEqual(failures, [], f"dashboard tiles a branch user cannot open: {failures}")
 
-	def test_every_tile_doctype_can_be_instantiated(self):
-		"""Opening a NEW form runs fetch_from and default logic that a list never touches.
+	def test_every_tile_doctype_loads_its_form(self):
+		"""What the desk actually calls when a form opens.
 
-		This is the half that catches permission gaps a list-scoping test cannot see.
+		`frappe.desk.form.load.getdoctype` is the real endpoint, and it runs the same
+		`has_permission("read")` the browser would hit. That is the half a list-scoping test
+		cannot see — Party Type surfaced on form open, not on a list.
+
+		An earlier version called `new_doc(dt).run_method("onload")` instead, which threw
+		`TypeError: unsupported operand type(s) for -: NoneType and float` on four selling
+		doctypes. That is not a permission signal at all — it is ERPNext's totals maths
+		running against a virgin document with no customer, company or items. Testing it
+		proved nothing and buried the real result.
 		"""
+		from frappe.desk.form.load import getdoctype
+
 		failures = []
 		for doctype in TILE_DOCTYPES:
 			if not frappe.db.exists("DocType", doctype):
 				continue
 			try:
-				doc = frappe.new_doc(doctype)
-				doc.run_method("onload")
+				frappe.response = frappe._dict()
+				getdoctype(doctype)
 			except Exception as e:
 				failures.append(f"{doctype}: {type(e).__name__}: {str(e)[:120]}")
-		self.assertEqual(failures, [], f"new-form failures: {failures}")
+		self.assertEqual(failures, [], f"form-load failures: {failures}")
+
+	def test_every_tile_doctype_is_creatable(self):
+		"""A tile that opens a new form needs `create`, not just `read`."""
+		failures = [
+			doctype
+			for doctype in TILE_DOCTYPES
+			if frappe.db.exists("DocType", doctype) and not frappe.has_permission(doctype, "create")
+		]
+		# Item is browse-only for this role by design; everything else must be creatable.
+		failures = [d for d in failures if d != "Item"]
+		self.assertEqual(failures, [], f"tiles a branch user cannot create from: {failures}")
 
 	def test_every_dashboard_report_is_permitted(self):
 		"""A Custom Role REPLACES a report's own Has Role list, it does not merge — so a
@@ -155,17 +176,19 @@ class TestBranchPickers(BranchUserContext):
 		is not necessarily the field's declared `options`. Party Type reached the client
 		this way and nothing in a declared-options sweep could have found it.
 		"""
+		# `read` OR `select` — not both. frappe/desk/search.py::search_widget resolves it as
+		#     ptype = "select" if frappe.only_has_select_perm(doctype) else "read"
+		# so `select` is the ALTERNATIVE used when a role holds nothing but select, never an
+		# extra hurdle on top of read. An earlier version of this test demanded both and
+		# reported `Payment Term` as broken when it works perfectly on read alone.
 		failures = []
 		for label, doctype in WIRED_QUERY_TARGETS:
 			if not frappe.db.exists("DocType", doctype):
 				continue
-			if not frappe.has_permission(doctype, "read"):
-				failures.append(f"{doctype} (read) — {label}")
-			# search_link wants select as well as read.
-			elif not frappe.has_permission(doctype, "select") and not frappe.has_permission(
-				doctype, "report"
+			if not (
+				frappe.has_permission(doctype, "read") or frappe.has_permission(doctype, "select")
 			):
-				failures.append(f"{doctype} (select) — {label}")
+				failures.append(f"{doctype} — {label}")
 		self.assertEqual(failures, [], f"pickers a branch user cannot use: {failures}")
 
 	def test_plain_pickers_are_readable(self):

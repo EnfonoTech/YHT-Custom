@@ -63,7 +63,11 @@ BRANCH_USER_PERMISSIONS = [
 	# searches. So a sweep that walks declared `options` sees `DocType` and never
 	# discovers Party Type at all — the declared option lies about what gets read.
 	# Symptom: a bare "No permission for Party Type" the moment a branch user opens a
-	# Payment Entry. `select` as well as `read`, because search_link wants both.
+	# Payment Entry. `read` is what fixes it — search_widget resolves the check as
+	#     ptype = "select" if frappe.only_has_select_perm(doctype) else "read"
+	# so `select` is the alternative for a select-only role, not an extra requirement.
+	# Both are granted here anyway: this is a 4-row reference table and a picker that
+	# works either way is one less thing to diagnose.
 	# test_branch_smoke.py now exercises the wired queries directly.
 	{"parent": "Party Type", "read": 1, "select": 1},
 	{"parent": "Sales Taxes and Charges Template", "read": 1},
