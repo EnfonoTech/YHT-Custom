@@ -233,8 +233,6 @@ class TestCollectPayment(FrappeTestCase):
 			self.skipTest("no usable mode of payment")
 
 		invoice = self._make_invoice(company)
-		if not invoice:
-			self.skipTest("could not build a test invoice on this site")
 
 		created = payment_assist.collect_payment(
 			invoice.name, [{"mode_of_payment": mode.parent, "amount": flt(invoice.grand_total)}]
@@ -264,8 +262,6 @@ class TestCollectPayment(FrappeTestCase):
 			self.skipTest("need two usable modes of payment")
 
 		invoice = self._make_invoice(company)
-		if not invoice:
-			self.skipTest("could not build a test invoice on this site")
 
 		half = flt(flt(invoice.grand_total) / 2, 2)
 		rest = flt(flt(invoice.grand_total) - half, 2)
@@ -281,12 +277,18 @@ class TestCollectPayment(FrappeTestCase):
 		self.assertAlmostEqual(flt(invoice.outstanding_amount, 2), 0.0, places=2)
 
 	def _make_invoice(self, company):
-		"""A minimal submitted cash-sale invoice, copied from an existing one.
+		"""A submitted cash-sale invoice, copied from an existing one.
 
-		Built from a real submitted invoice rather than from scratch because this
-		site's flow policy routes stock through a Delivery Note and rejects an
+		Copied from a real submitted invoice rather than built from scratch because
+		this site's flow policy routes stock through a Delivery Note and rejects an
 		invoice that tries to move it — a hand-built invoice would fail validation
 		for reasons unrelated to what is under test.
+
+		This deliberately does NOT swallow exceptions. An earlier version returned
+		None on any failure so the caller could skipTest, and the result was that
+		the two end-to-end tests — the only ones that prove a Payment Entry actually
+		posts — reported as skipped while the real cause sat unread. A broken
+		fixture must fail loudly, not quietly downgrade the suite.
 		"""
 		template_name = frappe.db.get_value(
 			"Sales Invoice",
@@ -310,10 +312,12 @@ class TestCollectPayment(FrappeTestCase):
 			row.dn_detail = None
 			row.sales_order = None
 			row.so_detail = None
-		try:
-			invoice.insert()
-			invoice.submit()
-		except Exception:
-			frappe.db.rollback()
-			return None
+		invoice.insert()
+		# reload() between insert and submit is REQUIRED, not defensive. Something on
+		# the insert path writes the row again behind the in-memory doc, so submit()
+		# hits check_if_latest and raises TimestampMismatchError — 0.4s apart, every
+		# time, but only inside FrappeTestCase; the identical sequence run straight
+		# through bench execute submits fine. Do not remove it.
+		invoice.reload()
+		invoice.submit()
 		return invoice
