@@ -170,6 +170,7 @@ PROVISIONING_STEPS = (
 	"setup_report_roles",
 	"setup_branch_payment_modes",
 	"repair_mirrored_perm_flags",
+	"run_dashboard_reports_inline",
 )
 
 
@@ -639,3 +640,72 @@ def repair_mirrored_perm_flags():
 	if repaired:
 		print(f"  yht_custom: restored {repaired} dropped select/if_owner flag(s)")
 	return repaired
+
+
+# ------------------------------------------------ dashboard reports run inline
+
+#: The four reports the branch dashboard links to.
+DASHBOARD_REPORTS = (
+	"Stock Balance",
+	"Stock Ledger",
+	"Accounts Receivable Summary",
+	"General Ledger",
+)
+
+
+def run_dashboard_reports_inline():
+	"""Stop the dashboard's reports being queued as Prepared Reports.
+
+	Frappe PROMOTES a slow report to `prepared_report = 1` on its own, and once promoted the
+	desk stops running it inline: it queues a background job and `frappe.query_report.data`
+	stays empty until that job finishes. All four reports the branch dashboard links to had
+	been promoted this way, so an operator clicking a tile got a queued job rather than a
+	table — and the written guide promised them a table.
+
+	Measured inline, as the branch user, over a one-month range:
+
+	    Stock Balance                 1,741 rows   1,669 ms
+	    Stock Ledger                      4 rows      81 ms
+	    Accounts Receivable Summary      69 rows   1,119 ms
+	    General Ledger                   36 rows   1,050 ms
+
+	So the queueing bought nothing at the ranges anyone actually uses. Both flags are set:
+	`prepared_report = 0` to run inline now, and `disable_prepared_report_automation = 1` so
+	frappe does not silently promote them again the next time one runs slowly.
+
+	The trade-off, stated: someone running Stock Ledger across three years (20,372 rows) now
+	waits inline instead of getting a background job. That is the correct default for a branch
+	operator looking at a month, and the guide already teaches setting the date range first.
+
+	NOTE the field is `disable_prepared_report_automation`. There is no
+	`disable_prepared_report` column in this version — querying that name raises
+	`OperationalError: Unknown column`, and `bench execute` reports it as a bare
+	`NameError: name 'yht_custom' is not defined`, because it wraps
+	`frappe.get_attr(method)(*args)` in a bare `except Exception` and falls through to `eval`.
+	Any runtime error in a function called that way is disguised as an import failure.
+	"""
+	meta = frappe.get_meta("Report")
+	has_automation_flag = bool(meta.get_field("disable_prepared_report_automation"))
+
+	changed = 0
+	for name in DASHBOARD_REPORTS:
+		if not frappe.db.exists("Report", name):
+			continue
+
+		updates = {}
+		if cint(frappe.db.get_value("Report", name, "prepared_report")):
+			updates["prepared_report"] = 0
+		if has_automation_flag and not cint(
+			frappe.db.get_value("Report", name, "disable_prepared_report_automation")
+		):
+			updates["disable_prepared_report_automation"] = 1
+
+		if updates:
+			# db.set_value, not doc.save(): Report is a standard doctype and saving one in a
+			# non-developer-mode site raises "Cannot edit a standard report".
+			frappe.db.set_value("Report", name, updates, update_modified=False)
+			changed += len(updates)
+
+	if changed:
+		print(f"  yht_custom: {changed} prepared-report flag(s) cleared on dashboard reports")
+	return changed
