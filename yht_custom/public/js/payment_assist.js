@@ -41,10 +41,18 @@ frappe.ui.form.on("Sales Invoice", {
 		yht_custom.payment.show_customer_position(frm);
 	},
 
-	after_submit(frm) {
-		if (!yht_custom.payment.wants_tender(frm)) return;
-		// A beat, so the submit alert and the docstatus re-render land first.
-		setTimeout(() => yht_custom.payment.open_tender(frm), 400);
+	// `on_submit`, NOT `after_submit`.
+	//
+	// `after_submit` is a key on `frappe.route_hooks` (frappe form.js:851), not a form script
+	// event, so a handler registered under that name is never called and the dialog silently
+	// never opened. The invoice submitted fine and the Collect Payment button appeared, which
+	// made it look like the feature worked — only the automatic open was missing.
+	on_submit(frm) {
+		// A beat, so the submit alert and the docstatus re-render land first, and re-check
+		// afterwards rather than trusting the doc state at trigger time.
+		setTimeout(() => {
+			if (yht_custom.payment.wants_tender(frm)) yht_custom.payment.open_tender(frm);
+		}, 600);
 	},
 
 	before_save(frm) {
@@ -146,6 +154,20 @@ yht_custom.payment.wants_tender = function (frm) {
 };
 
 yht_custom.payment.add_collect_button = function (frm) {
+	// ERPNext's own Create > Payment is a dead end for a branch user, so replace it rather
+	// than leave two buttons where one throws.
+	//
+	// It calls `get_payment_entry`, which sets `pe.bank_account` from the company default and
+	// then hits `has_permission("Bank Account", "read", throw=True)` — a bare
+	//     "User … does not have doctype access via role permission for document Bank Account"
+	// with nothing on screen explaining which document. Granting that read would hand every
+	// branch operator the account number and IBAN of every company account, so instead the
+	// native action is removed for restricted users and `Collect Payment` takes its place.
+	// See yht_custom/api/payment_assist.py for the full trace.
+	if (frappe.boot && frappe.boot.yht_branch_restricted && frm.doc.docstatus === 1) {
+		frm.remove_custom_button("Payment", "Create");
+	}
+
 	if (!yht_custom.payment.wants_tender(frm)) return;
 	frm.add_custom_button(__("Collect Payment"), () => yht_custom.payment.open_tender(frm));
 };

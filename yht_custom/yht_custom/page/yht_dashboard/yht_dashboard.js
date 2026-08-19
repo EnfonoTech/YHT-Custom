@@ -35,32 +35,60 @@ frappe.pages["yht-dashboard"].on_page_load = function (wrapper) {
 	page.body = $('<div class="yht-dash"></div>').appendTo(page.main);
 
 	wrapper.yht_page = page;
-	load(page);
+	load(page, { showSpinner: true });
 
-	page.set_secondary_action(__("Refresh"), () => load(page), "refresh");
+	page.set_secondary_action(__("Refresh"), () => load(page, { force: true, showSpinner: true }), "refresh");
 };
 
 frappe.pages["yht-dashboard"].on_page_show = function (wrapper) {
-	if (wrapper.yht_page) load(wrapper.yht_page);
+	// Render the LAST payload immediately, then revalidate quietly behind it.
+	//
+	// The first version blanked the page and refetched on every single page show, so every
+	// trip back to the dashboard — which is the whole navigation model of this role — showed
+	// "Loading dashboard…" again from scratch. The server side is not the problem: the payload
+	// measures ~730ms. Throwing away an already-rendered screen is.
+	//
+	// So: paint from cache instantly if we have one, and only show the spinner when there is
+	// genuinely nothing to show. The Refresh button always forces a visible reload.
+	if (!wrapper.yht_page) return;
+	load(wrapper.yht_page, { showSpinner: !CACHE.data });
 };
 
-function load(page) {
-	page.body.html(`
-		<div class="yht-loading">
-			<div class="yht-spinner"></div>
-			<span>${__("Loading dashboard…")}</span>
-		</div>`);
+//: Last payload, and when it was fetched. Lives for the session, on purpose — the numbers are
+//: a branch's running totals, not something that must be to-the-second.
+const CACHE = { data: null, at: 0 };
+const STALE_MS = 60 * 1000;
+
+function load(page, { force = false, showSpinner = false } = {}) {
+	const fresh = CACHE.data && Date.now() - CACHE.at < STALE_MS;
+
+	if (CACHE.data) render(page, CACHE.data);
+	else if (showSpinner) {
+		page.body.html(`
+			<div class="yht-loading">
+				<div class="yht-spinner"></div>
+				<span>${__("Loading dashboard…")}</span>
+			</div>`);
+	}
+
+	// Nothing to do if the cached copy is still warm and nobody asked for a reload.
+	if (fresh && !force) return;
 
 	frappe.call({
 		method: "yht_custom.api.dashboard.get_dashboard_data",
 		callback(r) {
 			if (!r.message) {
-				page.body.html(`<div class="yht-empty">${__("No data available.")}</div>`);
+				if (!CACHE.data) page.body.html(`<div class="yht-empty">${__("No data available.")}</div>`);
 				return;
 			}
+			CACHE.data = r.message;
+			CACHE.at = Date.now();
 			render(page, r.message);
 		},
 		error() {
+			// Keep whatever is on screen if we have something — a failed refresh should not
+			// wipe a working dashboard.
+			if (CACHE.data) return;
 			page.body.html(
 				`<div class="yht-error">${__(
 					"Could not load the dashboard. Please contact your administrator."
