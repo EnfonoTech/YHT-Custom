@@ -66,7 +66,11 @@ HIDE_FIELDS = {
 	],
 	"Sales Order": ["project", "currency", "conversion_rate", *_CURRENCY_SECTION],
 	"Delivery Note": ["project", "currency", "conversion_rate", *_CURRENCY_SECTION],
-	"Quotation": ["project", "currency", "conversion_rate", *_CURRENCY_SECTION],
+	# No `project` here on purpose: Quotation is the ONE doctype in this set that
+	# has no `project` field in v15. Listing it was a silent no-op — _hide_fields
+	# skips a field it cannot find, so nothing errored and nothing was hidden.
+	# Caught by test_every_hidden_field_exists, which is why that test is strict.
+	"Quotation": ["currency", "conversion_rate", *_CURRENCY_SECTION],
 	"Purchase Invoice": [
 		"project",
 		"currency",
@@ -74,13 +78,9 @@ HIDE_FIELDS = {
 		"use_transaction_date_exchange_rate",
 		*_CURRENCY_SECTION,
 	],
-	"Purchase Receipt": [
-		"project",
-		"currency",
-		"conversion_rate",
-		"use_transaction_date_exchange_rate",
-		*_CURRENCY_SECTION,
-	],
+	# `use_transaction_date_exchange_rate` is Purchase INVOICE only — another
+	# silent no-op the strict test caught.
+	"Purchase Receipt": ["project", "currency", "conversion_rate", *_CURRENCY_SECTION],
 	"Payment Entry": ["project"],
 }
 

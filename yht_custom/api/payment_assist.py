@@ -104,7 +104,7 @@ def _modes_with_account(company: str) -> set[str]:
 
 
 @frappe.whitelist()
-def get_branch_payment_modes(company: str) -> list[dict]:
+def get_branch_payment_modes(company: str | None = None) -> list[dict]:
 	"""Tenderable modes for the signed-in user.
 
 	Returns ``[{"mode_of_payment": str, "type": str}]`` — names and Cash/Bank type
@@ -148,7 +148,7 @@ def get_branch_payment_modes(company: str) -> list[dict]:
 
 
 @frappe.whitelist()
-def get_customer_payment_status(customer: str, company: str) -> dict:
+def get_customer_payment_status(customer: str | None = None, company: str | None = None) -> dict:
 	"""Outstanding, credit limit and breach flag for the sales screen.
 
 	``frappe.has_permission`` is checked explicitly: this is a public HTTP endpoint
