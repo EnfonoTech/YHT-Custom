@@ -79,6 +79,33 @@ def before_validate(doc, method=None):
 		if not flt(row.get("qty")):
 			row.qty = 1
 
+		# ...and so is a unit of measure. `Purchase Invoice Item.uom` is `reqd = 1`, so
+		# without this an operator typing "Ramadan campaign — printing" is stopped by
+		# "In Items, UOM is required in every row" and has to pick a unit for a service.
+		# Found while capturing the training video: the guide says an expense row is a
+		# description and an amount, and this is what makes that true.
+		if not row.get("uom"):
+			row.uom = _default_uom()
+		if not row.get("stock_uom"):
+			row.stock_uom = row.uom
+		if not flt(row.get("conversion_factor")):
+			row.conversion_factor = 1
+
+
+def _default_uom() -> str:
+	"""A unit for a line that has no physical unit.
+
+	Prefers Stock Settings' default so a site that standardised on something else is
+	respected, then ``Nos``, then whatever UOM exists — the field is mandatory, so
+	returning nothing is not an option.
+	"""
+	configured = frappe.db.get_single_value("Stock Settings", "stock_uom")
+	if configured and frappe.db.exists("UOM", configured):
+		return configured
+	if frappe.db.exists("UOM", "Nos"):
+		return "Nos"
+	return frappe.db.get_value("UOM", {}, "name")
+
 
 def validate(doc, method=None):
 	"""Guard the two things that make an expense invoice wrong if missed."""

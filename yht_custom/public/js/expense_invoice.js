@@ -39,6 +39,13 @@ frappe.ui.form.on("Purchase Invoice Item", {
 		const head = frm.doc.custom_expense_head;
 		if (head) frappe.model.set_value(cdt, cdn, "expense_account", head);
 		frappe.model.set_value(cdt, cdn, "qty", 1);
+		// `uom` is mandatory on Purchase Invoice Item, and an expense line has no natural
+		// unit. Set it here so the operator is not stopped by "UOM is required in every row"
+		// on a line that reads "printing". before_validate does the same server-side, which is
+		// what covers the REST and import paths.
+		if (!frappe.get_doc(cdt, cdn).uom) {
+			frappe.model.set_value(cdt, cdn, "uom", frappe.boot.sysdefaults.stock_uom || "Nos");
+		}
 	},
 });
 
