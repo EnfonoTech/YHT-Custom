@@ -71,6 +71,13 @@ BRANCH_USER_PERMISSIONS = [
 	{"parent": "Stock Ledger Entry", "read": 1, "report": 1},
 	{"parent": "Bin", "read": 1, "report": 1},
 	{"parent": "Report", "read": 1},
+	# Accounts Receivable Summary reaches further than its ref_doctype suggests:
+	# accounts_receivable.py:517 does frappe.get_list("Journal Entry") for invoices
+	# booked via a JE, and the report also joins Payment Ledger Entry. Without both
+	# it dies on a bare PermissionError with no message. Read-only; GL Entry read
+	# (already granted above) is strictly more revealing than either.
+	{"parent": "Journal Entry", "read": 1, "report": 1},
+	{"parent": "Payment Ledger Entry", "read": 1, "report": 1},
 	# --- support masters the transacting FORMS read on load -------------------
 	# Added after a live sweep: 51 link targets reachable from the branch forms
 	# were unreadable, of which these are the ones a KSA trading flow actually
