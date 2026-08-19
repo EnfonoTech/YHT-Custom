@@ -46,6 +46,44 @@ const ALLOWED_ROUTES = [
 	"Workspaces",
 ];
 
+// ── redirect BEFORE frappe's router sees the URL ─────────────────────────────
+//
+// Bouncing from app_ready is too late. On a direct load of /app/asset the router still
+// resolves the route first, fails, and raises its own modal:
+//
+//     Not found — Page asset not found — The resource you are looking for is not available
+//
+// So the user landed on the dashboard WITH an error dialog on top of it, which is uglier than
+// the bare permission error it replaced and contradicts the orange-message behaviour the
+// training material describes.
+//
+// This file is loaded via app_include_js, which runs after frappe.boot is on the page but
+// before the desk boots the router. Rewriting the URL here means the router only ever sees
+// the dashboard route, so no not-found dialog is ever raised. The app_ready gate below still
+// covers in-app navigation, where the router is already running.
+(function redirect_before_boot() {
+	if (typeof frappe === "undefined" || !frappe.boot || !frappe.boot.yht_branch_restricted) return;
+	const match = /^\/app\/([^/?#]+)/.exec(window.location.pathname);
+	if (!match) return;
+
+	const slug = match[1];
+	if (ALLOWED_ROUTES.includes(slug)) return;
+	// A slug that IS an allowed doctype is fine — /app/sales-invoice is a real destination.
+	if (ALLOWED_DOCTYPES.some((dt) => frappe.router && frappe.router.slug(dt) === slug)) return;
+
+	window.history.replaceState(null, "", "/app/yht-dashboard");
+	// Tell the user why, once the desk is up enough to show it.
+	$(document).on("app_ready", function () {
+		frappe.show_alert(
+			{
+				message: __("{0} is not available for your role.", [__(frappe.model.unscrub(slug))]),
+				indicator: "orange",
+			},
+			6
+		);
+	});
+})();
+
 $(document).on("app_ready", function () {
 	if (!frappe.boot || !frappe.boot.yht_branch_restricted) return;
 
