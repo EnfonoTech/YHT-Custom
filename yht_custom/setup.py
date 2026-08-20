@@ -17,6 +17,7 @@ from yht_custom.site_defaults import setup_site_defaults
 from yht_custom.setup_property_setters import setup_ignore_user_permissions
 from yht_custom.discount_totals import setup_discount_grid_columns
 from yht_custom.saudi_address import ADDRESS_CUSTOM_FIELDS
+from yht_custom.letterhead import setup_branch_letterheads
 
 #: What a Branch User may touch. Per the MoM document set — Quotation, Sales
 #: Order, Delivery Note, Sales Invoice, Purchase Receipt, Purchase Invoice,
@@ -166,6 +167,7 @@ PROVISIONING_STEPS = (
 	"setup_ignore_user_permissions",
 	"setup_expense_invoice",
 	"setup_branch_series",
+	"setup_branch_letterheads",
 	"setup_default_print_formats",
 	"setup_form_layout",
 	"setup_discount_grid_columns",
@@ -217,6 +219,7 @@ def _imported(name):
 		"setup_form_layout": setup_form_layout,
 		"setup_site_defaults": setup_site_defaults,
 		"setup_discount_grid_columns": setup_discount_grid_columns,
+		"setup_branch_letterheads": setup_branch_letterheads,
 	}[name]
 
 
@@ -478,10 +481,21 @@ def ensure_module_profile():
 #: Our formats become the default so a user pressing Print gets the right layout
 #: without choosing. Sales Invoice is deliberately absent: ksa_compliance owns it
 #: and its ZATCA Phase 2 format carries the QR code required for compliance.
+#: Sales Invoice is deliberately ABSENT. ksa_compliance owns Sales Invoice
+#: printing until ZATCA onboarding, and pinning a default here would override the
+#: ZATCA format on a compliance document.
+#:
+#: Purchase Invoice is pinned to the GENERAL format, not the expense one. An
+#: expense invoice is a subset of Purchase Invoice and default_print_format is
+#: per-doctype, so one of the two has to be chosen manually; the general bill is
+#: the far more common document, and the expense format stays one click away in
+#: the print dialog.
 DEFAULT_PRINT_FORMATS = {
 	"Delivery Note": "YHT Delivery Note",
 	"Quotation": "YHT Quotation",
 	"Sales Order": "YHT Sales Order",
+	"Purchase Invoice": "YHT Purchase Invoice",
+	"Journal Entry": "YHT Journal Entry",
 }
 
 

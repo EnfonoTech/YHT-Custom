@@ -201,6 +201,7 @@ jinja = {
 		"yht_custom.print_helpers.yht_so_title",
 		"yht_custom.print_helpers.yht_line_discount",
 		"yht_custom.print_helpers.yht_discount_total",
+		"yht_custom.print_helpers.yht_currency",
 	],
 }
 

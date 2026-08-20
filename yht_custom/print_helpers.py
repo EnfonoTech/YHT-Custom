@@ -16,7 +16,7 @@ be one upgrade away from silently shadowing, or being shadowed by, another app's
 """
 
 import frappe
-from frappe.utils import flt, fmt_money, formatdate
+from frappe.utils import cstr, flt, fmt_money, formatdate
 
 #: RTL rule (inherited from RMAX, learned the hard way): never put a colon inside
 #: an Arabic value cell. The bidi algorithm moves it to the visual LEFT of the
@@ -146,3 +146,33 @@ def yht_discount_total(doc) -> float:
 	from yht_custom.discount_totals import line_discount_total
 
 	return line_discount_total(doc)
+
+
+def yht_currency(doc) -> str:
+	"""Currency for a printed document, resolved WITHOUT touching the sandbox.
+
+	`frappe.defaults.get_global_default` is NOT reachable from a print format.
+	Frappe hands the template a restricted `frappe` namespace in which `defaults`
+	is a function, so the expression raises
+
+	    'function object' has no attribute 'get_global_default'
+
+	Every format here carried `doc.currency or frappe.defaults.get_global_default(
+	"currency")` and got away with it only because `doc.currency` was always
+	truthy — Python never evaluated the right-hand side. Journal Entry has no
+	`currency` field at all, so it was the first document to reach it, and the
+	whole format failed to render.
+
+	This helper is ordinary server-side Python, so it can look anything up.
+	"""
+	currency = cstr(doc.get("currency")).strip()
+	if currency:
+		return currency
+
+	company = doc.get("company")
+	if company:
+		company_currency = frappe.get_cached_value("Company", company, "default_currency")
+		if company_currency:
+			return company_currency
+
+	return frappe.defaults.get_global_default("currency") or "SAR"
