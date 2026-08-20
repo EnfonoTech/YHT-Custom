@@ -165,7 +165,11 @@ const REPORTS = [
 	{ icon: "book", label: "Stock Ledger", desc: "Stock transactions", report: "Stock Ledger" },
 	{ icon: "activity", label: "Receivables Summary", desc: "Party-wise aging", report: "Accounts Receivable Summary" },
 	{ icon: "ledger", label: "General Ledger", desc: "Account transactions", report: "General Ledger" },
-	{ icon: "statement", label: "Customer Statement", desc: "Account statements", report: "General Ledger" },
+	// This tile said "Customer Statement" and opened General Ledger from the day the
+	// dashboard was built — a different name, different filters, every party in the
+	// company on it. It now opens the report it always claimed to.
+	{ icon: "statement", label: "Customer Statement", desc: "One customer, aged", report: "Customer Statement" },
+	{ icon: "tag", label: "Item Prices", desc: "Price list rates", report: "Item-wise Price List Rate" },
 ];
 
 // ---------------------------------------------------------------------- render

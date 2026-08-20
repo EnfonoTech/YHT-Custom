@@ -519,6 +519,8 @@ DASHBOARD_REPORTS = (
 	"Stock Sales",
 	"Collection",
 	"Branch Receivables",
+	"Customer Statement",
+	"Item-wise Price List Rate",
 	"Stock Balance",
 	"Stock Ledger",
 	"Accounts Receivable Summary",
