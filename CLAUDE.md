@@ -58,6 +58,14 @@ MariaDB and box CPU/RAM are shared.
 | `setup_property_setters.py` | `ignore_user_permissions` on every scoped field |
 | `item_naming.py` | item-group-wise item code generation (`Item.before_insert`) |
 | `api/dashboard.py` | `get_dashboard_data` for the dashboard page |
+| `api/party.py` | simple Customer / Supplier creation — party + address + contact in one call |
+| `report_scope.py` | branch scoping for **reports**; `permission_query_conditions` does not reach a Script Report |
+| `yht_custom/report/` | Stock Sales · Collection · Branch Receivables (Script Reports) |
+| `discount_totals.py` | consolidated item-wise discount, and the grid column that makes it enterable |
+| `saudi_address.py` | Saudi national address, Short Code as the address title, `national_address_gaps()` |
+| `letterhead.py` | bilingual per-branch Letter Head, generated from live data |
+| `hr_setup.py` | GOSI components, Saudi leave types, holiday list, payroll period, `hr_gaps()` |
+| `public/js/simple_party.js` | the quick-create dialog (list views + dashboard tile) |
 | `yht_custom/doctype/branch_configuration/` | the provisioning core |
 | `yht_custom/page/yht_dashboard/` | branch-user landing page |
 | `public/js/branch_user_restrict.js` | navigation whitelist (usability, **not** security) |
@@ -173,6 +181,40 @@ accountant: SI→`CN`, DN→`DRN`, PI→`DBN`, PR→`PRN`.
     sidebar. Do not reach for a Module Profile to restrict access.
 19. **A role inserted moments ago is not in the user's cached permission set.** `frappe.clear_cache(user=...)`
     before `frappe.set_user(...)`, or every read comes back as a bare `PermissionError`.
+20. **`permission_query_conditions` does NOT apply to a report.** A Script Report runs its own SQL, so nothing
+    in `branch_filters` reaches it and an unscoped report shows a branch user every branch's data. That is the
+    whole reason the report pack is Script Reports — a Query Report cannot call app code to scope itself. Every
+    report resolves its branch through `report_scope`, which reads the same helpers the list views use.
+21. **`Count(field).distinct()`, not `Count(field.distinct())`.** A pypika `Field` has no `.distinct()`; the
+    DISTINCT belongs to the aggregate function. The wrong form raises `AttributeError: 'Field' object has no
+    attribute 'distinct'` only when the report is actually run.
+22. **Deleting a Custom Field does NOT drop its column or its data.** Step 1 deleted the legacy
+    `custom_total_line_item_discount` field; thousands of legacy values stayed in the column, and redeclaring the
+    field brought them back under our label, disagreeing with our own definition. After purging fields on any
+    client, either drop the column or backfill it — `patches/backfill_line_item_discount_total.py`.
+23. **A print-format edit does not deploy without bumping `modified` in its JSON.** `import_file` compares the
+    timestamp and skips an unchanged record, so migrate reports success and changes nothing.
+24. **`frappe.defaults.get_global_default` is NOT callable from a print format.** The template gets a restricted
+    `frappe` namespace where `defaults` is a function, so it raises *'function object' has no attribute
+    'get_global_default'*. Four formats carried it for a week and survived only because `doc.currency` was always
+    truthy and short-circuited it — Journal Entry has no `currency` field and was the first to reach it. Use
+    `yht_currency(doc)`, which is ordinary server-side Python.
+25. **A NEW jinja method in `hooks.py` 500s EVERY WEBSITE PAGE until the workers reload.**
+    `frappe.utils.jinja.get_jinja_hooks` resolves every registered path when it builds the environment, so one
+    unresolved attribute raises for the whole env — and `/login` is a website page. Deploying `hooks.py` and the
+    module together is not enough; the sequence must end with the worker signal.
+26. **Frappe normalises HTML on save and inserts its own `<tbody>`.** A generated Letter Head came back exactly
+    15 bytes longer than what was written (`<tbody>` + `</tbody>`), so an "has this changed" comparison was never
+    equal and every migrate rewrote every letterhead. Emit the `<tbody>` yourself.
+27. **`Payroll Period` autonames by PROMPT** — `name` must be set by hand or the insert raises "Please set the
+    document name". And because an `after_migrate` step runs in ONE transaction, that one failure rolled back the
+    GOSI components and Leave Types created earlier in the same step.
+28. **`["in", [None, "", 0]]` never matches NULL.** SQL `IN (NULL, '', 0)` excludes NULLs, so a gap report on a
+    freshly created column said 0 employees were missing a GOSI number when all 11 were. Use `["is", "not set"]`.
+29. **`Selling Settings.customer_group` is a GROUP node on this site** (`All Customer Groups`), and
+    `Customer.validate_customer_group` throws on one. Reading the setting straight through fails on every
+    create — ERPNext's own quick entry has the same defect here. Resolve a leaf, preferring the most-used value
+    on existing records (`Commercial`, 427 of 428 customers).
 
 ## Deploy
 
@@ -185,8 +227,15 @@ deploy keys are repo-scoped — using `github.com` here authenticates as the wro
 cd /home/v15/yht-bench/apps/yht_custom && sudo -u v15 -H git pull upstream main
 cd /home/v15/yht-bench && sudo -u v15 bench --site yht-khobhar.enfonoerp.com migrate
 sudo -u v15 bench --site yht-khobhar.enfonoerp.com clear-cache
+touch /home/v15/yht-bench/sites/assets/assets.json
 sudo supervisorctl signal QUIT yht-bench-web:yht-bench-frappe-web
 ```
+
+**The worker signal is not optional and it is not just about speed.** Registering a new jinja method in
+`hooks.py` 500s **every website page**, `/login` included, until the workers reload — `get_jinja_hooks` resolves
+every registered path when it builds the environment, so one unresolved attribute takes the whole env down.
+Pushing `hooks.py` and the module in the same commit does NOT avoid this: gunicorn is still holding the old
+module. Measured: `/login` returned 500 for ~20 minutes after one such deploy (2026-08-20).
 
 Two things that will bite:
 
@@ -206,8 +255,44 @@ cd /home/v15/yht-bench && sudo -u v15 bench --site yht-khobhar.enfonoerp.com run
 
 ## Status
 
-**Steps 2 and 3 — done. 21 tests, all passing** (1 skipped: the cross-company guard has nothing to test on a
-single-company site).
+**Steps 2–6 substantially done. 192 tests, all passing** (1 skipped: the cross-company guard has nothing to
+test on a single-company site). `main` @ `fc33a91`.
+
+Step 5 and 6 remainder, closed 2026-08-20:
+
+| Item | State |
+|---|---|
+| 5.5 item-wise discount + consolidated print total | done — `discount_totals.py`, all four selling formats |
+| 5.9 Saudi national address, Short Code as title | done — `saudi_address.py` |
+| 5.10 simple Customer / Supplier forms | done — `api/party.py` + `simple_party.js` |
+| 6.5 bilingual branch letterhead | done — `letterhead.py`; company default deliberately unchanged |
+| 6.6 report pack | done — Stock Sales · Collection · Branch Receivables |
+| 6.8 HR configuration | done — GOSI, leave types, holiday list, payroll period |
+| general Purchase Invoice + Journal Entry print formats | done |
+
+**Still outstanding:** 5.6 sales assist (partly built — Price Assist and the payment dialog exist), 5.7 pricing
+(blocked on B9), 6.1 branded tax invoice + 6.9 ZATCA onboarding (blocked on credentials), Step 7 import gate.
+
+### What the report pack measured
+
+Administrator, five-year window: Stock Sales 4,995 rows by item / 30 by item group / 285 by customer, all
+SAR 9,646,939.65 · Collection 783 Payment Entries (SAR 9,065,318.55) + 560 till receipts (SAR 336,843.83) ·
+Branch Receivables 371 rows, SAR 2,178,821.29, matching the stored `outstanding_amount` exactly. As the branch
+user: 4,897 / 1,243 / 365 rows, all inline, 180–767 ms.
+
+### Two gaps this work surfaced, both for the client
+
+**ZATCA will reject nearly every address.** Of 578 Saudi addresses: **578 have no district** and **535 no
+building number** — both required for a Standard (B2B) e-invoice, both sourced from the Address. 111 have no
+postal code and 50 carry a malformed one (`00`, `3463231`, `325478`). Run
+`yht_custom.saudi_address.national_address_gaps`. This belongs in the Step 7 gate.
+
+**GOSI needs a wage base decision.** There was no GOSI component of any kind. Three now exist, but `GOSI Wage`
+ships as a `base` placeholder: the legal base is basic + housing, and this site has nine components with
+"BASIC SALARY" in the name plus two different accommodation components, so it cannot be mapped automatically.
+`yht_custom.hr_setup.hr_gaps` reports `gosi_wage_still_placeholder` until someone fixes it. Also: 11 of 11
+active employees have no nationality flag, all 13 salary structures lack GOSI, 0 leave allocations, and no Eid
+dates (lunar — never guessed).
 
 Step 2 — app installs and migrates; `after_migrate` provisions the Branch User role, the four `Branch` custom
 fields, 35 Branch User DocPerms, the Module Profile and the series machinery. Branch Configuration works end to
