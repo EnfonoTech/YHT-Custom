@@ -19,6 +19,7 @@ from yht_custom.discount_totals import setup_discount_grid_columns
 from yht_custom.saudi_address import ADDRESS_CUSTOM_FIELDS
 from yht_custom.letterhead import setup_branch_letterheads
 from yht_custom.hr_setup import setup_hr
+from yht_custom.sales_assist import setup_sales_assist_columns
 
 #: What a Branch User may touch. Per the MoM document set — Quotation, Sales
 #: Order, Delivery Note, Sales Invoice, Purchase Receipt, Purchase Invoice,
@@ -172,6 +173,7 @@ PROVISIONING_STEPS = (
 	"setup_default_print_formats",
 	"setup_form_layout",
 	"setup_discount_grid_columns",
+	"setup_sales_assist_columns",
 	"setup_site_defaults",
 	"setup_report_roles",
 	"setup_branch_payment_modes",
@@ -223,6 +225,7 @@ def _imported(name):
 		"setup_discount_grid_columns": setup_discount_grid_columns,
 		"setup_branch_letterheads": setup_branch_letterheads,
 		"setup_hr": setup_hr,
+		"setup_sales_assist_columns": setup_sales_assist_columns,
 	}[name]
 
 
