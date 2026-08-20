@@ -433,19 +433,39 @@ yht_custom.price.pick_row = function (frm, then) {
 const DOUBLE_CLICK_MS = 600;
 let lastRateClick = { key: null, at: 0 };
 
-$(document).on("click", '.grid-row [data-fieldname="rate"]', function () {
-	const frm = window.cur_frm;
-	if (!frm || !SELLING.includes(frm.doc.doctype) || frm.doc.docstatus !== 0) return;
+// 🔴 CAPTURE PHASE, and a native listener — not `$(document).on("click", …)`.
+//
+// The jQuery delegated handler was correctly bound (verified live: the selector was registered
+// on document and matched six nodes) and still never ran, because frappe's own grid click
+// handler calls stopPropagation before the event bubbles up to document. A bubble-phase
+// listener on document can never see it.
+//
+// `addEventListener(..., true)` runs in the capture phase, on the way DOWN, so it fires before
+// anything downstream can stop it. Nothing is prevented or stopped here — frappe's editor still
+// opens exactly as it would; we only observe.
+document.addEventListener(
+	"click",
+	function (event) {
+		const cell = event.target instanceof Element
+			? event.target.closest('.grid-row [data-fieldname="rate"]')
+			: null;
+		if (!cell) return;
 
-	const $row = $(this).closest(".grid-row");
-	const key = `${frm.doc.name}:${$row.attr("data-name") || $row.attr("data-idx")}`;
-	const now = Date.now();
+		const frm = window.cur_frm;
+		if (!frm || !SELLING.includes(frm.doc.doctype) || cint(frm.doc.docstatus) !== 0) return;
 
-	if (lastRateClick.key === key && now - lastRateClick.at < DOUBLE_CLICK_MS) {
-		lastRateClick = { key: null, at: 0 };
-		const row = yht_custom.price.row_from_node(frm, this);
-		if (row && row.item_code) yht_custom.price.open(frm, row);
-		return;
-	}
-	lastRateClick = { key, at: now };
-});
+		const gridRow = cell.closest(".grid-row");
+		if (!gridRow) return;
+		const key = `${frm.doc.name}:${gridRow.getAttribute("data-name") || gridRow.getAttribute("data-idx")}`;
+		const now = Date.now();
+
+		if (lastRateClick.key === key && now - lastRateClick.at < DOUBLE_CLICK_MS) {
+			lastRateClick = { key: null, at: 0 };
+			const row = yht_custom.price.row_from_node(frm, cell);
+			if (row && row.item_code) yht_custom.price.open(frm, row);
+			return;
+		}
+		lastRateClick = { key, at: now };
+	},
+	true
+);
