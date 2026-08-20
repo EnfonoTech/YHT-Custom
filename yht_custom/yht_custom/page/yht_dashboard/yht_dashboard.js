@@ -150,6 +150,7 @@ const ACTIONS = [
 	{ icon: "order", label: "Sales Order", desc: "View orders", doctype: "Sales Order", mode: "list" },
 	{ icon: "truck", label: "Delivery Note", desc: "View delivery notes", doctype: "Delivery Note", mode: "list" },
 	{ icon: "people", label: "Customer", desc: "Manage customers", doctype: "Customer", mode: "list" },
+	{ icon: "people", label: "New Customer", desc: "Quick create", dialog: "Customer" },
 	{ icon: "card", label: "Payment Entry", desc: "Record payments", doctype: "Payment Entry", mode: "list" },
 	{ icon: "box", label: "Purchase Receipt", desc: "View receipts", doctype: "Purchase Receipt", mode: "list" },
 	{ icon: "expense", label: "Purchase Invoice", desc: "View invoices", doctype: "Purchase Invoice", mode: "list" },
@@ -227,6 +228,13 @@ function render(page, d) {
 
 	// Stagger the cards in. 40ms apart is enough to read as one sweep rather than
 	// a dozen unrelated pops.
+	// Delegated so it survives every re-render of the tile grid.
+	page.body.off("click.yht-dialog").on("click.yht-dialog", "[data-yht-dialog]", function (e) {
+		e.preventDefault();
+		const doctype = $(this).attr("data-yht-dialog");
+		if (window.yht && yht.simple_party) yht.simple_party.open(doctype);
+	});
+
 	setTimeout(() => {
 		page.body.find(".yht-kpi, .yht-card, .yht-pending-item").each(function (i) {
 			const $el = $(this);
@@ -246,6 +254,11 @@ function kpi_card(k) {
 }
 
 function action_card(a) {
+	// A dialog tile carries no route. It still renders as an anchor so it inherits
+	// the card styling and keyboard focus; the click is intercepted below.
+	if (a.dialog) {
+		return card("#", a.icon, __(a.label), __(a.desc), `data-yht-dialog="${a.dialog}"`);
+	}
 	const route =
 		a.mode === "new"
 			? `/app/${frappe.router.slug(a.doctype)}/new`
@@ -262,8 +275,8 @@ function report_card(r) {
 	);
 }
 
-function card(route, icon_name, label, desc) {
-	return `<a class="yht-card" href="${route}">
+function card(route, icon_name, label, desc, attrs = "") {
+	return `<a class="yht-card" href="${route}" ${attrs}>
 		<span class="yht-card-icon">${icon(icon_name)}</span>
 		<span class="yht-card-text">
 			<span class="yht-card-title">${frappe.utils.escape_html(label)}</span>

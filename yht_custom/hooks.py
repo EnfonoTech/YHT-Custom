@@ -19,6 +19,7 @@ app_include_js = [
 	"/assets/yht_custom/js/expense_invoice.js?v=5",
 	"/assets/yht_custom/js/price_assist.js?v=5",
 	"/assets/yht_custom/js/payment_assist.js?v=3",
+	"/assets/yht_custom/js/simple_party.js?v=1",
 ]
 app_include_css = "/assets/yht_custom/css/yht_custom.css?v=6"
 
