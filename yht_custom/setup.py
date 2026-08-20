@@ -18,6 +18,7 @@ from yht_custom.setup_property_setters import setup_ignore_user_permissions
 from yht_custom.discount_totals import setup_discount_grid_columns
 from yht_custom.saudi_address import ADDRESS_CUSTOM_FIELDS
 from yht_custom.letterhead import setup_branch_letterheads
+from yht_custom.hr_setup import setup_hr
 
 #: What a Branch User may touch. Per the MoM document set — Quotation, Sales
 #: Order, Delivery Note, Sales Invoice, Purchase Receipt, Purchase Invoice,
@@ -176,6 +177,7 @@ PROVISIONING_STEPS = (
 	"setup_branch_payment_modes",
 	"repair_mirrored_perm_flags",
 	"run_dashboard_reports_inline",
+	"setup_hr",
 )
 
 
@@ -220,6 +222,7 @@ def _imported(name):
 		"setup_site_defaults": setup_site_defaults,
 		"setup_discount_grid_columns": setup_discount_grid_columns,
 		"setup_branch_letterheads": setup_branch_letterheads,
+		"setup_hr": setup_hr,
 	}[name]
 
 

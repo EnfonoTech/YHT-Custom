@@ -177,6 +177,9 @@ fixtures = [
 					"Address-custom_additional_number",
 					"Address-custom_unit_number",
 					"Address-custom_short_address",
+					"Employee-custom_is_saudi_national",
+					"Employee-custom_gosi_number",
+					"Employee-custom_iqama_number",
 				],
 			]
 		],
