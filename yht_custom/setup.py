@@ -459,8 +459,14 @@ def setup_default_print_formats():
 
 # ---------------------------------------------------------------- report access
 
-#: Reports the branch dashboard links to.
+#: Reports the branch dashboard links to. The first three are this app's own
+#: (yht_custom/report/) and ship their roles in their JSON; they are listed here
+#: anyway so the Custom Role rule below covers them if anyone ever creates one,
+#: and so they are re-pinned to inline execution after any manual promotion.
 DASHBOARD_REPORTS = (
+	"Stock Sales",
+	"Collection",
+	"Branch Receivables",
 	"Stock Balance",
 	"Stock Ledger",
 	"Accounts Receivable Summary",
@@ -643,14 +649,11 @@ def repair_mirrored_perm_flags():
 
 
 # ------------------------------------------------ dashboard reports run inline
-
-#: The four reports the branch dashboard links to.
-DASHBOARD_REPORTS = (
-	"Stock Balance",
-	"Stock Ledger",
-	"Accounts Receivable Summary",
-	"General Ledger",
-)
+#
+# DASHBOARD_REPORTS is defined once, above, next to setup_report_roles. It used to
+# be declared a second time here — a later redefinition of the same name, so the
+# module-level constant the ROLE step read was silently this copy, and editing the
+# first one changed nothing.
 
 
 def run_dashboard_reports_inline():

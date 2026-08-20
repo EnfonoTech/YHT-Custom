@@ -127,6 +127,11 @@ const ICONS = {
 		'<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
 	statement:
 		'<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+	trend:
+		'<polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>',
+	wallet:
+		'<path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/>',
+	clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
 };
 
 function icon(name) {
@@ -152,6 +157,9 @@ const ACTIONS = [
 ];
 
 const REPORTS = [
+	{ icon: "trend", label: "Stock Sales", desc: "Sold by item or customer", report: "Stock Sales" },
+	{ icon: "wallet", label: "Collection", desc: "Money received", report: "Collection" },
+	{ icon: "clock", label: "Branch Receivables", desc: "Outstanding, aged", report: "Branch Receivables" },
 	{ icon: "layers", label: "Stock Balance", desc: "Current stock levels", report: "Stock Balance" },
 	{ icon: "book", label: "Stock Ledger", desc: "Stock transactions", report: "Stock Ledger" },
 	{ icon: "activity", label: "Receivables Summary", desc: "Party-wise aging", report: "Accounts Receivable Summary" },
