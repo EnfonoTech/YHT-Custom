@@ -65,6 +65,12 @@ MariaDB and box CPU/RAM are shared.
 | `saudi_address.py` | Saudi national address, Short Code as the address title, `national_address_gaps()` |
 | `letterhead.py` | bilingual per-branch Letter Head, generated from live data |
 | `hr_setup.py` | GOSI components, Saudi leave types, holiday list, payroll period, `hr_gaps()` |
+| `import_gate.py` | the go-live gate (11 checks) + pre/post stock snapshots — plan 7.1 |
+| `sales_assist.py` | live stock in the item grid, `payment_terms_coverage()` |
+| `yht_custom/report/import_gate/` | the gate as a report finance can sign |
+| `yht_custom/report/stock_valuation_snapshot/` | per item/warehouse qty + rate + value |
+| `yht_custom/report/customer_statement/` | ledger-based statement, replaces the mislabelled tile |
+| `yht_custom/report/address_data_quality/` | the ZATCA address worklist + CSV export |
 | `public/js/simple_party.js` | the quick-create dialog (list views + dashboard tile) |
 | `yht_custom/doctype/branch_configuration/` | the provisioning core |
 | `yht_custom/page/yht_dashboard/` | branch-user landing page |
@@ -215,6 +221,23 @@ accountant: SI→`CN`, DN→`DRN`, PI→`DBN`, PR→`PRN`.
     `Customer.validate_customer_group` throws on one. Reading the setting straight through fails on every
     create — ERPNext's own quick entry has the same defect here. Resolve a leaf, preferring the most-used value
     on existing records (`Commercial`, 427 of 428 customers).
+30. **`SUM(Stock Ledger Entry.actual_qty)` is the WRONG basis for reconciling a Bin.** This site has
+    3,469 Stock Reconciliation rows and every one carries `actual_qty = 0`, because a reconciliation
+    sets `qty_after_transaction` absolutely rather than posting a movement. Measured that way, 1,863
+    of 2,820 bins looked broken; against the LATEST ledger row's `qty_after_transaction` and
+    `stock_value`, **zero** disagree. Which also locates the SAR 74,409.27 gap: it is between stock
+    and the GL, not inside the stock ledger.
+31. **A SELECT alias is not visible to the WHERE of the same query.** `s.stock_value AS sle_value`
+    then `WHERE … s.sle_value` raises *Unknown column 's.sle_value' in 'WHERE'*. It was only caught
+    because the gate runner reports ERROR distinctly instead of folding it into FAIL — **an ERROR is
+    never a pass.**
+32. **A Dynamic Link join multiplies.** An Address linked to both a Customer and a Supplier came back
+    twice, turning 578 addresses into 583 worklist rows — and a Data Import built from that would
+    have processed the same ID twice. Collapse links per parent.
+33. **A Chrome capture profile holds live session cookies, and there is more than one of them.**
+    `Tools/Video Generator` carries both `.profile-capture/` and `.profile-dryrun/`; ignoring only the
+    first staged eight `Default/Cookies` databases for commit. Glob `.profile-*/` plus explicit
+    `Cookies` / `Login Data` / `Web Data` patterns.
 
 ## Deploy
 
@@ -255,7 +278,7 @@ cd /home/v15/yht-bench && sudo -u v15 bench --site yht-khobhar.enfonoerp.com run
 
 ## Status
 
-**Steps 2–6 substantially done. 192 tests, all passing** (1 skipped: the cross-company guard has nothing to
+**Steps 2–6 done, 7.1 done. 241 tests on `main`, all passing; 329 with the pipeline suite** (1 skipped: the cross-company guard has nothing to
 test on a single-company site). `main` @ `fc33a91`.
 
 Step 5 and 6 remainder, closed 2026-08-20:
@@ -270,8 +293,36 @@ Step 5 and 6 remainder, closed 2026-08-20:
 | 6.8 HR configuration | done — GOSI, leave types, holiday list, payroll period |
 | general Purchase Invoice + Journal Entry print formats | done |
 
-**Still outstanding:** 5.6 sales assist (partly built — Price Assist and the payment dialog exist), 5.7 pricing
-(blocked on B9), 6.1 branded tax invoice + 6.9 ZATCA onboarding (blocked on credentials), Step 7 import gate.
+Second round, also 2026-08-20:
+
+| Item | State |
+|---|---|
+| 5.6 sales assist | **done** — `actual_qty` unhidden in all four item grids; due-date autofill verified |
+| 6.6 Customer Statement | **done** — ledger-based; the dashboard tile no longer opens General Ledger |
+| **7.1 import gate** | **done** — `Import Gate` + `Stock Valuation Snapshot` reports, 11 checks |
+| Address worklist | **done** — `Address Data Quality` + a Data-Import-ready CSV |
+
+**Still outstanding:** 5.7 pricing (blocked on B9), 6.1 branded tax invoice + 6.9 ZATCA onboarding
+(blocked on CSR/OTP), 4.10 cancel rights (blocked on B8), Step 7.2–7.6 (needs the incumbent backup).
+
+### The gate, as it stands
+
+`bench --site … execute yht_custom.import_gate.run` — **FAIL, 7 blocking**:
+
+    FAIL !  GL balances                Dr 70,254,978.90 / Cr 70,251,978.90 — KS-JV-26-0074
+    FAIL !  Every voucher balances     1 voucher
+    FAIL !  Accounting equation        Assets 2,895,481.37 vs 2,892,481.37
+    FAIL !  Stock ties to GL           Bin 1,215,757.78 vs GL 1,141,348.51
+    PASS !  Bins agree with ledger     0 of 2,820
+    FAIL !  No negative stock          102 bins
+    FAIL !  No negative stock value    1 bin
+    FAIL    No stock at zero value     26 bins, 55 ledger rows
+    PASS    One valuation method       0 items off Moving Average
+    FAIL    Periods frozen             both 0001-01-01 (B15)
+    FAIL !  No test accounts enabled   branchtest@ — keep for UAT, disable at go-live
+
+`branchtest@` is deliberately still enabled: client UAT is 7.4 and has not happened. It is a
+**blocking gate check** rather than a checklist line, because that line survived four handoffs.
 
 ### What the report pack measured
 
