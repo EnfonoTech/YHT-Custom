@@ -100,6 +100,20 @@ class TestGateNumbers(FrappeTestCase):
 	def test_valuation_method_is_uniform_since_step_3(self):
 		self.assertEqual(self._check("valuation_method_uniform")["status"], "PASS")
 
+	def test_the_uat_account_blocks_go_live_rather_than_a_checklist_line(self):
+		"""`branchtest@` has been "disable before go-live" in the handoff for four
+		sessions. It is deliberately still enabled — client UAT has not happened and
+		disabling it would block the testing it exists for — so the GATE refuses
+		while it is enabled instead of relying on someone reading a note.
+		"""
+		row = self._check("no_test_accounts")
+		self.assertTrue(row["blocking"])
+		if frappe.db.exists("User", {"enabled": 1, "name": ["like", "%branchtest%"]}):
+			self.assertEqual(row["status"], "FAIL")
+			self.assertIn("branchtest", row["detail"])
+		else:
+			self.assertEqual(row["status"], "PASS")
+
 
 class TestSnapshots(FrappeTestCase):
 	LABELS = ("_test_gate_before", "_test_gate_after")

@@ -246,6 +246,33 @@ def _periods_frozen():
 	}
 
 
+def _no_test_accounts():
+	"""A capture/UAT account must not survive go-live.
+
+	`branchtest@yht-khobhar.enfonoerp.com` has been flagged "disable before
+	go-live" in the handoff for four sessions running. It is deliberately still
+	ENABLED — client UAT (step 7.4) has not happened yet and disabling it would
+	block the very testing it exists for — so instead of another checklist line
+	nobody reads, the go-live gate refuses while it is enabled.
+	"""
+	accounts = frappe.get_all(
+		"User",
+		filters={"enabled": 1, "name": ["like", "%branchtest%"]},
+		pluck="name",
+	)
+	accounts += frappe.get_all(
+		"User",
+		filters={"enabled": 1, "name": ["like", "_test%"]},
+		pluck="name",
+	)
+	accounts = sorted(set(accounts))
+	return {
+		"measured": f"{len(accounts)} enabled",
+		"difference": flt(len(accounts)),
+		"detail": ", ".join(accounts[:4]) + (" — keep for UAT, disable at go-live" if accounts else ""),
+	}
+
+
 #: (key, label, function, blocking). `blocking` means go-live must not proceed
 #: while it fails; the rest are recorded and signed off.
 CHECKS = (
@@ -259,6 +286,7 @@ CHECKS = (
 	("no_zero_value_stock", "No stock held at zero value", _no_zero_value_stock, False),
 	("valuation_method_uniform", "One valuation method", _valuation_method_uniform, False),
 	("periods_frozen", "Periods frozen", _periods_frozen, False),
+	("no_test_accounts", "No test accounts enabled", _no_test_accounts, True),
 )
 
 
