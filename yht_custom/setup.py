@@ -16,6 +16,7 @@ from yht_custom.form_layout import setup_form_layout
 from yht_custom.site_defaults import setup_site_defaults
 from yht_custom.setup_property_setters import setup_ignore_user_permissions
 from yht_custom.discount_totals import setup_discount_grid_columns
+from yht_custom.saudi_address import ADDRESS_CUSTOM_FIELDS
 
 #: What a Branch User may touch. Per the MoM document set — Quotation, Sales
 #: Order, Delivery Note, Sales Invoice, Purchase Receipt, Purchase Invoice,
@@ -360,6 +361,10 @@ def ensure_branch_custom_fields():
 			"Sales Invoice": SALES_INVOICE_CUSTOM_FIELDS + _discount_total_field("discount_amount"),
 			"Delivery Note": _discount_total_field("discount_amount"),
 			"Quotation": _discount_total_field("discount_amount"),
+			# ksa_compliance already ships custom_building_number and custom_area,
+			# and its own mapping decides which fieldnames reach the ZATCA XML.
+			# These three are the ones it does not provide.
+			"Address": ADDRESS_CUSTOM_FIELDS,
 		},
 		ignore_validate=True,
 	)

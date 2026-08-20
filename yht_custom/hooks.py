@@ -68,6 +68,12 @@ _BRANCH_DEFAULT_EVENTS = {
 }
 
 doc_events = {
+	# Saudi national address (plan 5.9). Address is shared by Customer and
+	# Supplier, so one registration covers both parties.
+	"Address": {
+		"validate": "yht_custom.saudi_address.validate",
+		"before_insert": "yht_custom.saudi_address.before_insert",
+	},
 	# Item code generation — before_insert, because frappe runs it BEFORE
 	# set_new_name() and ERPNext's Item.autoname ends with name = item_code.
 	"Item": {"before_insert": "yht_custom.item_naming.set_item_code_from_group"},
@@ -167,6 +173,9 @@ fixtures = [
 					"Sales Order-custom_total_line_item_discount",
 					"Delivery Note-custom_total_line_item_discount",
 					"Quotation-custom_total_line_item_discount",
+					"Address-custom_additional_number",
+					"Address-custom_unit_number",
+					"Address-custom_short_address",
 				],
 			]
 		],
