@@ -521,6 +521,7 @@ DASHBOARD_REPORTS = (
 	"Branch Receivables",
 	"Customer Statement",
 	"Item-wise Price List Rate",
+	"Address Data Quality",
 	"Stock Balance",
 	"Stock Ledger",
 	"Accounts Receivable Summary",
