@@ -357,15 +357,16 @@ yht_custom.price.open_history = function (frm, row) {
 
 /** Resolve the child row a grid DOM node belongs to. */
 yht_custom.price.row_from_node = function (frm, node) {
+	// The grid row carries both `data-name` (the child docname) and `data-idx` — verified in the
+	// live DOM — so neither needs scraping out of the rendered text.
 	const $row = $(node).closest(".grid-row");
 	const name = $row.attr("data-name");
-	if (name && locals[frm.doc.doctype + " Item"]) {
-		const byName = (frm.doc.items || []).find((r) => r.name === name);
-		if (byName) return byName;
-	}
-	// Fall back to the visible index — the grid renders rows in doc order.
-	const idx = cint($row.find(".row-index, .grid-static-col").first().text());
-	return (frm.doc.items || []).find((r) => r.idx === idx) || null;
+	const rows = frm.doc.items || [];
+	return (
+		rows.find((r) => r.name === name) ||
+		rows.find((r) => r.idx === cint($row.attr("data-idx"))) ||
+		null
+	);
 };
 
 /** Ask which row, when the answer is not obvious. */
@@ -415,18 +416,36 @@ yht_custom.price.pick_row = function (frm, then) {
 	dialog.show();
 };
 
-// Double-click a Rate cell to open Price Assist for that line.
+// Two quick clicks on a Rate cell open Price Assist for that line.
 //
-// Bound once, delegated from the document, because the grid tears down and rebuilds its rows
-// constantly — a handler attached to a row does not survive the next render. Scoped to the
-// selling doctypes Price Assist actually answers for: its rows are "last rate to THIS
-// customer" and a recent selling band, which mean nothing on a purchase document.
-$(document).on("dblclick", '.grid-row [data-fieldname="rate"]', function (e) {
+// 🔴 NOT a native `dblclick` handler. Frappe's own click handler swaps the static cell for an
+// editable control, so the first and second clicks land on DIFFERENT DOM nodes and the browser
+// never emits a dblclick at all — the binding looked correct and simply never fired. A real
+// user hits exactly the same thing, so this is not a test artefact.
+//
+// Instead: watch clicks and pair them ourselves, keyed on the ROW rather than the node, which
+// is immune to the cell being replaced in between. Delegated from the document because the grid
+// tears down and rebuilds its rows constantly.
+//
+// Scoped to the selling doctypes Price Assist actually answers for — its rows are "last rate to
+// THIS customer" and a recent selling band, which mean nothing on a purchase document.
+
+const DOUBLE_CLICK_MS = 600;
+let lastRateClick = { key: null, at: 0 };
+
+$(document).on("click", '.grid-row [data-fieldname="rate"]', function () {
 	const frm = window.cur_frm;
 	if (!frm || !SELLING.includes(frm.doc.doctype) || frm.doc.docstatus !== 0) return;
-	const row = yht_custom.price.row_from_node(frm, this);
-	if (!row || !row.item_code) return;
-	e.preventDefault();
-	e.stopPropagation();
-	yht_custom.price.open(frm, row);
+
+	const $row = $(this).closest(".grid-row");
+	const key = `${frm.doc.name}:${$row.attr("data-name") || $row.attr("data-idx")}`;
+	const now = Date.now();
+
+	if (lastRateClick.key === key && now - lastRateClick.at < DOUBLE_CLICK_MS) {
+		lastRateClick = { key: null, at: 0 };
+		const row = yht_custom.price.row_from_node(frm, this);
+		if (row && row.item_code) yht_custom.price.open(frm, row);
+		return;
+	}
+	lastRateClick = { key, at: now };
 });
