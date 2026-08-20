@@ -568,3 +568,49 @@
 	font-weight: 600;
 	opacity: 0.75;
 }
+
+
+/* ── Price History summary strip ──────────────────────────────────────
+   Four figures an operator wants beside the sales table: what we last paid, what the buying
+   list says, the valuation, and what is actually on the shelf. Tokens, not hex, so it follows
+   grey_theme like the rest. */
+
+.yht-hist-summary {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+	gap: 10px;
+	margin-bottom: 4px;
+}
+
+.yht-hist-cell {
+	padding: 12px 14px;
+	border: 1px solid var(--border-color, #e8ecf1);
+	border-radius: 10px;
+	background: var(--card-bg, #fff);
+}
+
+.yht-hist-label {
+	font-size: 10.5px;
+	font-weight: 600;
+	letter-spacing: 0.7px;
+	text-transform: uppercase;
+	color: var(--text-muted, #8492a6);
+}
+
+.yht-hist-value {
+	margin-top: 5px;
+	font-size: 18px;
+	font-weight: 600;
+	color: var(--text-color, #1a1a2e);
+}
+
+.yht-hist-note {
+	margin-top: 3px;
+	font-size: 11.5px;
+	color: var(--text-muted, #8492a6);
+}
+
+/* A rate cell is double-clickable — hint it without shouting. */
+.grid-row [data-fieldname="rate"] {
+	cursor: cell;
+}

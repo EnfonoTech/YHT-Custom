@@ -192,9 +192,20 @@ def _valuation(item_code, warehouses):
 
 
 @frappe.whitelist()
-def get_price_history(item_code: str, customer: str | None = None, company: str | None = None,
-                      limit: int = 30) -> list[dict]:
-	"""Recent sales of this item, branch-scoped. Powers the History tab."""
+def get_price_history(
+	item_code: str,
+	customer: str | None = None,
+	company: str | None = None,
+	limit: int = 30,
+) -> dict:
+	"""Recent sales of this item PLUS the buying and stock position.
+
+	Returns ``{"rows": [...], "summary": {...}}``.
+
+	The shape changed from a bare list on purpose: an operator asking "what has this sold for"
+	almost always also wants "what did we pay for it" and "have we got any", and making them
+	close the dialog and open Price Assist to find out was two clicks for one question.
+	"""
 	if not item_code:
 		frappe.throw(_("Item Code is required"))
 	frappe.has_permission("Sales Invoice", "read", throw=True)
@@ -207,7 +218,7 @@ def get_price_history(item_code: str, customer: str | None = None, company: str 
 		params["company"] = company
 	params.update({"item_code": item_code, "limit": cint(limit) or 30})
 
-	return frappe.db.sql(
+	rows = frappe.db.sql(
 		f"""
 		SELECT si.name AS invoice, si.posting_date, si.customer, si.customer_name,
 		       sii.qty, sii.uom, sii.rate, sii.discount_percentage, sii.amount,
@@ -221,3 +232,51 @@ def get_price_history(item_code: str, customer: str | None = None, company: str 
 		params,
 		as_dict=True,
 	)
+
+	return {"rows": rows, "summary": _buying_and_stock(item_code, company, warehouses)}
+
+
+def _buying_and_stock(item_code: str, company: str | None, warehouses: list) -> dict:
+	"""What we paid, what the buying list says, and what is on the shelf.
+
+	`last_purchase_rate` on the Item is a single stale number with no date attached, so the
+	last purchase comes from ERPNext's own `get_last_purchase_details`, which walks Purchase
+	Order, Purchase Receipt and Purchase Invoice and returns the most recent in STOCK UOM —
+	the same basis as the valuation, so the two figures are comparable.
+	"""
+	from erpnext.stock.doctype.item.item import get_last_purchase_details
+
+	item = frappe.db.get_value(
+		"Item", item_code, ["item_name", "stock_uom", "is_stock_item", "last_purchase_rate"], as_dict=True
+	) or frappe._dict()
+
+	try:
+		last = get_last_purchase_details(item_code) or frappe._dict()
+	except Exception:
+		# Never let a reporting extra break the dialog the operator is waiting on.
+		frappe.log_error(frappe.get_traceback(), "yht price history: last purchase")
+		last = frappe._dict()
+
+	buying_list = frappe.db.get_single_value("Buying Settings", "buying_price_list")
+	buying_rate = None
+	if buying_list:
+		buying_rate = frappe.db.get_value(
+			"Item Price",
+			{"item_code": item_code, "price_list": buying_list, "selling": 0},
+			"price_list_rate",
+		)
+
+	stock = _stock(item_code, warehouses)
+	return {
+		"item_name": item.get("item_name"),
+		"stock_uom": item.get("stock_uom"),
+		"is_stock_item": cint(item.get("is_stock_item")),
+		"last_purchase_rate": flt(last.get("rate")) or flt(item.get("last_purchase_rate")) or None,
+		"last_purchase_date": last.get("purchase_date"),
+		"buying_price_list": buying_list,
+		"buying_price_list_rate": flt(buying_rate) if buying_rate else None,
+		"valuation_rate": _valuation(item_code, warehouses),
+		"available_qty": sum(flt(row.get("actual_qty")) for row in stock),
+		"reserved_qty": sum(flt(row.get("reserved_qty")) for row in stock),
+		"stock": stock,
+	}
