@@ -123,3 +123,26 @@ def yht_so_title(doc) -> tuple[str, str]:
 		"Sales Order": ("SALES ORDER", "أمر بيع"),
 	}
 	return titles.get(kind, titles["Sales Order"])
+
+
+def yht_line_discount(row) -> float:
+	"""Money given away on one printed row.
+
+	Thin wrapper so a print format never has to know how a discount is stored —
+	percentage, per-unit amount or a hand-typed rate all come out the same here.
+	"""
+	from yht_custom.discount_totals import line_discount
+
+	return line_discount(row)
+
+
+def yht_discount_total(doc) -> float:
+	"""Consolidated item-wise discount for the document (MoM §2.3).
+
+	Computed from the rows on every render rather than read from the stored
+	`custom_total_line_item_discount`, so the 2,344 invoices submitted before that
+	field existed print a correct total without backfilling a single one.
+	"""
+	from yht_custom.discount_totals import line_discount_total
+
+	return line_discount_total(doc)

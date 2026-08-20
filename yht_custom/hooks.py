@@ -78,6 +78,11 @@ doc_events = {
 # overrides what it must. expense_invoice.set_expense_series deliberately runs
 # after set_naming_series_from_branch so an expense invoice takes the expense
 # series rather than the branch's purchase series.
+_DISCOUNT_EVENTS = {
+	doctype: {"validate": "yht_custom.discount_totals.set_line_discount_total"}
+	for doctype in ("Sales Invoice", "Sales Order", "Delivery Note", "Quotation")
+}
+
 _FLOW_EVENTS = {
 	"Sales Invoice": {"before_validate": "yht_custom.sales_flow.enforce_delivery_note_route"},
 	"Delivery Note": {
@@ -135,6 +140,7 @@ def _merge_events(base: dict, extra: dict) -> dict:
 
 
 doc_events = _merge_events(doc_events, _FLOW_EVENTS)
+doc_events = _merge_events(doc_events, _DISCOUNT_EVENTS)
 
 # -------------------------------------------------------------------- fixtures
 # A fixture needs BOTH the entry here AND the record itself — a name missing from
@@ -157,6 +163,10 @@ fixtures = [
 					"Purchase Invoice-custom_expense_head",
 					"Sales Order-custom_print_as",
 					"Sales Invoice-custom_payment_mode",
+					"Sales Invoice-custom_total_line_item_discount",
+					"Sales Order-custom_total_line_item_discount",
+					"Delivery Note-custom_total_line_item_discount",
+					"Quotation-custom_total_line_item_discount",
 				],
 			]
 		],
@@ -179,6 +189,8 @@ jinja = {
 		"yht_custom.print_helpers.yht_date",
 		"yht_custom.print_helpers.yht_item_ar",
 		"yht_custom.print_helpers.yht_so_title",
+		"yht_custom.print_helpers.yht_line_discount",
+		"yht_custom.print_helpers.yht_discount_total",
 	],
 }
 

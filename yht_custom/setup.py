@@ -15,6 +15,7 @@ from yht_custom.expense_invoice import setup_expense_invoice
 from yht_custom.form_layout import setup_form_layout
 from yht_custom.site_defaults import setup_site_defaults
 from yht_custom.setup_property_setters import setup_ignore_user_permissions
+from yht_custom.discount_totals import setup_discount_grid_columns
 
 #: What a Branch User may touch. Per the MoM document set — Quotation, Sales
 #: Order, Delivery Note, Sales Invoice, Purchase Receipt, Purchase Invoice,
@@ -166,6 +167,7 @@ PROVISIONING_STEPS = (
 	"setup_branch_series",
 	"setup_default_print_formats",
 	"setup_form_layout",
+	"setup_discount_grid_columns",
 	"setup_site_defaults",
 	"setup_report_roles",
 	"setup_branch_payment_modes",
@@ -213,6 +215,7 @@ def _imported(name):
 		"setup_default_print_formats": setup_default_print_formats,
 		"setup_form_layout": setup_form_layout,
 		"setup_site_defaults": setup_site_defaults,
+		"setup_discount_grid_columns": setup_discount_grid_columns,
 	}[name]
 
 
@@ -309,6 +312,31 @@ SALES_INVOICE_CUSTOM_FIELDS = [
 	},
 ]
 
+#: Consolidated item-wise discount, printed under the totals block (MoM §2.3).
+#:
+#: Read-only and computed: `discount_totals.set_line_discount_total` writes it on
+#: validate. The print formats do NOT read it — they call the Jinja helper, which
+#: recomputes from the rows, so documents submitted before this field existed
+#: still print a correct total. The field exists so the number can be filtered and
+#: reported on, and it carries `allow_on_submit` because a Delivery Note can be
+#: amended after submit and the stored copy would otherwise go stale.
+DISCOUNT_TOTAL_FIELD = {
+	"fieldname": "custom_total_line_item_discount",
+	"label": "Total Item Discount",
+	"fieldtype": "Currency",
+	"options": "currency",
+	"read_only": 1,
+	"allow_on_submit": 1,
+	"no_copy": 0,
+	"print_hide": 1,
+	"description": "Sum of the discount given on the item rows. The header discount is separate.",
+}
+
+
+def _discount_total_field(insert_after):
+	return [dict(DISCOUNT_TOTAL_FIELD, insert_after=insert_after)]
+
+
 #: Prefix that drives item-group-wise item code generation (see item_naming.py).
 ITEM_GROUP_CUSTOM_FIELDS = [
 	{
@@ -328,8 +356,10 @@ def ensure_branch_custom_fields():
 		{
 			"Branch": BRANCH_CUSTOM_FIELDS,
 			"Item Group": ITEM_GROUP_CUSTOM_FIELDS,
-			"Sales Order": SALES_ORDER_CUSTOM_FIELDS,
-			"Sales Invoice": SALES_INVOICE_CUSTOM_FIELDS,
+			"Sales Order": SALES_ORDER_CUSTOM_FIELDS + _discount_total_field("discount_amount"),
+			"Sales Invoice": SALES_INVOICE_CUSTOM_FIELDS + _discount_total_field("discount_amount"),
+			"Delivery Note": _discount_total_field("discount_amount"),
+			"Quotation": _discount_total_field("discount_amount"),
 		},
 		ignore_validate=True,
 	)
