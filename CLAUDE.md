@@ -254,6 +254,24 @@ touch /home/v15/yht-bench/sites/assets/assets.json
 sudo supervisorctl signal QUIT yht-bench-web:yht-bench-frappe-web
 ```
 
+### Running the test suite
+
+**`yht-test` is the site to run tests against, not `yht-khobhar.enfonoerp.com`.** It lives on the same
+bench, local-only (no DNS, no nginx, no SSL), scheduler paused, full app stack installed.
+
+```bash
+bench --site yht-test run-tests --app yht_custom --skip-before-tests
+```
+
+`--skip-before-tests` is **not optional on any site**: `hrms`'s `before_tests` hook is what deleted
+4,847 client `Item Price` rows once already.
+
+Seed the copy with client data using `scripts/seed-copy-site.sh` — and read its header first. The
+client database is ~10 GB and the restore replays into the SAME MariaDB serving four LIVE client
+sites on the other bench, so the script refuses to run outside 22:30–01:30 CEST. Measured: the suite
+against an EMPTY `yht-test` gives 16 failures / 25 errors / 103 skipped, because it asserts the
+client's real figures on purpose. The copy has to be a real copy.
+
 **The worker signal is not optional and it is not just about speed.** Registering a new jinja method in
 `hooks.py` 500s **every website page**, `/login` included, until the workers reload — `get_jinja_hooks` resolves
 every registered path when it builds the environment, so one unresolved attribute takes the whole env down.

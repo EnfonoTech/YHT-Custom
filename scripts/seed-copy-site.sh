@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# Seed the test site with a copy of the client's data.
+#
+# WHY THIS IS A SEPARATE, WINDOWED STEP
+# -------------------------------------
+# The client database is ~10 GB. Restoring it replays a logical dump into the SAME
+# MariaDB instance that serves four LIVE client sites on the other bench
+# (almashreq, elco, yas-logistics, designer-stom). That churns the InnoDB buffer
+# pool — 4 GB, against 6.7 GB resident and ~3 GB free on an 11 GB box — so the live
+# sites lose their hot pages and get slow for as long as the restore runs.
+#
+# On an idle box it would probably be fine. "Probably fine" is not a thing to do to
+# four live ERPs eleven hours outside the maintenance window, so this script exists
+# to be run INSIDE it: 02:00-05:00 IST, which is 22:30-01:30 CEST on this host.
+#
+# WHY THE COPY IS NEEDED AT ALL, measured rather than assumed:
+# running the suite against the freshly created EMPTY yht-test gave
+#     Ran 244 tests — 16 failures, 25 errors, 103 skipped
+# because the suite asserts the client's real figures on purpose (102 negative
+# bins, the SAR 3,000 ledger gap, 578 addresses without a district). Those are
+# regression guards on actual defects, so they only mean anything against real data.
+#
+#   Usage:  bash seed-copy-site.sh          # inside the maintenance window
+#           FORCE=1 bash seed-copy-site.sh  # skip the window check, deliberately
+set -euo pipefail
+
+BENCH=/home/v15/yht-bench
+SOURCE=yht-khobhar.enfonoerp.com
+TARGET=yht-test
+
+say() { printf '%s\n' "$*"; }
+
+# ── window guard ─────────────────────────────────────────────────────────────
+hour=$(date +%H)
+if [ "${FORCE:-0}" != "1" ] && [ "$hour" -ge 2 ] && [ "$hour" -lt 22 ]; then
+  say "REFUSING: it is $(date +%H:%M) on this host and the maintenance window is 22:30-01:30 CEST."
+  say "          MariaDB here also serves four LIVE client sites; a 10 GB restore"
+  say "          evicts their buffer-pool pages for the length of the run."
+  say "          Re-run inside the window, or FORCE=1 if you have accepted that."
+  exit 2
+fi
+
+[ -d "$BENCH/sites/$TARGET" ] || { say "REFUSING: $TARGET does not exist. Create it first."; exit 3; }
+
+# ── never overwrite the source ───────────────────────────────────────────────
+if [ "$TARGET" = "$SOURCE" ]; then say "REFUSING: target is the source."; exit 4; fi
+
+say "--- backing up $SOURCE (database only, no files) ---"
+cd "$BENCH"
+sudo -u v15 -H /usr/local/bin/bench --site "$SOURCE" backup | tail -3
+
+LATEST=$(ls -t "$BENCH/sites/$SOURCE/private/backups/"*-database.sql.gz | head -1)
+say "--- restoring $LATEST into $TARGET ---"
+PW=$(python3 -c "import json;print(json.load(open('$BENCH/sites/common_site_config.json'))['db_root_password'])")
+sudo -u v15 -H /usr/local/bin/bench --site "$TARGET" restore "$LATEST" \
+  --mariadb-root-password "$PW" --admin-password "yht-test-only" | tail -5
+
+# ── make absolutely sure the copy cannot act like the client site ────────────
+say "--- neutering the copy ---"
+cd "$BENCH"
+for key in host_name domains maintenance_mode mail_server mail_port mail_login mail_password; do
+  sudo -u v15 -H /usr/local/bin/bench --site "$TARGET" set-config "$key" "" >/dev/null 2>&1 || true
+done
+sudo -u v15 -H /usr/local/bin/bench --site "$TARGET" set-config pause_scheduler 1 >/dev/null
+sudo -u v15 -H /usr/local/bin/bench --site "$TARGET" set-config allow_tests true >/dev/null
+
+# Outbound email from a copy of a client site is the classic copy-site accident.
+sudo -u v15 -H /usr/local/bin/bench --site "$TARGET" execute frappe.client.set_value \
+  --kwargs "{'doctype':'System Settings','name':'System Settings','fieldname':'disable_system_update_notification','value':1}" >/dev/null 2>&1 || true
+
+sudo -u v15 -H /usr/local/bin/bench --site "$TARGET" migrate | tail -3
+
+say ""
+say "--- verifying the copy carries the client's data ---"
+sudo -u v15 -H /usr/local/bin/bench --site "$TARGET" execute yht_custom.import_gate.run 2>&1 | tail -14
+
+say ""
+say "NEXT, once the suite is green here:"
+say "  bench --site $SOURCE set-config allow_tests false"
+say "  and leave it false. That is the last reviewer item."
