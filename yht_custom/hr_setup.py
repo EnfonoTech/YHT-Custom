@@ -409,3 +409,83 @@ def _eid_present(year: int) -> bool:
 		"Holiday", filters={"parent": name}, pluck="description"
 	)
 	return any("eid" in (text or "").lower() for text in descriptions)
+
+
+# ------------------------------------------------- salary component housekeeping
+
+#: Components this app creates. Never swept: they are unreferenced BY DESIGN until
+#: HR adds them to a salary structure, which is the client decision the GOSI wage
+#: base is waiting on.
+OUR_COMPONENTS = ("GOSI Wage", "GOSI Employee", "GOSI Employer")
+
+
+def unused_salary_components() -> dict:
+	"""Which Salary Components nothing references, and which are still enabled.
+
+	    bench --site … execute yht_custom.hr_setup.unused_salary_components
+
+	THIS DELIBERATELY DOES NOT DISABLE ANYTHING, and the numbers are why.
+
+	"53 unused components, 34 of them named for other group entities" is a true
+	count and a misleading one. Of those 53, **44 are already disabled** — somebody
+	dealt with them. Of the nine still enabled, **three are this app's own GOSI
+	components**, unreferenced only because the wage base is still a client
+	decision. That leaves six:
+
+	    MEDICAL ALLOWANCE · OVERTIME SALARY · RE ENTRY EXPENSE
+	    STAFF ACCOMODATION ALLOWANCE · STAFF FAMILY TICKET ALLOWANCE
+	    STAFF LOAN AND ADVANCES
+
+	None carries another entity's suffix. They read as ordinary KATC components
+	that simply are not on a salary structure yet — "STAFF LOAN AND ADVANCES" in
+	particular is a deduction payroll may well want next month. Disabling those is
+	not cleanup, it is removing something someone was about to use.
+
+	Every reference point is checked, not just Salary Detail: all ten Link fields
+	pointing at Salary Component across frappe, erpnext and hrms — Additional
+	Salary, Retention Bonus, Gratuity, Employee Benefit Application Detail, Leave
+	Type.earning_component and the rest. Only Salary Detail holds data today.
+	"""
+	fields = frappe.db.sql(
+		"""SELECT parent AS dt, fieldname FROM `tabDocField`
+		   WHERE fieldtype = 'Link' AND options = 'Salary Component'
+		   UNION
+		   SELECT dt, fieldname FROM `tabCustom Field`
+		   WHERE fieldtype = 'Link' AND options = 'Salary Component'""",
+		as_dict=True,
+	)
+
+	referenced, checked = set(), []
+	for row in fields:
+		if not frappe.db.table_exists(row.dt):
+			continue
+		values = frappe.db.sql(
+			f"SELECT DISTINCT `{row.fieldname}` FROM `tab{row.dt}` "
+			f"WHERE `{row.fieldname}` IS NOT NULL AND `{row.fieldname}` != ''",
+			pluck=True,
+		)
+		checked.append(f"{row.dt}.{row.fieldname}")
+		referenced |= set(values)
+
+	components = frappe.get_all("Salary Component", fields=["name", "disabled"])
+	unused = [c for c in components if c.name not in referenced]
+	enabled = sorted(c.name for c in unused if not c.disabled and c.name not in OUR_COMPONENTS)
+
+	summary = {
+		"components": len(components),
+		"reference_points_checked": len(checked),
+		"referenced": len(referenced),
+		"unused_total": len(unused),
+		"unused_already_disabled": len([c for c in unused if c.disabled]),
+		"ours_awaiting_a_structure": sorted(
+			c.name for c in unused if c.name in OUR_COMPONENTS
+		),
+		"unused_and_still_enabled": enabled,
+		"verdict": (
+			"nothing to prune — the enabled ones look like components awaiting use"
+			if len(enabled) < 10
+			else "worth a look with HR"
+		),
+	}
+	print(frappe.as_json(summary, indent=1))
+	return summary

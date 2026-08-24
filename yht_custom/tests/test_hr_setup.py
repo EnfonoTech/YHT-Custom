@@ -171,3 +171,48 @@ class TestGapCounting(FrappeTestCase):
 		self.assertEqual(
 			hr_setup._employees_missing("custom_field_that_does_not_exist"), "field not created"
 		)
+
+
+class TestSalaryComponentHousekeeping(FrappeTestCase):
+	def test_our_own_components_are_never_swept(self):
+		"""They are unreferenced BY DESIGN until HR puts them on a structure."""
+		summary = hr_setup.unused_salary_components()
+		for name in hr_setup.OUR_COMPONENTS:
+			with self.subTest(component=name):
+				self.assertNotIn(name, summary["unused_and_still_enabled"])
+				self.assertFalse(frappe.db.get_value("Salary Component", name, "disabled"))
+
+	def test_every_reference_point_is_checked_not_just_salary_detail(self):
+		"""Additional Salary, Retention Bonus, Gratuity and Leave Type all link here.
+
+		Counting only Salary Detail would call a component unused while an
+		Additional Salary row still pointed at it.
+		"""
+		summary = hr_setup.unused_salary_components()
+		declared = frappe.db.sql(
+			"""SELECT COUNT(*) FROM (
+			     SELECT parent, fieldname FROM `tabDocField`
+			     WHERE fieldtype = 'Link' AND options = 'Salary Component'
+			     UNION
+			     SELECT dt, fieldname FROM `tabCustom Field`
+			     WHERE fieldtype = 'Link' AND options = 'Salary Component') t"""
+		)[0][0]
+		self.assertGreater(summary["reference_points_checked"], 1)
+		self.assertLessEqual(summary["reference_points_checked"], declared)
+
+	def test_the_report_does_not_disable_anything(self):
+		"""It reports. Disabling a component someone is about to use is not cleanup."""
+		before = frappe.db.count("Salary Component", {"disabled": 1})
+		hr_setup.unused_salary_components()
+		self.assertEqual(frappe.db.count("Salary Component", {"disabled": 1}), before)
+
+	def test_a_referenced_component_is_never_listed_as_unused(self):
+		used = frappe.db.sql_list(
+			"SELECT DISTINCT salary_component FROM `tabSalary Detail` "
+			"WHERE salary_component IS NOT NULL"
+		)
+		if not used:
+			self.skipTest("no salary structures on this site")
+		summary = hr_setup.unused_salary_components()
+		for name in used:
+			self.assertNotIn(name, summary["unused_and_still_enabled"])
