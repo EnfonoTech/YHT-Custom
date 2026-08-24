@@ -256,21 +256,34 @@ sudo supervisorctl signal QUIT yht-bench-web:yht-bench-frappe-web
 
 ### Running the test suite
 
-**`yht-test` is the site to run tests against, not `yht-khobhar.enfonoerp.com`.** It lives on the same
-bench, local-only (no DNS, no nginx, no SSL), scheduler paused, full app stack installed.
+**Tests run on `yht-test`, and ONLY on `yht-test`.** `allow_tests` is now `false` on
+`yht-khobhar.enfonoerp.com` — a run there is refused by the framework, not by convention.
 
 ```bash
 bench --site yht-test run-tests --app yht_custom --skip-before-tests
 ```
 
-`--skip-before-tests` is **not optional on any site**: `hrms`'s `before_tests` hook is what deleted
-4,847 client `Item Price` rows once already.
+`--skip-before-tests` stays mandatory anyway: `hrms`'s `before_tests` hook is what deleted 4,847
+client `Item Price` rows once already.
 
-Seed the copy with client data using `scripts/seed-copy-site.sh` — and read its header first. The
-client database is ~10 GB and the restore replays into the SAME MariaDB serving four LIVE client
-sites on the other bench, so the script refuses to run outside 22:30–01:30 CEST. Measured: the suite
-against an EMPTY `yht-test` gives 16 failures / 25 errors / 103 skipped, because it asserts the
-client's real figures on purpose. The copy has to be a real copy.
+| | |
+|---|---|
+| Site | `yht-test` on the SAME bench, `/home/v15/yht-bench` |
+| URL | https://yht-test.enfonoerp.com (Caddy block on control → this box:80) |
+| Data | a **copy of the client database** — treat it as client data |
+| Suite | **248 tests, OK** — identical to the client site |
+| Manager | registered as `yht-test`, environment `staging` |
+
+**It is neutered, and each guard matters.** `mute_emails=1` (the framework-level kill), scheduler
+paused, all Email Accounts `enable_outgoing=0`/`enable_incoming=0`, all 6 Notifications disabled.
+A restored copy carries the client's mail config, their notifications and their digests; a test
+site quietly emailing real customers is the classic copy-site accident.
+
+Reseed with `scripts/seed-copy-site.sh`. Read its header: the restore replays ~10 GB into the SAME
+MariaDB that serves four LIVE client sites on the other bench, so it refuses outside
+22:30–01:30 CEST unless `FORCE=1`. **That refusal is not theoretical** — forcing it at 20:00
+pushed `elco`, `yas-logistics` and `designer-stom` to 5–10 s responses and intermittent
+timeouts within three minutes. Aborted, and they recovered immediately.
 
 **The worker signal is not optional and it is not just about speed.** Registering a new jinja method in
 `hooks.py` 500s **every website page**, `/login` included, until the workers reload — `get_jinja_hooks` resolves

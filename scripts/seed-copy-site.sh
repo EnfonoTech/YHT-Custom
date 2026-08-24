@@ -58,15 +58,28 @@ sudo -u v15 -H /usr/local/bin/bench --site "$TARGET" restore "$LATEST" \
 # ── make absolutely sure the copy cannot act like the client site ────────────
 say "--- neutering the copy ---"
 cd "$BENCH"
-for key in host_name domains maintenance_mode mail_server mail_port mail_login mail_password; do
-  sudo -u v15 -H /usr/local/bin/bench --site "$TARGET" set-config "$key" "" >/dev/null 2>&1 || true
-done
+
+# 🔴 mute_emails is the ONE guard that matters. A restored copy carries the client's
+# Email Accounts, their Notifications and their scheduled digests; the classic
+# copy-site accident is a test site quietly emailing real customers. This kills
+# outbound at the framework level, before any of that can fire.
+sudo -u v15 -H /usr/local/bin/bench --site "$TARGET" set-config mute_emails 1 >/dev/null
 sudo -u v15 -H /usr/local/bin/bench --site "$TARGET" set-config pause_scheduler 1 >/dev/null
 sudo -u v15 -H /usr/local/bin/bench --site "$TARGET" set-config allow_tests true >/dev/null
+for key in maintenance_mode mail_server mail_port mail_login mail_password; do
+  sudo -u v15 -H /usr/local/bin/bench --site "$TARGET" set-config "$key" "" >/dev/null 2>&1 || true
+done
 
-# Outbound email from a copy of a client site is the classic copy-site accident.
-sudo -u v15 -H /usr/local/bin/bench --site "$TARGET" execute frappe.client.set_value \
-  --kwargs "{'doctype':'System Settings','name':'System Settings','fieldname':'disable_system_update_notification','value':1}" >/dev/null 2>&1 || true
+# host_name and domains are DELIBERATELY LEFT ALONE. An earlier version cleared them,
+# from when this copy was local-only; it is now reachable at yht-test.enfonoerp.com so
+# changes can be shown to someone before they touch the client site. Clearing them here
+# would silently un-route it after every reseed.
+say "    host_name kept: $(python3 -c "import json;print(json.load(open('$BENCH/sites/$TARGET/site_config.json')).get('host_name'))")"
+
+# Belt and braces at the DB level, in case mute_emails is ever removed.
+sudo -u v15 -H /usr/local/bin/bench --site "$TARGET" execute frappe.db.sql \
+  --kwargs "{'query':'update \`tabEmail Account\` set enable_outgoing=0, enable_incoming=0'}" >/dev/null 2>&1 || true
+sudo -u v15 -H /usr/local/bin/bench --site "$TARGET" execute frappe.db.commit >/dev/null 2>&1 || true
 
 sudo -u v15 -H /usr/local/bin/bench --site "$TARGET" migrate | tail -3
 
