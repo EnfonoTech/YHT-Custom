@@ -257,17 +257,37 @@ function kpi_card(k) {
 	</div>`;
 }
 
+//: Item 11 — "keep direct new create button all the transaction module".
+//: Branch users are pinned to this page and never see a desk workspace, so the
+//: workspace shortcuts added for Accounts/Buying/Selling do not reach them. The
+//: tile keeps opening the list; the + goes straight to a blank document.
+//:
+//: Only on tiles the role can actually create. Item is read-only for a branch
+//: user, so a + there would route them into a permission error.
+const CAN_CREATE = [
+	"Quotation",
+	"Sales Order",
+	"Delivery Note",
+	"Sales Invoice",
+	"Purchase Receipt",
+	"Purchase Invoice",
+	"Payment Entry",
+	"Customer",
+];
+
 function action_card(a) {
 	// A dialog tile carries no route. It still renders as an anchor so it inherits
 	// the card styling and keyboard focus; the click is intercepted below.
 	if (a.dialog) {
 		return card("#", a.icon, __(a.label), __(a.desc), `data-yht-dialog="${a.dialog}"`);
 	}
-	const route =
-		a.mode === "new"
-			? `/app/${frappe.router.slug(a.doctype)}/new`
-			: `/app/${frappe.router.slug(a.doctype)}`;
-	return card(route, a.icon, __(a.label), __(a.desc));
+	const slug = frappe.router.slug(a.doctype);
+	const route = a.mode === "new" ? `/app/${slug}/new` : `/app/${slug}`;
+	const plus = CAN_CREATE.includes(a.doctype) && a.mode !== "new"
+		? `<a class="yht-card-new" href="/app/${slug}/new" title="${__("New")}"
+		     aria-label="${__("New {0}", [__(a.doctype)])}">+</a>`
+		: "";
+	return card(route, a.icon, __(a.label), __(a.desc), "", plus);
 }
 
 function report_card(r) {
@@ -279,7 +299,12 @@ function report_card(r) {
 	);
 }
 
-function card(route, icon_name, label, desc, attrs = "") {
+function card(route, icon_name, label, desc, attrs = "", extra = "") {
+	// `extra` is rendered OUTSIDE the anchor's text span but inside the wrapper, so
+	// the + is its own link rather than a nested <a> (which the browser drops).
+	if (extra) {
+		return `<span class="yht-card-wrap">${card(route, icon_name, label, desc, attrs)}${extra}</span>`;
+	}
 	return `<a class="yht-card" href="${route}" ${attrs}>
 		<span class="yht-card-icon">${icon(icon_name)}</span>
 		<span class="yht-card-text">

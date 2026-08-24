@@ -20,6 +20,7 @@ from yht_custom.saudi_address import ADDRESS_CUSTOM_FIELDS
 from yht_custom.letterhead import setup_branch_letterheads
 from yht_custom.hr_setup import setup_hr
 from yht_custom.sales_assist import setup_sales_assist_columns
+from yht_custom.workspace_shortcuts import setup_new_shortcuts
 
 #: What a Branch User may touch. Per the MoM document set — Quotation, Sales
 #: Order, Delivery Note, Sales Invoice, Purchase Receipt, Purchase Invoice,
@@ -174,6 +175,7 @@ PROVISIONING_STEPS = (
 	"setup_form_layout",
 	"setup_discount_grid_columns",
 	"setup_sales_assist_columns",
+	"setup_new_shortcuts",
 	"setup_site_defaults",
 	"setup_report_roles",
 	"setup_branch_payment_modes",
@@ -226,6 +228,7 @@ def _imported(name):
 		"setup_branch_letterheads": setup_branch_letterheads,
 		"setup_hr": setup_hr,
 		"setup_sales_assist_columns": setup_sales_assist_columns,
+		"setup_new_shortcuts": setup_new_shortcuts,
 	}[name]
 
 
@@ -347,6 +350,28 @@ def _discount_total_field(insert_after):
 	return [dict(DISCOUNT_TOTAL_FIELD, insert_after=insert_after)]
 
 
+#: Client sheet item 10 wants update-stock, price list and store sitting together
+#: immediately above the item table. On **Sales Invoice and Quotation there is no
+#: section break between the Currency and Price List accordion and the items
+#: table** — Sales Order, Purchase Invoice and Purchase Receipt all have
+#: `sec_warehouse`, those two do not.
+#:
+#: 🔴 That matters because Step 4 HIDES `currency_and_price_list`, and hiding a
+#: Section Break hides everything up to the NEXT one. Moving the trio to sit just
+#: before `items_section` therefore moved it INSIDE the hidden span — update
+#: stock, the price list and the warehouse all silently disappeared from Sales
+#: Invoice. Caught by the Step 4 regression test, which exists for exactly this.
+#:
+#: So the trio gets its own section break to live under. It is a Custom Field
+#: rather than a Property Setter because there is no existing break to repoint.
+STOCK_PRICING_SECTION = {
+	"fieldname": "custom_stock_pricing_section",
+	"label": "Stock & Pricing",
+	"fieldtype": "Section Break",
+	"insert_after": "ignore_pricing_rule",
+	"collapsible": 0,
+}
+
 #: Prefix that drives item-group-wise item code generation (see item_naming.py).
 ITEM_GROUP_CUSTOM_FIELDS = [
 	{
@@ -366,14 +391,20 @@ def ensure_branch_custom_fields():
 		{
 			"Branch": BRANCH_CUSTOM_FIELDS,
 			"Item Group": ITEM_GROUP_CUSTOM_FIELDS,
-			"Sales Order": SALES_ORDER_CUSTOM_FIELDS + _discount_total_field("discount_amount"),
-			"Sales Invoice": SALES_INVOICE_CUSTOM_FIELDS + _discount_total_field("discount_amount"),
-			"Delivery Note": _discount_total_field("discount_amount"),
+			"Sales Order": SALES_ORDER_CUSTOM_FIELDS + _discount_total_field("discount_amount")
+			+ [dict(STOCK_PRICING_SECTION)],
+			"Sales Invoice": SALES_INVOICE_CUSTOM_FIELDS + _discount_total_field("discount_amount")
+			+ [dict(STOCK_PRICING_SECTION)],
+			"Delivery Note": _discount_total_field("discount_amount") + [dict(STOCK_PRICING_SECTION)],
+			"Purchase Invoice": [dict(STOCK_PRICING_SECTION)],
+			"Purchase Receipt": [dict(STOCK_PRICING_SECTION)],
 			"Quotation": _discount_total_field("discount_amount"),
 			# ksa_compliance already ships custom_building_number and custom_area,
 			# and its own mapping decides which fieldnames reach the ZATCA XML.
 			# These three are the ones it does not provide.
 			"Address": ADDRESS_CUSTOM_FIELDS,
+			# Item 10's visible home for update-stock / price list / store.
+			"Quotation": [dict(STOCK_PRICING_SECTION)],
 		},
 		ignore_validate=True,
 	)

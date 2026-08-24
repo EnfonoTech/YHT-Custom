@@ -17,8 +17,8 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from yht_custom.form_layout import (
+	GROUP_BEFORE,
 	HIDE_FIELDS,
-	MOVE_AFTER,
 	_CURRENCY_SECTION,
 	setup_form_layout,
 )
@@ -57,13 +57,16 @@ class TestFormLayout(FrappeTestCase):
 		"""`update_stock` exists only on Sales Invoice and Purchase Invoice, and
 		Quotation has no header warehouse at all, so the anchors legitimately
 		differ per doctype. A wrong anchor is a silent no-op."""
-		for doctype, moves in MOVE_AFTER.items():
+		# MOVE_AFTER was retired when client-sheet item 10 landed: it and the new
+		# rule both rewrote `field_order` and each undid the other on every
+		# migrate. GROUP_BEFORE is the single rule now.
+		for doctype, (group, anchor) in GROUP_BEFORE.items():
 			if not frappe.db.exists("DocType", doctype):
 				continue
 			meta = frappe.get_meta(doctype)
-			for fieldname, anchor in moves:
-				self.assertIsNotNone(meta.get_field(fieldname), f"{doctype}.{fieldname}")
-				self.assertIsNotNone(meta.get_field(anchor), f"{doctype}.{anchor} (anchor)")
+			self.assertIsNotNone(meta.get_field(anchor), f"{doctype}.{anchor} (anchor)")
+			present = [f for f in group if meta.get_field(f)]
+			self.assertTrue(present, f"{doctype}: none of {group} exists")
 
 	def test_currency_section_is_hidden_everywhere(self):
 		for doctype in PRICE_LIST_FIELD:
@@ -104,19 +107,51 @@ class TestFormLayout(FrappeTestCase):
 			field = frappe.get_meta(doctype).get_field(price_field)
 			self.assertFalse(field.hidden, f"{doctype}.{price_field} is hidden")
 
-	def test_price_list_sits_next_to_its_anchor(self):
-		for doctype, moves in MOVE_AFTER.items():
+	def test_price_list_sits_in_the_group_above_the_items(self):
+		"""The price list travels with update-stock and the store, in its own
+		section, immediately above the item table.
+
+		Replaces an older assertion that the price list sat immediately AFTER a
+		per-doctype anchor. That rule (MOVE_AFTER) was retired when client-sheet
+		item 10 landed: it and the new grouping both rewrote `field_order` and each
+		undid the other on every migrate.
+		"""
+		for doctype, (group, anchor) in GROUP_BEFORE.items():
 			if not frappe.db.exists("DocType", doctype):
 				continue
-			order = [df.fieldname for df in frappe.get_meta(doctype).fields]
-			for fieldname, anchor in moves:
-				if fieldname not in order or anchor not in order:
-					continue
+			with self.subTest(doctype=doctype):
+				order = [df.fieldname for df in frappe.get_meta(doctype).fields]
+				present = [f for f in group if f in order]
+				self.assertIn(anchor, order)
+				at = order.index(anchor)
 				self.assertEqual(
-					order.index(fieldname),
-					order.index(anchor) + 1,
-					f"{doctype}: {fieldname} is not immediately after {anchor}",
+					order[at - len(present) : at],
+					present,
+					f"{doctype}: {present} is not contiguous immediately before {anchor}",
 				)
+
+	def test_the_group_opens_its_own_visible_section(self):
+		"""🔴 The regression that made this necessary.
+
+		Sales Invoice and Quotation have NO section break between the hidden
+		`Currency and Price List` accordion and the items table. Moving the group to
+		sit just before `items_section` put it inside the hidden span, so update
+		stock, the price list and the store all vanished from the form. The group
+		now LEADS with its own Section Break custom field.
+		"""
+		for doctype, (group, _anchor) in GROUP_BEFORE.items():
+			if not frappe.db.exists("DocType", doctype):
+				continue
+			with self.subTest(doctype=doctype):
+				self.assertEqual(
+					group[0],
+					"custom_stock_pricing_section",
+					f"{doctype}: the group must open with its own section break",
+				)
+				field = frappe.get_meta(doctype).get_field("custom_stock_pricing_section")
+				self.assertIsNotNone(field, f"{doctype}: section break was never created")
+				self.assertEqual(field.fieldtype, "Section Break")
+				self.assertFalse(field.hidden, f"{doctype}: the group's own section is hidden")
 
 	def test_section_members_are_hidden_individually_too(self):
 		"""Belt and braces: hiding the section break is enough for the form, but a

@@ -614,3 +614,55 @@
 .grid-row [data-fieldname="rate"] {
 	cursor: cell;
 }
+
+/* ── item 11: the direct-new "+" on a dashboard tile ─────────────────────────
+   The + is a sibling of the card, not a child: a nested <a> is invalid HTML and
+   browsers drop the inner one, so the tile would swallow the click. The wrapper
+   is position:relative and the + floats over the card's top-right corner. */
+.yht-dash .yht-card-wrap {
+	position: relative;
+	display: block;
+}
+
+.yht-dash .yht-card-wrap .yht-card {
+	padding-right: 46px; /* leave room so a long label never runs under the + */
+}
+
+.yht-dash .yht-card-new {
+	position: absolute;
+	top: 50%;
+	right: 12px;
+	transform: translateY(-50%);
+	width: 26px;
+	height: 26px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 7px;
+	border: 1px solid var(--border-color, #e8ecf1);
+	background: var(--bg-color, #f7f8fa);
+	color: var(--text-muted, #6b7280);
+	font-size: 16px;
+	line-height: 1;
+	text-decoration: none;
+	opacity: 0;
+	transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+/* Revealed on hover of the tile, and always visible on touch, where there is no
+   hover state to discover it with. */
+.yht-dash .yht-card-wrap:hover .yht-card-new,
+.yht-dash .yht-card-new:focus-visible {
+	opacity: 1;
+}
+
+@media (hover: none) {
+	.yht-dash .yht-card-new { opacity: 1; }
+}
+
+.yht-dash .yht-card-new:hover {
+	background: var(--primary, #2490ef);
+	border-color: var(--primary, #2490ef);
+	color: #fff;
+	text-decoration: none;
+}

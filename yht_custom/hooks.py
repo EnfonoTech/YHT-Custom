@@ -20,8 +20,9 @@ app_include_js = [
 	"/assets/yht_custom/js/price_assist.js?v=5",
 	"/assets/yht_custom/js/payment_assist.js?v=3",
 	"/assets/yht_custom/js/simple_party.js?v=1",
+	"/assets/yht_custom/js/rate_lock.js?v=1",
 ]
-app_include_css = "/assets/yht_custom/css/yht_custom.css?v=6"
+app_include_css = "/assets/yht_custom/css/yht_custom.css?v=7"
 
 # Prefer doctype_js over app_include_js: it takes effect without a `bench build`,
 # which matters because builds are limited to the maintenance window.
@@ -91,7 +92,12 @@ _DISCOUNT_EVENTS = {
 }
 
 _FLOW_EVENTS = {
-	"Sales Invoice": {"before_validate": "yht_custom.sales_flow.enforce_delivery_note_route"},
+	"Sales Invoice": {
+		"before_validate": "yht_custom.sales_flow.enforce_delivery_note_route",
+		# Item 5: a rate fetched from a Sales Order or Delivery Note is not
+		# editable here. The JS makes the cell read-only; this is the boundary.
+		"validate": "yht_custom.rate_lock.enforce_fetched_rate",
+	},
 	"Delivery Note": {
 		"validate": "yht_custom.sales_flow.validate_delivery_note",
 		"on_update_after_submit": "yht_custom.sales_flow.lock_submitted_delivery_note",
