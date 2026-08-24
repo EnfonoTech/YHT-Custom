@@ -163,7 +163,7 @@
 
 <header class="runhead">
   <span class="who">Kathoom Alkhobar Trading Co.</span>
-  <span class="doc">ERP User Guide — v1.0</span>
+  <span class="doc">ERP User Guide — v1.1</span>
 </header>
 
 <div class="wrap">
@@ -184,6 +184,7 @@
   <a href="#a-purchase">Receiving goods</a>
   <a href="#a-expense">Expense bills</a>
   <a href="#a-reports">Your reports</a>
+  <a href="#a-new-customer">Adding a customer</a>
   <a href="#a-cannot">What you cannot do</a>
 
   <div class="part">Part B · Administrator</div>
@@ -232,6 +233,7 @@
     <thead><tr><th style="width:90px">Version</th><th style="width:130px">Date</th><th>Change</th></tr></thead>
     <tbody>
       <tr><td>1.0</td><td>August 2026</td><td>First issue. Branch and administrator parts, written and screenshotted against the live UAT system.</td></tr>
+      <tr><td>1.1</td><td>August 2026</td><td>Four branch reports added to A11 (Stock Sales, Collection, Branch Receivables, Customer Statement) plus Item Prices; the Customer Statement tile now opens a real statement rather than the General Ledger. New A12 covers Quick Create for customers and the Saudi national address. A4 documents the live Stock column; A5 documents the per-row discount and how it prints.</td></tr>
     </tbody>
   </table>
 </section>
@@ -362,6 +364,9 @@
     <li>From the submitted Sales Order: <span class="ui">Create &rarr; Delivery Note</span>. Items, quantities and rates carry over.</li>
     <li>No order? Dashboard &rarr; <span class="ui">Delivery Note</span> &rarr; <span class="ui">+ Add</span>.</li>
     <li>Check the quantity actually going out. Change it here if it differs — this is the record of what physically left.</li>
+    <li>The <span class="ui">Stock</span> column shows what is on hand in your warehouse for that
+    item, live, as you type. If it reads less than you are about to deliver, stop — the submit
+    will refuse it rather than go negative.</li>
     <li><span class="ui">Submit</span>. Stock leaves <code>Stores - KATC</code> at this moment.</li>
     <li><span class="ui">Print</span> — customer copy and office copy, with a signature block.</li>
   </ol>
@@ -400,6 +405,24 @@
     <img src="img/04-price-buttons.jpg" alt="Price Assist and Show Price History under the items table">
     <figcaption><b>Figure A5.1</b> — <span class="ui">Show Price History</span> and <span class="ui">Price Assist</span>, in the item grid footer. Click into the row you are pricing first — both work on a row.</figcaption>
   </figure>
+
+  <h3>Discount</h3>
+  <p>Each row carries its own <span class="ui">Discount %</span> column, next to the rate. Enter
+  the discount there rather than working the rate out yourself — the rate updates on its own, and
+  the printed document then shows the customer three numbers that add up:</p>
+  <table>
+    <tbody>
+      <tr><td>Gross Amount</td><td>what the items come to at list price</td></tr>
+      <tr><td>Item Discount</td><td>the total you gave away across all rows</td></tr>
+      <tr><td>Total</td><td>gross minus the discount — what they actually owe before VAT</td></tr>
+    </tbody>
+  </table>
+  <div class="note">
+    <b>A whole-document discount is a separate line.</b>
+    The header discount prints as <span class="ui">Invoice Discount</span>, underneath the total.
+    It is not added into <span class="ui">Item Discount</span> — keeping them apart is what lets
+    the column add up.
+  </div>
 
   <h3>Price Assist</h3>
   <ul>
@@ -548,14 +571,21 @@
 
 <section id="a-reports">
   <h2>A11 · Your reports</h2>
+  <p>The first four are yours — built for this branch, and each answers one question. The rest
+  are ERPNext's own. If two reports seem to answer the same thing, use the one whose name matches
+  the question you actually have.</p>
   <table>
     <thead><tr><th>Report</th><th>Answers</th><th>Reach for it when</th></tr></thead>
     <tbody>
+      <tr><td><b>Stock Sales</b></td><td>What did we sell — by item, item group or customer?</td><td>Reviewing a month, or finding your best lines</td></tr>
+      <tr><td><b>Collection</b></td><td>What money came in, and through which till or bank</td><td>Reconciling a day's takings</td></tr>
+      <tr><td><b>Branch Receivables</b></td><td>Every unpaid invoice, aged into 0–30 / 31–60 / 61–90 / 90+</td><td>Working the debt oldest first</td></tr>
+      <tr><td><b>Customer Statement</b></td><td>One customer's full account history, with a running balance</td><td>A customer queries their balance</td></tr>
       <tr><td><b>Stock Balance</b></td><td>How much of each item do I have, and what is it worth?</td><td>A customer asks if you have something</td></tr>
       <tr><td><b>Stock Ledger</b></td><td>Every movement of an item, in date order</td><td>A quantity looks wrong and you need to see why</td></tr>
-      <tr><td><b>Receivables Summary</b></td><td>Who owes us, and how late</td><td>Planning collection calls</td></tr>
+      <tr><td><b>Receivables Summary</b></td><td>Who owes us, grouped by customer</td><td>A quick view across all customers at once</td></tr>
       <tr><td><b>General Ledger</b></td><td>Every entry against an account</td><td>Checking how something was booked</td></tr>
-      <tr><td><b>Customer Statement</b></td><td>One customer's full account history</td><td>A customer queries their balance</td></tr>
+      <tr><td><b>Item Prices</b></td><td>The price list rate for every item</td><td>Quoting away from the screen</td></tr>
     </tbody>
   </table>
   <figure>
@@ -566,6 +596,18 @@
     <img src="img/09-report-stock-balance.jpg" alt="Stock Balance report">
     <figcaption><b>Figure A11.2</b> — Stock Balance. What you have and what it is worth — not what anyone owes.</figcaption>
   </figure>
+  <div class="note">
+    <b>Collection counts both ways money arrives.</b>
+    A Payment Entry, and cash taken at the counter on the invoice itself. Both appear, tagged in
+    the <span class="ui">Source</span> column, and the filter isolates either. If you only ever
+    looked at Payment Entries you would miss the till entirely.
+  </div>
+  <div class="note">
+    <b>Branch Receivables and Receivables Summary are not the same report.</b>
+    Branch Receivables lists <b>every invoice</b>, one row each, aged. Receivables Summary rolls
+    those up <b>per customer</b>. Chasing a specific invoice: the first. Sizing the whole debt:
+    the second.
+  </div>
   <div class="warn">
     <b>Do not ask Stock Balance a money question.</b>
     It values stock, not debt. "Who owes us?" is <b>Receivables Summary</b>. Asking the wrong
@@ -576,8 +618,34 @@
   anything: a report showing less than you expected is usually a date range, not missing data.</p>
 </section>
 
+<section id="a-new-customer">
+  <h2>A12 · Adding a customer</h2>
+  <p>A walk-in with no record yet does not need the full customer form. On the
+  <span class="ui">Customer</span> list, or from the <span class="ui">New Customer</span> tile on
+  your dashboard, use <span class="ui">Quick Create</span>. One screen makes the customer, the
+  address and the contact together.</p>
+  <div class="warn">
+    <b>Fill in District and Building Number.</b>
+    They look optional and they are not. A tax invoice to a company customer is rejected by ZATCA
+    without them, and the rejection happens later — at invoicing, to whoever raises it, not to you
+    now. Thirty seconds here saves someone else an argument.
+  </div>
+  <p>The address fields follow the Saudi national address: <b>Street</b>, <b>Building Number</b>
+  (4 digits), <b>District</b>, <b>City</b>, <b>Postal Code</b> (5 digits), and optionally the
+  <b>Short Address</b> — the eight-character code like <code>RQAA2929</code>. Enter a Short
+  Address and it becomes the address title, so the record is findable by the code the customer
+  themselves quotes.</p>
+  <p>The form checks the shapes as you save: a three-digit building number or a two-digit postal
+  code is refused with the reason. Leaving a field empty is allowed; putting the wrong thing in it
+  is not.</p>
+  <div class="note">
+    <b>Suppliers work the same way, but not for you.</b>
+    The same <span class="ui">Quick Create</span> button sits on the Supplier list. Your login can
+    read suppliers and not create them, so it will tell you so rather than fail halfway.
+  </div>
+</section>
 <section id="a-cannot">
-  <h2>A12 · What you cannot do, and who to ask</h2>
+  <h2>A13 · What you cannot do, and who to ask</h2>
   <table>
     <thead><tr><th>You cannot</th><th>Why</th><th>Ask</th></tr></thead>
     <tbody>
