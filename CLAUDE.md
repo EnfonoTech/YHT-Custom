@@ -301,7 +301,18 @@ accountant: SI→`CN`, DN→`DRN`, PI→`DBN`, PR→`PRN`.
     printed below it. ERPNext already did the split: read `taxes[].item_wise_tax_detail`, keyed on
     `item_code or item_name`. Two shapes are in the wild — `[rate, amount]` and the current
     `{"tax_rate", "tax_amount", "net_amount"}` — and the stored amounts are in **company**
-    currency (`× conversion_rate`), so scale the map onto `doc.total_taxes_and_charges`.
+    currency (`× conversion_rate`), so scale the map — but scale it onto the CONTRIBUTING ROWS'
+    own total, never onto `doc.total_taxes_and_charges`.
+    🔴 **AND DECIDE MEMBERSHIP ON `Account.account_type`, NOT ON `charge_type` AND NOT ON WHETHER
+    THE ROW CARRIES A DETAIL MAP.** ERPNext calls `set_item_wise_tax` for EVERY charge type unless
+    the document is consolidated or carries `dont_recompute_tax`
+    (`erpnext/controllers/taxes_and_totals.py:544-545`), and distributes an `Actual` charge across
+    the lines as `item.net_amount * actual / doc.net_total` (`:517-518`) — so a freight row DOES
+    arrive with a populated map, and "no detail" never fires. Excluding every `Actual` row is the
+    opposite error: measured on YHT, `KSSQ-26-0793` is SAR 100 freight on an Expense account (must
+    be excluded) while `KSIN-26-0092`'s only tax row is SAR 1.05 `Actual` on
+    `200602 - VAT OUTPUT 15%`, which IS the VAT (must be kept). `account_type == "Tax"` separates
+    them; read it with `frappe.db.get_value`, which runs no permission check.
 43. **`Total after Discount` is not `net_total`.** `net_total` only carries the additional discount
     when `apply_discount_on == "Net Total"`; with the discount on Grand Total it is still the
     pre-discount figure, so the line prints the same number as `Total`. And print

@@ -14,7 +14,9 @@ survive being pasted into a Letter Head, and all three are corrected here.
    that carried them.
 2. **It lays out with `display:flex`.** wkhtmltopdf 0.12.x runs an old WebKit
    whose flexbox support is unreliable, so the header is a `<table>` here —
-   English 47% / logo 23% / Arabic 47%, the artefact's own proportions.
+   English 42% / logo 16% / Arabic 42%. NOT the artefact's own 47/23/47: those
+   sum to 117%, and in wkhtmltopdf the overflow clips the right-most (Arabic)
+   column mid-word (gotcha 46).
 3. **It carries the logo as a ~320 KB base64 data URI.** Letter Head `content` is
    re-run through `frappe.utils.jinja.render_template()` on EVERY print and is
    scrubbed by `scrub_urls`. The logo ships as an asset instead (Q1) — which is
@@ -216,18 +218,39 @@ def setup_katc_letterhead() -> dict:
 				"is_default": 0,
 				"disabled": 0,
 			}
-		).insert(ignore_permissions=True)
-		# Two framework validations overrule the fields above, and both are put back
-		# by hand. `db_set` rather than a second `save()`, because a save re-runs
-		# exactly the validations being undone.
-		#   - `before_insert` forces `source = "Image"` (see the docstring).
-		#   - `validate_disabled_and_default` sets `is_default = 1` when the site has
-		#     no other default Letter Head. On THIS site the incumbent
-		#     `KATHOOM ALKHOBAR` holds it, so the flag stays 0 — but a fresh site
-		#     would silently make the KATC head the default and contradict the
-		#     module docstring.
+		)
+		# 🔴 THE INSERT CARRIES THE SAME HAZARD AS THE SAVE, AND NEEDS THE SAME GUARD.
+		# When nothing else holds `is_default`, `validate_disabled_and_default`
+		# sets it on THIS record and `on_update` then calls `set_as_default()`,
+		# which writes the global `set_default("letter_head", …)` and
+		# `set_default("default_letter_head_content", …)`. A following
+		# `db_set("is_default", 0)` puts one column back and reverses NEITHER
+		# DefaultValue row — the site would go on resolving the KATC head as its
+		# default letterhead. So record whether the window is open BEFORE
+		# inserting, and close it afterwards.
+		had_other_default = _another_letter_head_is_default()
+		doc.insert(ignore_permissions=True)
+		# `before_insert` forces `source = "Image"` (see the docstring); `db_set`
+		# rather than a second `save()`, because a save re-runs exactly the
+		# validations being undone.
 		doc.db_set("source", "HTML", update_modified=False)
 		doc.db_set("is_default", 0, update_modified=False)
+		if not had_other_default:
+			# Nothing else held the flag, so `set_as_default` ran. Clear the two
+			# DefaultValue rows it wrote. No other record's flag needs restoring:
+			# there was none to clear.
+			frappe.defaults.clear_default("letter_head")
+			frappe.defaults.clear_default("default_letter_head_content")
+			# Keyword arguments on purpose — see the sibling branch above.
+			frappe.log_error(
+				title="yht_custom: KATC letterhead default cleared",
+				message=(
+					f"{KATC_LETTER_HEAD} was inserted on a site with no default "
+					"Letter Head, so validate_disabled_and_default made it the "
+					"default and set_as_default wrote the global letter_head "
+					"defaults. Both were cleared again. Set a default Letter Head."
+				),
+			)
 		created += 1
 
 	return {"created": created, "updated": updated, "unchanged": unchanged}

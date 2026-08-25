@@ -552,6 +552,63 @@ def _tax_amount(value):
 	return None
 
 
+def _tax_account_cache() -> dict:
+	"""`account_head` -> is it an `Account` with `account_type == "Tax"`.
+
+	Lives on `frappe.local` for the same reason `_item_ar_cache` does: discarded
+	at the end of the request, so a print run does one lookup per distinct
+	account head instead of one per tax row.
+	"""
+	cache = getattr(frappe.local, "yht_tax_account_cache", None)
+	if cache is None:
+		cache = {}
+		frappe.local.yht_tax_account_cache = cache
+	return cache
+
+
+def _is_tax_account(account_head) -> bool:
+	"""Does this tax row's account head actually hold TAX?
+
+	🔴 THE MEMBERSHIP TEST FOR THE PER-LINE SPLIT, AND IT IS NOT `charge_type`.
+	`set_item_wise_tax` (`erpnext/controllers/taxes_and_totals.py:544-545`) is
+	called for EVERY charge type unless the document is consolidated or carries
+	`dont_recompute_tax`, and an `Actual` charge is distributed across the lines
+	as `item.net_amount * actual / doc.net_total`
+	(`taxes_and_totals.py:517-518`). So an `Actual` freight row DOES arrive with
+	a populated `item_wise_tax_detail` — keying the split on whether the detail
+	exists lets a transport charge into a column headed
+	`TAX AMT / مبلغ الضريبة` on a Saudi tax invoice.
+
+	Nor is excluding every `Actual` row correct. Measured on the client's own
+	data, both shapes exist and they need opposite answers:
+
+	  - `KSSQ-26-0793` — `Actual` SAR 100.00 on
+	    `Transportation and Cargo Expense` (root type Expense, no
+	    `account_type`). Freight. Must NOT sit in the VAT column.
+	  - `KSIN-26-0092` — `Actual` SAR 1.05 on `200602 - VAT OUTPUT 15%`
+	    (`account_type = "Tax"`), and it is the document's ONLY tax row. That IS
+	    the VAT. Dropping it would print a 0.00 VAT column on a tax invoice and
+	    relabel the tax as `Other Charges`.
+
+	`Account.account_type` separates them and is ERPNext's own answer to the
+	question. `frappe.db.get_value`, never `get_doc`: it runs no permission
+	check, so a branch user who cannot read `Account` still gets a correct
+	invoice — the same reason `yht_bank_details` reads the way it does.
+
+	Unknown or missing account heads answer False, so anything unrecognised
+	falls out of the column and is labelled as a charge rather than as tax.
+	"""
+	head = cstr(account_head)
+	if not head:
+		return False
+	cache = _tax_account_cache()
+	if head not in cache:
+		cache[head] = (
+			cstr(frappe.db.get_value("Account", head, "account_type")) == "Tax"
+		)
+	return cache[head]
+
+
 def yht_row_taxes(doc) -> dict:
 	"""Tax amount per item row, keyed by the child row's `name`.
 
@@ -579,14 +636,16 @@ def yht_row_taxes(doc) -> dict:
 	Both are one proportional factor, so both are handled by scaling the map.
 
 	🔴 THE SCALE IS THE CONTRIBUTING ROWS' OWN TOTAL, NOT `total_taxes_and_charges`.
-	A tax row with no `item_wise_tax_detail` — an `Actual` freight or handling
-	charge is the everyday case — belongs to no line. Scaling onto the document
-	total would spread it across every line and print it in a column headed
-	`TAX AMT / مبلغ الضريبة` on a Saudi tax invoice, which is a worse answer than
-	the `0.00` the old arithmetic gave. Only the rows that actually contributed to
-	`booked` set the scale; whatever is left over is the caller's to label (both
-	taxed formats print it as `Other Charges`). Empty dict when there is nothing
-	to read.
+	A row on a non-tax account — freight, handling — belongs in no line's VAT.
+	Scaling onto the document total would spread it across every line and print
+	it in a column headed `TAX AMT / مبلغ الضريبة` on a Saudi tax invoice, which
+	is a worse answer than the `0.00` the old arithmetic gave. Membership is
+	decided by `_is_tax_account`, NOT by `charge_type` and NOT by whether the row
+	carries `item_wise_tax_detail` — ERPNext populates that for `Actual` charges
+	too, so both of those tests let freight into the VAT column. Only the rows
+	that actually contributed to `booked` set the scale; whatever is left over is
+	the caller's to label (both taxed formats print it as `Other Charges`). Empty
+	dict when there is nothing to read.
 	"""
 	rows = doc.get("items") or []
 	if not rows:
@@ -594,10 +653,14 @@ def yht_row_taxes(doc) -> dict:
 
 	booked: dict = {}
 	# The document-currency total of ONLY the tax rows that contributed to
-	# `booked`. An `Actual` charge contributes nothing and is deliberately left
-	# out of both.
+	# `booked`. A charge on a non-tax account contributes nothing and is
+	# deliberately left out of both.
 	contributing_total = 0.0
 	for tax in doc.get("taxes") or []:
+		if not _is_tax_account(tax.get("account_head")):
+			# Not a tax account — a freight or handling charge. It belongs to no
+			# line; the caller labels the remainder `Other Charges`.
+			continue
 		detail = tax.get("item_wise_tax_detail")
 		if isinstance(detail, str):
 			try:

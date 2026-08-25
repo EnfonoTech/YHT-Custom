@@ -386,6 +386,97 @@ class TestKatcLetterhead(FrappeTestCase):
 				"Letter Head", module.KATC_LETTER_HEAD, "source", "HTML", update_modified=False
 			)
 
+	def test_the_spacer_is_not_emitted_on_the_plain_desk_print_path(self):
+		"""🔴 THE DESK `Print` MENU PASSES NO `letterhead=` AT ALL.
+
+		The five with-letterhead formats gate their header cell on
+		`'katc-lh' in letter_head`. When a user opens the standard print view the
+		argument is absent, or resolves to the incumbent IMAGE letterhead, and
+		neither contains that marker — so an unconditional `{% else %}` put a
+		194 pt (68 mm) blank band at the top of the page on the one path nobody
+		passes arguments on. The spacer exists for `Print Without LH`, so it is
+		gated on `no_letterhead`, which `printview.get_rendered_template` puts in
+		the template args (`frappe/www/printview.py:234`, coerced at `:128-131`).
+
+		Every other render in this suite passes `letterhead=EXPECTED_LETTER_HEAD`,
+		which is exactly why this path was uncovered.
+		"""
+		spacer = re.compile(r"katc-spacer", re.I)
+		for print_format, doctype in FORMATS:
+			if (print_format, doctype) in NO_LH_FORMATS:
+				continue  # these two are ALWAYS spacer-only, by design
+			name = artefact_or_any(doctype)
+			if not name:
+				self.skipTest(f"no submitted {doctype}")
+			with self.subTest(print_format=print_format):
+				# No letterhead= and no no_letterhead= — the desk Print menu.
+				body = format_body(render(doctype, name, print_format))
+				self.assertIsNone(
+					spacer.search(body),
+					f"{print_format} prints a blank spacer band on the plain desk print path",
+				)
+
+	def test_provisioning_never_takes_the_default_when_it_has_to_INSERT(self):
+		"""The other half of check 1 — the branch that cannot use `db_set`.
+
+		The sibling test forces `source = "Image"` so the UPDATE branch runs. That
+		branch is guarded. The INSERT branch was not: `.insert()` lets
+		`validate_disabled_and_default` set `is_default = 1`, and `on_update`'s
+		`set_as_default()` then writes `set_default("letter_head", …)` and
+		`set_default("default_letter_head_content", …)` — DefaultValue rows that a
+		following `db_set("is_default", 0)` does not touch.
+
+		So this deletes the record INSIDE the no-default window and lets
+		provisioning recreate it. Same class-scoped rollback caveat as the sibling:
+		everything is restored in a `finally`.
+		"""
+		module = katc_letterhead()
+		defaults = frappe.get_all("Letter Head", filters={"is_default": 1}, pluck="name")
+		try:
+			for name in defaults:
+				frappe.db.set_value("Letter Head", name, "is_default", 0, update_modified=False)
+			frappe.delete_doc(
+				"Letter Head", module.KATC_LETTER_HEAD, force=True, ignore_permissions=True
+			)
+			self.assertFalse(
+				frappe.db.exists("Letter Head", module.KATC_LETTER_HEAD),
+				"the INSERT branch is only exercised when the record is gone",
+			)
+
+			module.setup_katc_letterhead()
+
+			self.assertTrue(
+				frappe.db.exists("Letter Head", module.KATC_LETTER_HEAD),
+				"provisioning must recreate the record",
+			)
+			self.assertNotEqual(
+				frappe.db.get_value(
+					"DefaultValue", {"parent": "__default", "defkey": "letter_head"}, "defvalue"
+				),
+				module.KATC_LETTER_HEAD,
+				f"{module.KATC_LETTER_HEAD} became the site-wide default Letter Head",
+			)
+			self.assertFalse(
+				frappe.db.get_value(
+					"DefaultValue",
+					{"parent": "__default", "defkey": "default_letter_head_content"},
+					"defvalue",
+				),
+				"set_as_default's default_letter_head_content row survived",
+			)
+			self.assertFalse(
+				frappe.db.get_value("Letter Head", module.KATC_LETTER_HEAD, "is_default"),
+				"is_default was taken on a site with no other default",
+			)
+			self.assertEqual(
+				frappe.db.get_value("Letter Head", module.KATC_LETTER_HEAD, "source"),
+				"HTML",
+				"before_insert forces Image and the insert branch must repair it",
+			)
+		finally:
+			for name in defaults:
+				frappe.db.set_value("Letter Head", name, "is_default", 1, update_modified=False)
+
 	def test_the_content_carries_the_artefact_facts(self):
 		# check 2
 		content = frappe.db.get_value(
@@ -763,6 +854,16 @@ class TestTwoFormatDoctypes(FrappeTestCase):
 		through `yht_katc_spacer_pt()`, so this asserts the ONE constant rather
 		than a literal that can drift away from it.
 		"""
+		# 🔴 PIN THE MEASUREMENT. The regex below is built FROM the constant, so it
+		# matches whatever the constant says — set it to 7 and this check stays
+		# green while every no-LH print overlaps the pre-printed stationery. The
+		# value comes from the twelve-render table in `.pipeline/changes.md`
+		# against the bbox positions quoted above. Re-measure before changing it.
+		self.assertEqual(
+			katc_letterhead().NO_LH_SPACER_PT,
+			194,
+			"re-measure against the artefacts before changing NO_LH_SPACER_PT",
+		)
 		spacer = re.compile(rf"height\s*:\s*{katc_letterhead().NO_LH_SPACER_PT}\s*pt", re.I)
 		for print_format, doctype in NO_LH_FORMATS:
 			name = artefact_or_any(doctype)
@@ -1329,10 +1430,28 @@ class TestPrintedTaxColumn(FrappeTestCase):
 		self.assertEqual(helper("yht_row_taxes")(frappe._dict(items=[], taxes=[])), {})
 
 	def test_an_actual_charge_is_not_spread_across_the_lines(self):
-		"""An `Actual` freight row has no `item_wise_tax_detail` and belongs to no
-		line. Scaling onto `total_taxes_and_charges` would push it into a column
-		headed `TAX AMT / مبلغ الضريبة` on a Saudi tax invoice.
+		"""A freight row belongs to no line's VAT — and it DOES carry a detail map.
+
+		🔴 THE PREMISE THIS TEST USED TO CARRY WAS FALSE. ERPNext calls
+		`set_item_wise_tax` for every charge type unless the document is
+		consolidated or carries `dont_recompute_tax`
+		(`erpnext/controllers/taxes_and_totals.py:544-545`), and distributes an
+		`Actual` charge across the lines as
+		`item.net_amount * actual / doc.net_total` (`:517-518`). So the freight row
+		is built here the way ERPNext builds it — 200.00 split 50/150 across A and
+		B — and the helper still has to keep it out of the VAT column. A row shaped
+		the way this test used to shape it (no detail at all) would pass whether
+		the guard worked or not.
+
+		The membership test is `Account.account_type`, so the two rows are put on
+		real accounts of each kind, resolved from the site rather than named.
 		"""
+		tax_account = frappe.db.get_value("Account", {"account_type": "Tax", "is_group": 0}, "name")
+		other_account = frappe.db.get_value(
+			"Account", {"account_type": ("!=", "Tax"), "root_type": "Expense", "is_group": 0}, "name"
+		)
+		if not tax_account or not other_account:
+			self.skipTest("site has no Tax and non-Tax account pair to discriminate with")
 		doc = frappe._dict(
 			items=[
 				frappe._dict(name="r1", item_code="A", net_amount=100.0),
@@ -1341,22 +1460,63 @@ class TestPrintedTaxColumn(FrappeTestCase):
 			taxes=[
 				frappe._dict(
 					charge_type="On Net Total",
+					account_head=tax_account,
 					item_wise_tax_detail='{"A": [15.0, 15.0], "B": [15.0, 45.0]}',
 					tax_amount_after_discount_amount=60.0,
 				),
-				# Freight. No item_wise_tax_detail at all.
-				frappe._dict(charge_type="Actual", tax_amount_after_discount_amount=200.0),
+				# Freight — and ERPNext DID distribute it across the lines:
+				# 100/400 * 200 = 50 and 300/400 * 200 = 150.
+				frappe._dict(
+					charge_type="Actual",
+					account_head=other_account,
+					item_wise_tax_detail='{"A": [0.0, 50.0], "B": [0.0, 150.0]}',
+					tax_amount_after_discount_amount=200.0,
+				),
 			],
 			total_taxes_and_charges=260.0,
 		)
 		per_row = helper("yht_row_taxes")(doc)
-		self.assertAlmostEqual(per_row["r1"], 15.0, places=2)
-		self.assertAlmostEqual(per_row["r2"], 45.0, places=2)
+		self.assertEqual(
+			{k: round(v, 2) for k, v in per_row.items()},
+			{"r1": 15.0, "r2": 45.0},
+			"the 200.00 freight charge reached the per-line VAT column",
+		)
 		self.assertAlmostEqual(
 			sum(per_row.values()),
 			60.0,
 			places=2,
-			msg="the 200.00 freight charge was spread into the per-line VAT column",
+			msg="the column must sum to the VAT, leaving 200.00 as Other Charges",
+		)
+
+	def test_an_actual_charge_on_a_TAX_account_stays_in_the_column(self):
+		"""The opposite error, and it is on the client's own data.
+
+		`KSIN-26-0092` carries ONE tax row: `Actual`, SAR 1.05, on
+		`200602 - VAT OUTPUT 15%`. That IS the invoice's VAT. Excluding every
+		`Actual` row — the obvious over-correction — would print a 0.00 VAT column
+		on a tax invoice and relabel the tax as `Other Charges`.
+		"""
+		tax_account = frappe.db.get_value("Account", {"account_type": "Tax", "is_group": 0}, "name")
+		if not tax_account:
+			self.skipTest("site has no Tax account")
+		doc = frappe._dict(
+			items=[frappe._dict(name="r1", item_code="A", net_amount=7.0)],
+			taxes=[
+				frappe._dict(
+					charge_type="Actual",
+					account_head=tax_account,
+					item_wise_tax_detail='{"A": [15.0, 1.05]}',
+					tax_amount_after_discount_amount=1.05,
+				)
+			],
+			total_taxes_and_charges=1.05,
+		)
+		per_row = helper("yht_row_taxes")(doc)
+		self.assertAlmostEqual(
+			per_row.get("r1", 0.0),
+			1.05,
+			places=2,
+			msg="VAT entered as an Actual charge was dropped out of the VAT column",
 		)
 
 	def test_the_printed_tax_column_sums_to_the_printed_vat_amount(self):
