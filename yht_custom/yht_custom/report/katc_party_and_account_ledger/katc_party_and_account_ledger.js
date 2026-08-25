@@ -1,7 +1,7 @@
 // Copyright (c) 2026, Enfono Technologies and contributors
 // For license information, please see license.txt
 
-frappe.query_reports["KATC Party & Account Ledger"] = {
+frappe.query_reports["KATC Party and Account Ledger"] = {
 	filters: [
 		{
 			fieldname: "company",

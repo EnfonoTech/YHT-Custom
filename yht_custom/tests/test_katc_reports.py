@@ -9,7 +9,7 @@ from frappe.utils import add_months, flt, nowdate
 
 from yht_custom import branch_filters, setup
 
-REPORTS = ("KATC Stock Ledger", "KATC General Ledger", "KATC Party & Account Ledger")
+REPORTS = ("KATC Stock Ledger", "KATC General Ledger", "KATC Party and Account Ledger")
 
 #: The columns the client asked for, in their own words, per sheet item.
 REQUIRED_COLUMNS = {
@@ -19,7 +19,7 @@ REQUIRED_COLUMNS = {
 		"valuation_rate", "balance_value",
 	),
 	"KATC General Ledger": ("posting_date", "voucher_no", "remarks", "debit", "credit", "balance"),
-	"KATC Party & Account Ledger": (
+	"KATC Party and Account Ledger": (
 		"posting_date", "voucher_no", "remarks", "debit", "credit", "balance",
 	),
 }
@@ -36,6 +36,32 @@ class TestKatcReportsInstalled(FrappeTestCase):
 		for name in REPORTS:
 			with self.subTest(report=name):
 				self.assertTrue(frappe.db.exists("Report", name), f"{name} is not installed")
+
+	def test_frappe_can_actually_LOAD_each_report(self):
+		"""🔴 THE ONE THAT WAS MISSING, AND IT COST A BROKEN REPORT.
+
+		The other tests import the module by a slug written down here, which proves
+		the file exists — not that the DESK can find it. Frappe resolves a Script
+		Report's module by scrubbing its NAME, and `frappe.scrub` only replaces
+		spaces and hyphens (`frappe/__init__.py:1475`). An ampersand survives, so
+		"KATC Party & Account Ledger" resolved to
+		`...report.katc_party_&_account_ledger` — not a legal module name — and the
+		report raised ModuleNotFoundError for anyone who opened it while every test
+		here passed.
+
+		So resolve it the way frappe does: from the stored report name, not from a
+		slug we control.
+		"""
+		for name in REPORTS:
+			with self.subTest(report=name):
+				stored = frappe.db.get_value("Report", name, "report_name")
+				slug = frappe.scrub(stored)
+				self.assertRegex(
+					slug, r"^[a-z_][a-z0-9_]*$",
+					f"'{stored}' scrubs to '{slug}', which is not a legal Python module name",
+				)
+				execute = frappe.get_attr(f"yht_custom.yht_custom.report.{slug}.{slug}.execute")
+				self.assertTrue(callable(execute))
 
 	def test_they_are_script_reports(self):
 		"""🔴 NOT Query Reports. `permission_query_conditions` does not reach a report
@@ -63,12 +89,12 @@ class TestKatcReportsInstalled(FrappeTestCase):
 				for fieldname in REQUIRED_COLUMNS[name]:
 					self.assertIn(fieldname, got, f"{name} is missing {fieldname}")
 
-	#: Explicit, because scrubbing "KATC Party & Account Ledger" into a module path
+	#: Explicit, because scrubbing "KATC Party and Account Ledger" into a module path
 	#: is exactly the kind of derivation that breaks silently on the next rename.
 	MODULES = {
 		"KATC Stock Ledger": "katc_stock_ledger",
 		"KATC General Ledger": "katc_general_ledger",
-		"KATC Party & Account Ledger": "katc_party_account_ledger",
+		"KATC Party and Account Ledger": "katc_party_and_account_ledger",
 	}
 
 	def _run(self, name):
@@ -84,7 +110,7 @@ class TestKatcReportsInstalled(FrappeTestCase):
 		}
 		if name == "KATC General Ledger":
 			base["account"] = frappe.db.get_value("GL Entry", {"is_cancelled": 0}, "account")
-		if name == "KATC Party & Account Ledger":
+		if name == "KATC Party and Account Ledger":
 			row = frappe.db.get_value(
 				"GL Entry", {"is_cancelled": 0, "party": ["!=", ""]}, ["party_type", "party"], as_dict=True
 			)

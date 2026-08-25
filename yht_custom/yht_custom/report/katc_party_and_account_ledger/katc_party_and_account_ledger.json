@@ -10,14 +10,14 @@
  "idx": 0,
  "is_standard": "Yes",
  "letterhead": null,
- "modified": "2026-08-25 15:00:00.000000",
+ "modified": "2026-08-25 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "Yht Custom",
- "name": "KATC Party & Account Ledger",
+ "name": "KATC Party and Account Ledger",
  "owner": "Administrator",
  "prepared_report": 0,
  "ref_doctype": "GL Entry",
- "report_name": "KATC Party & Account Ledger",
+ "report_name": "KATC Party and Account Ledger",
  "report_type": "Script Report",
  "roles": [
   {

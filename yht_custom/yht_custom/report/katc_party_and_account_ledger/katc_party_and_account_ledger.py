@@ -1,7 +1,15 @@
 # Copyright (c) 2026, Enfono Technologies and contributors
 # For license information, please see license.txt
 
-"""KATC Party & Account Ledger — client sheet item 9.
+"""KATC Party and Account Ledger — client sheet item 9.
+
+🔴 "AND", NOT "&", AND THAT IS NOT A STYLE CHOICE. Frappe resolves a Script
+Report's Python module by scrubbing its NAME, and `frappe.scrub` only replaces
+spaces and hyphens (`frappe/__init__.py:1475`) — an ampersand survives. Named
+"KATC Party & Account Ledger" the desk looked for
+`yht_custom.yht_custom.report.katc_party_&_account_ledger`, which is not a legal
+module name, and the report died with ModuleNotFoundError the moment anyone
+opened it. Never put an ampersand in a Script Report name.
 
     Party Type & Account wise Report keep -
     Date, voucher number, Remarks, Debit, Credit, Balance
