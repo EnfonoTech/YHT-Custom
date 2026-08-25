@@ -168,6 +168,7 @@ yht_custom.price.show = function (frm, row, d) {
 		${stock}
 		<div style="margin-top:10px">
 			<button class="btn btn-xs btn-default yht-history">${__("Show price history")}</button>
+			<button class="btn btn-xs btn-default yht-purchases" style="margin-left:6px">${__("Show purchase history")}</button>
 			${mine ? `<button class="btn btn-xs btn-default yht-use-last" style="margin-left:6px">${__("Use last rate to this customer")}</button>` : ""}
 		</div>
 		<div class="yht-history-out" style="margin-top:8px"></div>
@@ -185,6 +186,19 @@ yht_custom.price.show = function (frm, row, d) {
 			$out.html(
 				yht_custom.price.history_summary(summary, d.currency) +
 					yht_custom.price.history_table(rows)
+			);
+		});
+	});
+
+	// Both history buttons render into the SAME output div, so one replaces the other
+	// rather than stacking two long tables the operator has to scroll past each other.
+	dialog.$wrapper.find(".yht-purchases").on("click", function () {
+		const $out = dialog.$wrapper.find(".yht-history-out");
+		$out.html(`<span class="text-muted">${__("Loading…")}</span>`);
+		yht_custom.price.fetch_purchase_history(frm, d.item_code, ({ rows }) => {
+			$out.html(
+				`<div style="font-weight:600;margin-top:6px">${__("Recent purchases")}</div>` +
+					yht_custom.price.purchase_table(rows)
 			);
 		});
 	});
@@ -313,6 +327,53 @@ yht_custom.price.history_table = function (rows) {
 					<td class="text-right">${flt(x.qty)}</td>
 					<td class="text-right">${format_currency(x.rate, x.currency)}</td>
 					<td><a href="/app/sales-invoice/${encodeURIComponent(x.invoice)}">${frappe.utils.escape_html(x.invoice)}</a></td>
+				</tr>`
+			)
+			.join("")}
+	</tbody></table>`;
+};
+
+// ------------------------------------------------------------- purchase history
+//
+// The buying counterpart of fetch_history. Separate endpoint rather than an extra key on
+// the price-history payload: an operator opens one or the other, and loading thirty
+// purchase rows on every "what has this sold for" would be work nobody asked for.
+
+yht_custom.price.fetch_purchase_history = function (frm, item_code, done) {
+	frappe.call({
+		method: "yht_custom.api.price_assist.get_purchase_history",
+		args: {
+			item_code: item_code,
+			// NOTE: no supplier filter. Price Assist runs on the SELLING doctypes, so
+			// `frm.doc` has a customer and no supplier — the question here is "what have we
+			// paid for this", from anyone.
+			company: frm.doc.company,
+			limit: 30,
+		},
+		callback(r) {
+			const m = r.message || {};
+			done({ rows: m.rows || [] });
+		},
+	});
+};
+
+yht_custom.price.purchase_table = function (rows) {
+	if (!rows.length) return `<span class="text-muted">${__("No purchase history for this item.")}</span>`;
+	return `<table class="table table-bordered table-sm">
+		<thead><tr>
+			<th>${__("Date")}</th><th>${__("Supplier")}</th>
+			<th class="text-right">${__("Qty")}</th><th class="text-right">${__("Rate")}</th>
+			<th>${__("Invoice")}</th><th>${__("Supplier Bill")}</th>
+		</tr></thead><tbody>
+		${rows
+			.map(
+				(x) => `<tr>
+					<td>${frappe.datetime.str_to_user(x.posting_date)}</td>
+					<td>${frappe.utils.escape_html(x.supplier_name || x.supplier || "")}</td>
+					<td class="text-right">${flt(x.qty)} ${frappe.utils.escape_html(x.uom || "")}</td>
+					<td class="text-right">${format_currency(x.rate, x.currency)}</td>
+					<td><a href="/app/purchase-invoice/${encodeURIComponent(x.invoice)}">${frappe.utils.escape_html(x.invoice)}</a></td>
+					<td>${frappe.utils.escape_html(x.bill_no || "")}</td>
 				</tr>`
 			)
 			.join("")}

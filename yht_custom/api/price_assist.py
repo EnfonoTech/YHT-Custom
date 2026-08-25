@@ -236,6 +236,82 @@ def get_price_history(
 	return {"rows": rows, "summary": _buying_and_stock(item_code, company, warehouses)}
 
 
+def _purchase_conditions(warehouses, supplier=None):
+	"""Shared WHERE for the purchase-history query. Parameterised throughout.
+
+	Deliberately the same shape as `_sale_conditions`: scope on the item row's warehouse,
+	falling back to the header's when the row is blank. That is TIGHTER than
+	`branch_filters.purchase_invoice_query`, which also lets a branch see a document its own
+	peers created regardless of warehouse — right for a list view, wrong here. "What did we
+	pay" on a pricing dialog means what THIS branch paid into its own warehouses, which is
+	the same basis as the sales figures sitting directly above it.
+	"""
+	where = ["pi.docstatus = 1", "pii.item_code = %(item_code)s"]
+	params = {}
+	if supplier:
+		where.append("pi.supplier = %(supplier)s")
+		params["supplier"] = supplier
+	if warehouses:
+		where.append(
+			"(pii.warehouse IN %(warehouses)s"
+			" OR (IFNULL(pii.warehouse, '') = '' AND pi.set_warehouse IN %(warehouses)s))"
+		)
+		params["warehouses"] = warehouses
+	return where, params
+
+
+@frappe.whitelist()
+def get_purchase_history(
+	item_code: str,
+	supplier: str | None = None,
+	company: str | None = None,
+	limit: int = 30,
+) -> dict:
+	"""Recent PURCHASES of this item — the buying counterpart of `get_price_history`.
+
+	Returns ``{"rows": [...]}``. No summary: the buying and stock figures already sit in
+	`get_price_history`'s summary and in the Price Assist body, and duplicating them here
+	would give the operator two places to read one number.
+
+	`rate` is the purchase rate in the invoice's own currency. `base_rate` comes along so a
+	foreign-currency purchase can be compared with the company-currency valuation shown
+	beside it — without it, a USD invoice reads as though we paid three times less than we
+	did.
+	"""
+	if not item_code:
+		frappe.throw(_("Item Code is required"))
+	# Gate on Purchase Invoice, NOT Sales Invoice. Branch User holds both reads
+	# (`setup.BRANCH_USER_PERMISSIONS`), but a role that can sell without seeing cost must
+	# get a clean permission error rather than a table of supplier prices.
+	frappe.has_permission("Purchase Invoice", "read", throw=True)
+
+	company = _company(company)
+	warehouses = _branch_warehouses()
+	where, params = _purchase_conditions(warehouses, supplier)
+	if company:
+		where.append("pi.company = %(company)s")
+		params["company"] = company
+	params.update({"item_code": item_code, "limit": cint(limit) or 30})
+
+	rows = frappe.db.sql(
+		f"""
+		SELECT pi.name AS invoice, pi.posting_date, pi.supplier, pi.supplier_name,
+		       pi.bill_no, pi.currency,
+		       pii.qty, pii.uom, pii.stock_qty, pii.stock_uom, pii.rate, pii.base_rate,
+		       pii.discount_percentage, pii.amount, pii.warehouse
+		FROM `tabPurchase Invoice Item` pii
+		INNER JOIN `tabPurchase Invoice` pi ON pi.name = pii.parent
+		WHERE {' AND '.join(where)}
+		ORDER BY pi.posting_date DESC, pi.creation DESC
+		LIMIT %(limit)s
+		""",
+		params,
+		as_dict=True,
+	)
+
+	return {"rows": rows}
+
+
 def _buying_and_stock(item_code: str, company: str | None, warehouses: list) -> dict:
 	"""What we paid, what the buying list says, and what is on the shelf.
 
