@@ -154,6 +154,12 @@ PERM_FIELDS = (
 )
 
 BRANCH_USER_ROLE = "Branch User"
+
+#: Client sheet items 13 and 14. The sheet listed six roles "details will update
+#: later"; the client has since said they only need this one. It is a SUPERSET of
+#: Branch User — same branch scoping, same doctypes — plus the one thing that
+#: makes it a manager: cancelled documents stay visible (item 14).
+BRANCH_MANAGER_ROLE = "Branch Manager"
 MODULE_PROFILE = "Branch User"
 
 
@@ -236,16 +242,24 @@ def _imported(name):
 
 
 def ensure_branch_user_role():
-	if frappe.db.exists("Role", BRANCH_USER_ROLE):
-		return
-	frappe.get_doc(
-		{
-			"doctype": "Role",
-			"role_name": BRANCH_USER_ROLE,
-			"desk_access": 1,
-			"is_custom": 1,
-		}
-	).insert(ignore_permissions=True)
+	"""Both branch roles. Idempotent.
+
+	`Branch Manager` is deliberately a separate ROLE rather than a flag on the
+	user: item 14 ("cancelled file only view role branch manager") is a
+	permission question, and `branch_filters` has to be able to answer it in SQL
+	without loading a User document per query.
+	"""
+	for role_name in (BRANCH_USER_ROLE, BRANCH_MANAGER_ROLE):
+		if frappe.db.exists("Role", role_name):
+			continue
+		frappe.get_doc(
+			{
+				"doctype": "Role",
+				"role_name": role_name,
+				"desk_access": 1,
+				"is_custom": 1,
+			}
+		).insert(ignore_permissions=True)
 
 
 # --------------------------------------------------------------- custom fields
@@ -447,6 +461,9 @@ def setup_branch_user_permissions():
 		if not frappe.db.exists("DocType", doctype):
 			continue
 		_upsert_custom_docperm(doctype, BRANCH_USER_ROLE, spec)
+		# A Branch Manager can reach everything a Branch User can. The difference
+		# is cancelled visibility, which `branch_filters` applies, not DocPerm.
+		_upsert_custom_docperm(doctype, BRANCH_MANAGER_ROLE, spec)
 
 
 def _upsert_custom_docperm(doctype, role, spec, permlevel=0):

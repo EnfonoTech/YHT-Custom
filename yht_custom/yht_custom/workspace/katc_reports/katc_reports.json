@@ -1,0 +1,207 @@
+{
+ "charts": [],
+ "content": "[{\"id\":\"katc_rep_head\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">Reports</span>\",\"col\":12}},{\"id\":\"katc_rep_c1\",\"type\":\"card\",\"data\":{\"card_name\":\"Client Reports\",\"col\":4}},{\"id\":\"katc_rep_c2\",\"type\":\"card\",\"data\":{\"card_name\":\"Branch\",\"col\":4}},{\"id\":\"katc_rep_c3\",\"type\":\"card\",\"data\":{\"card_name\":\"Data & Go-Live\",\"col\":4}}]",
+ "creation": "2026-08-25 15:30:00.000000",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "list",
+ "idx": 0,
+ "is_hidden": 0,
+ "label": "KATC Reports",
+ "links": [
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Client Reports",
+   "link_count": 3,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "KATC Stock Ledger",
+   "link_count": 0,
+   "link_to": "KATC Stock Ledger",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "KATC General Ledger",
+   "link_count": 0,
+   "link_to": "KATC General Ledger",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "KATC Party & Account Ledger",
+   "link_count": 0,
+   "link_to": "KATC Party & Account Ledger",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Branch",
+   "link_count": 4,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Stock Sales",
+   "link_count": 0,
+   "link_to": "Stock Sales",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Collection",
+   "link_count": 0,
+   "link_to": "Collection",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Branch Receivables",
+   "link_count": 0,
+   "link_to": "Branch Receivables",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Customer Statement",
+   "link_count": 0,
+   "link_to": "Customer Statement",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Data & Go-Live",
+   "link_count": 3,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Import Gate",
+   "link_count": 0,
+   "link_to": "Import Gate",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Stock Valuation Snapshot",
+   "link_count": 0,
+   "link_to": "Stock Valuation Snapshot",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Address Data Quality",
+   "link_count": 0,
+   "link_to": "Address Data Quality",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  }
+ ],
+ "modified": "2026-08-25 15:30:00.000000",
+ "modified_by": "Administrator",
+ "module": "Yht Custom",
+ "name": "KATC Reports",
+ "number_cards": [],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [],
+ "roles": [
+  {
+   "role": "Branch User"
+  },
+  {
+   "role": "Branch Manager"
+  },
+  {
+   "role": "Accounts Manager"
+  },
+  {
+   "role": "Accounts User"
+  },
+  {
+   "role": "Sales Manager"
+  },
+  {
+   "role": "Stock Manager"
+  }
+ ],
+ "sequence_id": 11.0,
+ "shortcuts": [
+  {
+   "color": "Blue",
+   "doc_view": "",
+   "label": "KATC Stock Ledger",
+   "link_to": "KATC Stock Ledger",
+   "type": "Report",
+   "report_ref_doctype": "Stock Ledger Entry"
+  },
+  {
+   "color": "Green",
+   "doc_view": "",
+   "label": "KATC General Ledger",
+   "link_to": "KATC General Ledger",
+   "type": "Report",
+   "report_ref_doctype": "GL Entry"
+  },
+  {
+   "color": "Orange",
+   "doc_view": "",
+   "label": "KATC Party & Account Ledger",
+   "link_to": "KATC Party & Account Ledger",
+   "type": "Report",
+   "report_ref_doctype": "GL Entry"
+  }
+ ],
+ "title": "KATC Reports"
+}

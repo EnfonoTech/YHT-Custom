@@ -51,7 +51,31 @@ def _escaped_list(values) -> str:
 
 #: MoM 2.5 — "Cancelled documents hidden from branch users". Appended to every
 #: branch filter rather than bolted on per doctype.
-def _hide_cancelled(doctype: str) -> str:
+#: Client sheet item 14 — "Cancelled file only view role branch manager role".
+BRANCH_MANAGER_ROLE = "Branch Manager"
+
+
+def can_see_cancelled(user: str | None = None) -> bool:
+	"""Item 14. Only a Branch Manager may see cancelled documents.
+
+	Read off the ROLE rather than a flag on the User, so this is one cached
+	lookup per request and usable from inside a permission query. System Manager
+	is included because a site administrator who cannot see a cancelled document
+	cannot investigate one.
+	"""
+	roles = frappe.get_roles(user or frappe.session.user)
+	return BRANCH_MANAGER_ROLE in roles or "System Manager" in roles
+
+
+def _hide_cancelled(doctype: str, user: str | None = None) -> str:
+	"""`docstatus != 2`, unless the caller is allowed to see cancelled documents.
+
+	Returns a clause that is always safe to AND into a WHERE. When the user MAY
+	see cancelled rows this returns a tautology rather than an empty string, so
+	callers that interpolate it unconditionally cannot produce `... AND `.
+	"""
+	if can_see_cancelled(user):
+		return "1 = 1"
 	return f"`tab{doctype}`.`docstatus` != 2"
 
 
@@ -81,7 +105,7 @@ def _warehouse_or_owner(doctype: str, header_fields: list[str], item_doctype: st
 	clauses.append(f"`tab{doctype}`.`owner` IN ({_escaped_list(peers)})")
 
 	scope = "(" + " OR ".join(clauses) + ")"
-	return f"{scope} AND {_hide_cancelled(doctype)}"
+	return f"{scope} AND {_hide_cancelled(doctype, user)}"
 
 
 def get_branch_peers(user: str | None = None) -> list[str]:
@@ -113,11 +137,11 @@ def _branch_peers_only(doctype: str, user: str) -> str:
 
 	peers = get_branch_peers(user)
 	if not peers:
-		return f"`tab{doctype}`.`owner` = {frappe.db.escape(user)} AND {_hide_cancelled(doctype)}"
+		return f"`tab{doctype}`.`owner` = {frappe.db.escape(user)} AND {_hide_cancelled(doctype, user)}"
 
 	return (
 		f"`tab{doctype}`.`owner` IN ({_escaped_list(peers)})"
-		f" AND {_hide_cancelled(doctype)}"
+		f" AND {_hide_cancelled(doctype, user)}"
 	)
 
 
