@@ -233,6 +233,7 @@
     <thead><tr><th style="width:90px">Version</th><th style="width:130px">Date</th><th>Change</th></tr></thead>
     <tbody>
       <tr><td>1.0</td><td>August 2026</td><td>First issue. Branch and administrator parts, written and screenshotted against the live UAT system.</td></tr>
+      <tr><td>1.2</td><td>25 August 2026</td><td>A5 gains <b>Show Purchase History</b>. A11 rewritten: ten report tiles, seven of them KATC's, with the Stock Ledger, General Ledger and new Party Ledger tiles opening the KATC versions built to the client's own column lists. B5 documents the seven <code>KATC</code> print formats and the form buttons that drive them, and states plainly that page numbers and a page-two letterhead cannot print on this server. New B6a covers the Branch Manager role and cancelled-document visibility.</td></tr>
       <tr><td>1.1</td><td>August 2026</td><td>Four branch reports added to A11 (Stock Sales, Collection, Branch Receivables, Customer Statement) plus Item Prices; the Customer Statement tile now opens a real statement rather than the General Ledger. New A12 covers Quick Create for customers and the Saudi national address. A4 documents the live Stock column; A5 documents the per-row discount and how it prints.</td></tr>
     </tbody>
   </table>
@@ -439,6 +440,18 @@
   <h3>Show Price History</h3>
   <p>The last 30 sales of that item — date, customer, quantity, rate, invoice. Open it when a
   customer says "you charged me less last time". The answer is on screen in one click.</p>
+
+  <h3>Show Purchase History</h3>
+  <p>Inside <span class="ui">Price Assist</span>, beside Show price history, there is
+  <span class="ui">Show purchase history</span>. It answers the other half of the pricing
+  question: what did <b>we</b> pay. Every purchase of that item — date, supplier, quantity, the
+  rate we paid, and the supplier's own bill number — and each row links straight to the Purchase
+  Invoice, so if a rate looks wrong you open the bill and see it.</p>
+  <div class="note">
+    <b>Use it when a customer pushes on price.</b>
+    Knowing what the item cost is what tells you how much room you actually have, rather than
+    guessing and discovering the margin afterwards.
+  </div>
   <div class="note">
     <b>You will get a quiet nudge.</b>
     Type a rate that differs from the last rate to that customer and a short message says how
@@ -571,9 +584,13 @@
 
 <section id="a-reports">
   <h2>A11 · Your reports</h2>
-  <p>The first four are yours — built for this branch, and each answers one question. The rest
+  <p>Seven of these are yours — built for this branch, and each answers one question. The rest
   are ERPNext's own. If two reports seem to answer the same thing, use the one whose name matches
   the question you actually have.</p>
+  <p>The <b>Stock Ledger</b>, <b>General Ledger</b> and <b>Party Ledger</b> tiles open the KATC
+  versions, built to the column list you asked for. ERPNext's own versions of the first two are
+  still there if you want them — search for them by name, or open the
+  <b>KATC Reports</b> screen, which lists every report on one page.</p>
   <table>
     <thead><tr><th>Report</th><th>Answers</th><th>Reach for it when</th></tr></thead>
     <tbody>
@@ -582,9 +599,10 @@
       <tr><td><b>Branch Receivables</b></td><td>Every unpaid invoice, aged into 0–30 / 31–60 / 61–90 / 90+</td><td>Working the debt oldest first</td></tr>
       <tr><td><b>Customer Statement</b></td><td>One customer's full account history, with a running balance</td><td>A customer queries their balance</td></tr>
       <tr><td><b>Stock Balance</b></td><td>How much of each item do I have, and what is it worth?</td><td>A customer asks if you have something</td></tr>
-      <tr><td><b>Stock Ledger</b></td><td>Every movement of an item, in date order</td><td>A quantity looks wrong and you need to see why</td></tr>
+      <tr><td><b>Stock Ledger</b></td><td>Every movement of an item, in date order — with <b>Qty In and Qty Out as two separate columns</b>, the running balance, the rate it was booked at, the valuation rate and the value left</td><td>A quantity looks wrong and you need to see why</td></tr>
       <tr><td><b>Receivables Summary</b></td><td>Who owes us, grouped by customer</td><td>A quick view across all customers at once</td></tr>
-      <tr><td><b>General Ledger</b></td><td>Every entry against an account</td><td>Checking how something was booked</td></tr>
+      <tr><td><b>General Ledger</b></td><td>One account — date, voucher, remarks, debit, credit and a running balance, starting from that account's real opening balance</td><td>Checking how something was booked</td></tr>
+      <tr><td><b>Party Ledger</b></td><td>The same six columns for one <b>customer or supplier</b>, across whichever accounts their entries landed in</td><td>A customer or supplier rings up about their balance</td></tr>
       <tr><td><b>Item Prices</b></td><td>The price list rate for every item</td><td>Quoting away from the screen</td></tr>
     </tbody>
   </table>
@@ -781,6 +799,38 @@
       <tr><td>Sales Invoice</td><td>—</td><td><b>No</b> — deliberately unset pending ZATCA onboarding</td></tr>
     </tbody>
   </table>
+  <h3>The KATC formats and the print buttons</h3>
+  <p>Seven further formats beginning <code>KATC</code> reproduce the layouts from the client's
+  previous system, on an HTML letterhead. They are reached from <b>buttons on the form</b>, not
+  from the print menu — the buttons pass the letterhead explicitly, which the print menu cannot
+  do for a document that still carries an older letterhead on it.</p>
+  <table>
+    <thead><tr><th>Doctype</th><th>Button</th><th>What you get</th></tr></thead>
+    <tbody>
+      <tr><td rowspan="2">Delivery Note</td><td><span class="ui">Print PDF</span></td><td><code>KATC Delivery Note</code> on the letterhead</td></tr>
+      <tr><td><span class="ui">Print Without LH</span></td><td>The same layout, header band left clear for pre-printed paper</td></tr>
+      <tr><td rowspan="2">Sales Invoice</td><td><span class="ui">Print PDF</span></td><td><code>KATC Tax Invoice</code> on the letterhead</td></tr>
+      <tr><td><span class="ui">Print Without LH</span></td><td>The same layout, header band clear</td></tr>
+      <tr><td rowspan="2">Sales Order</td><td><span class="ui">Print PDF</span></td><td><code>KATC Proforma Invoice</code> — prices and tax</td></tr>
+      <tr><td><span class="ui">Print Without LH</span></td><td><code>KATC Sales Order No LH</code> — a <b>different document</b>, not the same page with the header removed</td></tr>
+      <tr><td rowspan="3">Quotation</td><td><span class="ui">Print PDF</span></td><td><code>KATC Quotation</code> on the letterhead</td></tr>
+      <tr><td><span class="ui">Print Without LH</span></td><td><code>KATC Quotation No LH</code></td></tr>
+      <tr><td><span class="ui">Print Arabic with LH</span></td><td><code>KATC Quotation Arabic</code> — adds an Arabic item-name column</td></tr>
+    </tbody>
+  </table>
+  <div class="note">
+    <b>The older <code>YHT</code> formats are untouched and still available</b> from the printer
+    icon — including <code>YHT Delivery Note</code> with its customer and office copies. Nothing
+    was deleted and no doctype default was changed.
+  </div>
+  <div class="warn">
+    <b>Page numbers and a page-2 letterhead do not print on this server.</b>
+    The PDF engine installed here is built without the patches those need, so on a document that
+    runs past one page there is no page number, no letterhead on page two, and the column
+    headings do not repeat. Verified by rendering a 74-line quotation. It is the engine, not the
+    layout — changing it is a server task with its own maintenance window.
+  </div>
+
   <div class="warn">
     <b>Deleting print formats is how a doctype ends up with none.</b>
     ERPNext ships no format at all for Delivery Note, Quotation or Journal Entry. Journal Entry
@@ -821,6 +871,32 @@
     Without it, every installed app's <code>before_tests</code> hook fires, and ERPNext's
     deletes every <code>Item Price</code> row on the site. That has already happened once here
     — 4,847 rows, restored from backup.
+  </div>
+</section>
+
+<section id="b-roles-cancelled">
+  <h2>B6a · Branch Manager, and cancelled documents</h2>
+  <p>There are now two branch roles. <b>Branch User</b> is unchanged. <b>Branch Manager</b>
+  reaches everything a Branch User does — the same doctypes, the same branch scoping — plus one
+  thing that makes it a manager.</p>
+  <table>
+    <thead><tr><th style="width:190px">Role</th><th>Sees cancelled documents?</th></tr></thead>
+    <tbody>
+      <tr><td><code>Branch User</code></td><td><b>No.</b> Cancelled documents are filtered out of every list.</td></tr>
+      <tr><td><code>Branch Manager</code></td><td><b>Yes.</b> Cancelled documents stay visible.</td></tr>
+      <tr><td><code>System Manager</code></td><td>Yes — an administrator who cannot see a cancelled document cannot investigate one.</td></tr>
+    </tbody>
+  </table>
+  <div class="note">
+    <b>This is a role, not a tick box on the user.</b>
+    The rule is applied in the permission query itself, so it holds on list views, on search and
+    on the API — not only on screens somebody remembered to hide.
+  </div>
+  <div class="warn">
+    <b>The other five roles on the client's sheet were not built.</b>
+    Sales Junior, Sales Senior, Accounts Junior, Accounts Senior and a separate Administrator
+    role were listed as "details will update later" and the client has since confirmed only
+    Branch Manager is needed. Ask before assuming the others exist.
   </div>
 </section>
 

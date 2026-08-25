@@ -370,6 +370,48 @@ accountant: SI→`CN`, DN→`DRN`, PI→`DBN`, PR→`PRN`.
     guard) leaks into every later method of the same class — alphabetical order decides who sees
     it. Restore what you changed in a `finally`.
 
+51. 🔴 **AN AMPERSAND IN A SCRIPT REPORT'S NAME MAKES IT UNOPENABLE.** Frappe resolves the
+    report's Python module by scrubbing its NAME, and `frappe.scrub` only replaces spaces and
+    hyphens (`frappe/__init__.py:1475`) — `&` survives. "KATC Party & Account Ledger" resolved
+    to `...report.katc_party_&_account_ledger`, not a legal module name, and the desk raised
+    `ModuleNotFoundError` for anyone who opened it. **Every test passed**, because they imported
+    the module by a slug written in the test file rather than resolving it the way the desk
+    does. Test a report by scrubbing its STORED name and asserting the result matches
+    `^[a-z_][a-z0-9_]*$` before importing.
+52. 🔴 **THE GRID HAS AN ELEVEN-UNIT BUDGET AND FAILS BY DROPPING COLUMNS SILENTLY.**
+    `grid.js:setup_visible_columns` starts `total_colsize = 1`, adds each visible column's width
+    and hits `if (total_colsize > 11) return false;` — which stops the loop dead, so every
+    column AFTER the overflow simply never renders, with no error. Unhiding `uom` ran the total
+    to `item_code 4 + qty 2 + uom 2 + discount 2 = 11`, `rate` took it to 13, and **Rate, Amount,
+    Warehouse and Stock all disappeared together**. Set `columns` explicitly on every column in
+    the set and make them sum to ≤ 10.
+53. 🔴 **`row.toggle_editable(field, …)` IS A SILENT NO-OP ON A FRESHLY LOADED GRID.** It routes
+    to `grid_row.set_field_property`, which writes into `grid_form.fields_dict` /
+    `on_grid_fields_dict` and returns early on `if (!field) return;`. A grid row builds both
+    lazily, so on a form just loaded from the server they are EMPTY. Use the six-argument
+    `frm.set_df_property("items", "read_only", 1, frm.doc.name, "rate", row.name)`, which
+    resolves a per-row docfield through `frappe.meta.get_docfield` and refreshes that one cell.
+54. 🔴 **`map_docs` PASSES THE DIALOG'S `args` POSITIONALLY INTO SLOT THREE, AND ERPNEXT'S
+    MAPPERS DISAGREE ABOUT WHAT SLOT THREE IS.** `delivery_note.make_sales_invoice(source,
+    target, args)` vs `sales_order.make_sales_invoice(source, target, ignore_permissions, args)`
+    — so "Get Items From > Delivery Note" worked and "> Sales Order" 417'd with
+    `FrappeTypeError: 'ignore_permissions' should be Union[int, bool, float]`. The desk swallows
+    it: the dialog closes and the invoice is left empty. Fixed with an
+    `override_whitelisted_methods` shim that dispatches on TYPE, not position.
+55. ⚠️ **`get_mapped_doc` accepts a JSON STRING or a Document as `target_doc`, not a raw dict.**
+    A dict reaches `target_doc.has_permission` and raises `AttributeError`. The desk sends a
+    string; a test that passes a dict fails for a reason that has nothing to do with the code
+    under test.
+56. ⚠️ **A dismissed frappe dialog leaves its backdrop in the DOM.** Clicking the header close
+    hides the modal but the backdrop stays, so the NEXT dialog's buttons exist and are covered —
+    Playwright refuses the click for 30 s while the element sits right there. Hide via
+    `frappe.ui.open_dialogs.forEach(d => d.hide())`, remove `.modal-backdrop`, then click
+    in-page rather than through Playwright's actionability check.
+57. ⚠️ **A capture clip much longer than its narration is as bad as one that is too short.**
+    `fit-clips` retimes to the window, so a 50 s clip under a 15 s frame becomes a 0.29 factor —
+    visible fast-forward. The head of a report clip is loading, which the narration never
+    describes: trim the head, keep the tail, aim for ~1.15× the narration.
+
 ## Deploy
 
 Repo: **`git@github-yht:EnfonoTech/YHT-Custom.git`** (private). The box has a dedicated read-only deploy key at
