@@ -354,6 +354,50 @@ _NATIONAL_ADDRESS_MAP = (
 	("country", "country"),
 )
 
+#: Read alongside the map above so `_derive_building_and_street` can fall back to
+#: the fields this client's data ACTUALLY uses.
+_ADDRESS_EXTRA_FIELDS = ("address_line2",)
+
+
+def _derive_building_and_street(result: dict, row: dict) -> None:
+	"""Put the building number and the street in the right cells.
+
+	🔴 THE STRAIGHT MAP PRINTS THE BUILDING NUMBER AS THE STREET NAME. Measured on
+	this site's 577 Saudi addresses:
+
+	  * `custom_building_number` — our own custom field — is set on **43**
+	  * `address_line1` is set on **577**, and is PURELY NUMERIC on **362**
+	  * `address_line2` is set on **397**
+
+	So the client keeps the building number in `address_line1` and the street in
+	`address_line2`. Reading `address_line1` as the street printed `6823` under
+	"Street Name" on `VTSI-KT-6925` while the incumbent printed "Prince Sultan
+	Road" for the same document.
+
+	The rule, in order:
+	  * building — our custom field if someone filled it, else `address_line1`
+	    when it is nothing but digits
+	  * street  — `address_line2` if present, else `address_line1` when it is NOT
+	    purely numeric (an address written the ordinary way, all on one line)
+
+	Anything unrecognised stays blank rather than guessing: a wrong street on a
+	ZATCA invoice is worse than an empty one.
+	"""
+	line1 = cstr(row.get("address_line1")).strip()
+	line2 = cstr(row.get("address_line2")).strip()
+	line1_is_number = bool(line1) and line1.isdigit()
+
+	if not result.get("building") and line1_is_number:
+		result["building"] = line1
+
+	if line2:
+		result["street"] = line2
+	elif line1_is_number:
+		# line1 was the building number and there is no line2 — no street on file.
+		result["street"] = ""
+	else:
+		result["street"] = line1
+
 
 def yht_national_address(doc, address_field: str = "customer_address") -> dict:
 	"""Saudi national address for the linked `Address`, as seven string keys.
@@ -362,10 +406,15 @@ def yht_national_address(doc, address_field: str = "customer_address") -> dict:
 	defaulting to `""` — a print format renders these straight into cells, so
 	`None` would print the word "None".
 
-	ONE read per document, not one per field and certainly not one per row: of 578
-	Saudi addresses on this site 578 have no district and 535 no building number,
-	so most of these come back empty and it would be easy to write something that
-	probes each field separately.
+	ONE read per document, not one per field and certainly not one per row.
+
+	⚠️ THE "578 OF 578 HAVE NO DISTRICT" FIGURE WAS MEASURED AGAINST THE WRONG
+	FIELD. It counted `custom_area`, which our own provisioning created and which
+	is populated on **0 of 577** addresses. The district this client actually
+	types lives in `county`, populated on **320**. `county` is not clean — some
+	rows carry a city there, some a region — so it is deliberately NOT mapped
+	here yet; that needs the client to say which is authoritative. Recorded so
+	the next person does not repeat the measurement.
 
 	A missing or deleted Address returns all-empty rather than raising. Nothing
 	about a print may depend on the buyer having a complete address — that is the
@@ -388,14 +437,44 @@ def yht_national_address(doc, address_field: str = "customer_address") -> dict:
 	if not available:
 		return blank
 
-	row = frappe.db.get_value("Address", address, [f for _k, f in available], as_dict=True)
+	extra = [f for f in _ADDRESS_EXTRA_FIELDS if frappe.db.has_column("Address", f)]
+	row = frappe.db.get_value(
+		"Address", address, [f for _k, f in available] + extra, as_dict=True
+	)
 	if not row:
 		return blank
 
 	result = dict(blank)
 	for key, fieldname in available:
 		result[key] = cstr(row.get(fieldname)).strip()
+	_derive_building_and_street(result, row)
 	return result
+
+
+def yht_party_vat(doc, party_field: str = "customer") -> str:
+	"""The buyer's VAT registration number, for the tax-invoice buyer block.
+
+	🔴 `doc.tax_id` IS OFTEN EMPTY ON HISTORICAL DOCUMENTS. It is copied from the
+	Customer when the document is created, so anything imported — or created
+	before the Customer's `tax_id` was filled in — carries NULL and printed a
+	blank "VAT Number" cell while the incumbent printed the number. Measured on
+	`VTSI-KT-6925`: `Sales Invoice.tax_id` is NULL, `Customer.tax_id` is
+	311278176700003.
+
+	So: the document's own value wins (it is what was true at invoice time and is
+	what ZATCA reported), and the Customer is the fallback for the rows that never
+	got one. `frappe.db.get_value`, not `get_doc` — it runs no permission check,
+	so a branch user still gets a complete invoice.
+	"""
+	stored = cstr(doc.get("tax_id") if hasattr(doc, "get") else "").strip()
+	if stored:
+		return stored
+
+	party = doc.get(party_field) if hasattr(doc, "get") else None
+	if not party:
+		return ""
+	doctype = "Customer" if party_field == "customer" else "Supplier"
+	return cstr(frappe.db.get_value(doctype, party, "tax_id") or "").strip()
 
 
 def yht_sales_person(doc) -> str:

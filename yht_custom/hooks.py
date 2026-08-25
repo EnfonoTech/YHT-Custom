@@ -225,6 +225,7 @@ jinja = {
 		"yht_custom.print_helpers.yht_katc_email",
 		"yht_custom.print_helpers.yht_katc_spacer_pt",
 		"yht_custom.print_helpers.yht_company_vat",
+		"yht_custom.print_helpers.yht_party_vat",
 		"yht_custom.print_helpers.yht_row_taxes",
 		"yht_custom.print_helpers.yht_national_address",
 		"yht_custom.print_helpers.yht_sales_person",

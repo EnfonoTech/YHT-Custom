@@ -51,7 +51,7 @@ import unittest
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
-from frappe.utils import flt
+from frappe.utils import cstr, flt
 
 from yht_custom import letterhead, print_helpers, setup
 
@@ -2131,3 +2131,80 @@ class TestPrintPermissions(FrappeTestCase):
 
 if __name__ == "__main__":
 	unittest.main()
+
+
+class TestBuyerBlockFields(FrappeTestCase):
+	"""The buyer block read four fields and three of them were the wrong ones."""
+
+	def test_the_building_number_is_not_printed_as_the_street(self):
+		"""🔴 THE REGRESSION. `address_line1` holds the BUILDING NUMBER on this site.
+
+		Reading it as the street printed `6823` under "Street Name" on
+		`VTSI-KT-6925` while the incumbent printed "Prince Sultan Road".
+		"""
+		helper = frappe.get_attr("yht_custom.print_helpers.yht_national_address")
+		# `regexp` is not a frappe filter operator — parameterised SQL instead.
+		rows = frappe.db.sql(
+			"""SELECT name FROM `tabAddress`
+			   WHERE country = %s AND address_line1 REGEXP '^[0-9]+$'
+			         AND IFNULL(address_line2, '') <> '' LIMIT 1""",
+			("Saudi Arabia",),
+		)
+		address = rows[0][0] if rows else None
+		if not address:
+			self.skipTest("no address with a numeric line1 and a line2")
+		line1, line2 = frappe.db.get_value("Address", address, ["address_line1", "address_line2"])
+		out = helper(frappe._dict(customer_address=address), "customer_address")
+		self.assertEqual(out["street"], cstr(line2).strip(), "street must come from address_line2")
+		self.assertNotEqual(out["street"], cstr(line1).strip(), "the building number reached the street cell")
+		self.assertEqual(out["building"], cstr(line1).strip(), "building must come from the numeric line1")
+
+	def test_a_one_line_address_keeps_its_street(self):
+		"""The other shape: no line2, and line1 is a real street rather than a number.
+
+		215 of 577 addresses here are written that way. Treating line1 as the
+		building number for those would blank the street instead of fixing it.
+		"""
+		helper = frappe.get_attr("yht_custom.print_helpers.yht_national_address")
+		rows = frappe.db.sql(
+			"""SELECT name FROM `tabAddress`
+			   WHERE country = %s AND address_line1 NOT REGEXP '^[0-9]+$'
+			         AND IFNULL(address_line1, '') <> ''
+			         AND IFNULL(address_line2, '') = '' LIMIT 1""",
+			("Saudi Arabia",),
+		)
+		address = rows[0][0] if rows else None
+		if not address:
+			self.skipTest("no single-line address on this site")
+		line1 = frappe.db.get_value("Address", address, "address_line1")
+		out = helper(frappe._dict(customer_address=address), "customer_address")
+		self.assertEqual(out["street"], cstr(line1).strip())
+		self.assertEqual(out["building"], "", "a non-numeric line1 is not a building number")
+
+	def test_a_missing_address_still_returns_every_key(self):
+		helper = frappe.get_attr("yht_custom.print_helpers.yht_national_address")
+		out = helper(frappe._dict(customer_address=None), "customer_address")
+		for key in ("building", "street", "district", "city", "pincode", "additional", "country"):
+			self.assertEqual(out[key], "", f"{key} must default to empty, never None")
+
+	def test_the_buyer_vat_falls_back_to_the_customer(self):
+		"""`doc.tax_id` is NULL on imported invoices; the Customer still has one."""
+		vat = frappe.get_attr("yht_custom.print_helpers.yht_party_vat")
+		customer = frappe.db.get_value("Customer", {"tax_id": ["!=", ""]}, "name")
+		if not customer:
+			self.skipTest("no customer carries a tax_id")
+		expected = cstr(frappe.db.get_value("Customer", customer, "tax_id")).strip()
+		self.assertEqual(vat(frappe._dict(customer=customer, tax_id=None)), expected)
+		self.assertEqual(vat(frappe._dict(customer=customer, tax_id="")), expected)
+
+	def test_the_documents_own_vat_wins(self):
+		"""What was true at invoice time is what ZATCA reported. Do not overwrite it."""
+		vat = frappe.get_attr("yht_custom.print_helpers.yht_party_vat")
+		customer = frappe.db.get_value("Customer", {"tax_id": ["!=", ""]}, "name")
+		if not customer:
+			self.skipTest("no customer carries a tax_id")
+		self.assertEqual(vat(frappe._dict(customer=customer, tax_id="300000000000003")), "300000000000003")
+
+	def test_no_party_and_no_tax_id_is_blank_not_none(self):
+		vat = frappe.get_attr("yht_custom.print_helpers.yht_party_vat")
+		self.assertEqual(vat(frappe._dict(customer=None, tax_id=None)), "")
