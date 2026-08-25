@@ -28,6 +28,13 @@ app_include_css = "/assets/yht_custom/css/yht_custom.css?v=7"
 # which matters because builds are limited to the maintenance window.
 doctype_js = {
 	"Item": "public/js/item_code_from_group.js",
+	# The client's incumbent print buttons (Print PDF / Print Without LH, plus
+	# Print Arabic with LH on Quotation). ONE file under four doctypes — it guards
+	# its own registration so the handlers cannot stack up across a session.
+	"Delivery Note": "public/js/katc_print_buttons.js",
+	"Sales Invoice": "public/js/katc_print_buttons.js",
+	"Sales Order": "public/js/katc_print_buttons.js",
+	"Quotation": "public/js/katc_print_buttons.js",
 }
 doctype_list_js = {}
 
@@ -223,6 +230,20 @@ jinja = {
 		"yht_custom.print_helpers.yht_line_discount",
 		"yht_custom.print_helpers.yht_discount_total",
 		"yht_custom.print_helpers.yht_currency",
+		# The KATC client prints. Every path here is resolved when the jinja
+		# environment is built, so one that does not import 500s EVERY website page,
+		# /login included, until the workers reload (gotcha 25).
+		"yht_custom.print_helpers.yht_katc_lh",
+		"yht_custom.print_helpers.yht_katc_email",
+		"yht_custom.print_helpers.yht_katc_spacer_pt",
+		"yht_custom.print_helpers.yht_company_vat",
+		"yht_custom.print_helpers.yht_party_vat",
+		"yht_custom.print_helpers.yht_row_taxes",
+		"yht_custom.print_helpers.yht_national_address",
+		"yht_custom.print_helpers.yht_sales_person",
+		"yht_custom.print_helpers.yht_creator_contact",
+		"yht_custom.print_helpers.yht_zatca_qr",
+		"yht_custom.print_helpers.yht_bank_details",
 	],
 }
 

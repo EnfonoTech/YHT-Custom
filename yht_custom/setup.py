@@ -18,6 +18,7 @@ from yht_custom.setup_property_setters import setup_ignore_user_permissions
 from yht_custom.discount_totals import setup_discount_grid_columns
 from yht_custom.saudi_address import ADDRESS_CUSTOM_FIELDS
 from yht_custom.letterhead import setup_branch_letterheads
+from yht_custom.katc_letterhead import setup_katc_letterhead
 from yht_custom.hr_setup import setup_hr
 from yht_custom.sales_assist import setup_sales_assist_columns
 from yht_custom.workspace_shortcuts import setup_new_shortcuts
@@ -133,6 +134,21 @@ BRANCH_USER_PERMISSIONS = [
 	# Bank Account exposes the account number and IBAN — there is no permlevel
 	# split on that doctype — so it is a client decision, not a code one.
 	# Tracked as the expected failure in tests/test_sales_cycle.py.
+	#
+	# ⚠️ ONE CONSEQUENCE OF THAT DECISION, WRITTEN DOWN RATHER THAN LEFT IMPLICIT.
+	# `print_helpers.yht_bank_details()` reads the designated receiving account with
+	# `frappe.db.get_value` precisely so the KATC formats stay printable for a role
+	# denied that read. It takes no arguments and applies no permission check of its
+	# own, and a `jinja` hook method lands in the SITE-WIDE template namespace — not
+	# only in the KATC print formats. So anyone who can author a template
+	# (Notification, Email Template, Web Page, Print Format Builder HTML) can render
+	# the IBAN regardless of their `Bank Account` permission.
+	#
+	# That is the approved trade (Q5: one designated receiving account prints on a
+	# customer-facing quotation), and it is bounded because `Branch User` holds NO
+	# create right on any of those four doctypes: none of them appears in this list,
+	# and the role is in no standard DocPerm for them either. Re-check that sentence
+	# before adding any of the four here.
 ]
 
 #: Every permission flag a Custom DocPerm row carries that we are willing to set.
@@ -177,6 +193,7 @@ PROVISIONING_STEPS = (
 	"setup_expense_invoice",
 	"setup_branch_series",
 	"setup_branch_letterheads",
+	"setup_katc_letterhead",
 	"setup_default_print_formats",
 	"setup_form_layout",
 	"setup_discount_grid_columns",
@@ -232,6 +249,7 @@ def _imported(name):
 		"setup_site_defaults": setup_site_defaults,
 		"setup_discount_grid_columns": setup_discount_grid_columns,
 		"setup_branch_letterheads": setup_branch_letterheads,
+		"setup_katc_letterhead": setup_katc_letterhead,
 		"setup_hr": setup_hr,
 		"setup_sales_assist_columns": setup_sales_assist_columns,
 		"setup_new_shortcuts": setup_new_shortcuts,
