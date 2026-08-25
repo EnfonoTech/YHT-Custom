@@ -11,14 +11,33 @@ from yht_custom import sales_assist
 
 
 class TestLiveStockColumn(FrappeTestCase):
-	def test_available_stock_shows_in_every_item_grid(self):
-		for doctype, fieldname, label in sales_assist.GRID_COLUMNS:
-			with self.subTest(doctype=doctype):
+	def test_every_configured_column_shows_in_the_item_grid(self):
+		"""GRID_COLUMNS carries a per-column `read_only` since UOM joined it.
+
+		`actual_qty` is fetched and must not be typeable; `uom` is a real choice on
+		the line and locking it would stop an operator selling in cartons. Asserting
+		one blanket value for both would have hidden whichever one was wrong.
+		"""
+		for doctype, fieldname, label, read_only in sales_assist.GRID_COLUMNS:
+			with self.subTest(doctype=doctype, fieldname=fieldname):
 				field = frappe.get_meta(doctype).get_field(fieldname)
 				self.assertTrue(field, f"{doctype} has no {fieldname}")
-				self.assertTrue(field.in_list_view, f"{doctype} hides available stock")
+				self.assertTrue(field.in_list_view, f"{doctype} hides {fieldname}")
 				self.assertEqual(field.label, label)
-				self.assertTrue(field.read_only, "a fetched figure must not be typeable")
+				self.assertEqual(
+					cint(field.read_only), cint(read_only),
+					f"{doctype}.{fieldname} read_only must be {read_only}",
+				)
+
+	def test_the_uom_column_is_editable_everywhere(self):
+		"""🔴 The one that would bite silently: a locked UOM blocks selling by carton."""
+		for doctype, fieldname, _label, _ro in sales_assist.GRID_COLUMNS:
+			if fieldname != "uom":
+				continue
+			with self.subTest(doctype=doctype):
+				field = frappe.get_meta(doctype).get_field("uom")
+				self.assertTrue(field.in_list_view, f"{doctype} hides UOM (client sheet item 10)")
+				self.assertFalse(cint(field.read_only), f"{doctype}.uom must stay editable")
 
 	def test_erpnext_already_populates_it(self):
 		"""The reason this needed no new code.

@@ -28,20 +28,34 @@ guessed at: `payment_terms_coverage()`.
 import frappe
 from frappe.utils import cint, flt
 
-#: (doctype, fieldname, label) to surface in the item grid.
+#: (doctype, fieldname, label, read_only) to surface in the item grid.
+#:
+#: `read_only` matters per column: `actual_qty` is a figure ERPNext fetches and
+#: nobody types, but `uom` is a genuine choice on the line — locking it would stop
+#: an operator selling in cartons.
+#:
+#: UOM is client-sheet item 10, which spells the item table out field by field:
+#: "(No, Item code, item name, qty, uom, rate, item discount, total)". Only
+#: `Delivery Note Item` ships with `uom` in the grid by ERPNext default; the other
+#: three had it only if a user had added it through Configure Columns, which is a
+#: per-user setting and invisible to everyone else.
 GRID_COLUMNS = (
-	("Sales Invoice Item", "actual_qty", "Stock"),
-	("Sales Order Item", "actual_qty", "Stock"),
-	("Delivery Note Item", "actual_qty", "Stock"),
-	("Quotation Item", "actual_qty", "Stock"),
+	("Sales Invoice Item", "actual_qty", "Stock", "1"),
+	("Sales Order Item", "actual_qty", "Stock", "1"),
+	("Delivery Note Item", "actual_qty", "Stock", "1"),
+	("Quotation Item", "actual_qty", "Stock", "1"),
+	("Sales Invoice Item", "uom", "UOM", "0"),
+	("Sales Order Item", "uom", "UOM", "0"),
+	("Delivery Note Item", "uom", "UOM", "0"),
+	("Quotation Item", "uom", "UOM", "0"),
 )
 
 
 def setup_sales_assist_columns() -> dict:
-	"""Show available stock in the item grid. Idempotent, only ever unhides."""
+	"""Show available stock and the UOM in the item grid. Idempotent, only unhides."""
 	applied, already, failed = 0, 0, []
 
-	for doctype, fieldname, label in GRID_COLUMNS:
+	for doctype, fieldname, label, read_only in GRID_COLUMNS:
 		if not frappe.get_meta(doctype).get_field(fieldname):
 			failed.append(f"{doctype}: no {fieldname}")
 			continue
@@ -49,8 +63,7 @@ def setup_sales_assist_columns() -> dict:
 		for prop, value, prop_type in (
 			("in_list_view", "1", "Check"),
 			("label", label, "Data"),
-			# The column is a fetched figure, never something an operator types.
-			("read_only", "1", "Check"),
+			("read_only", read_only, "Check"),
 		):
 			existing = frappe.db.get_value(
 				"Property Setter",
