@@ -252,3 +252,55 @@ class TestReportsWorkspace(FrappeTestCase):
 					frappe.db.exists(row.link_type, row.link_to),
 					f"{row.link_type} {row.link_to} does not exist",
 				)
+
+
+class TestDashboardReportTiles(FrappeTestCase):
+	"""The branch dashboard's Reports row.
+
+	This row already shipped one tile that opened a DIFFERENT report from the one on
+	its label — "Customer Statement" opened General Ledger from the day it was built.
+	So the tiles are parsed out of the page JS and checked against the database.
+	"""
+
+	def _tiles(self):
+		import re
+		path = frappe.get_app_path(
+			"yht_custom", "yht_custom", "page", "yht_dashboard", "yht_dashboard.js"
+		)
+		src = open(path, encoding="utf-8").read()
+		block = re.search(r"const REPORTS = \[(.*?)\n\];", src, re.S)
+		self.assertTrue(block, "could not find the REPORTS list in the dashboard JS")
+		return re.findall(r'label:\s*"([^"]+)".*?report:\s*"([^"]+)"', block.group(1))
+
+	def test_every_tile_opens_a_report_that_exists(self):
+		tiles = self._tiles()
+		self.assertTrue(tiles, "no report tiles parsed")
+		for label, report in tiles:
+			with self.subTest(tile=label):
+				self.assertTrue(
+					frappe.db.exists("Report", report),
+					f'tile "{label}" opens "{report}", which does not exist',
+				)
+
+	def test_the_ledger_tiles_open_the_KATC_reports(self):
+		"""🔴 Client sheet items 7, 8 and 9 asked for THEIR column lists.
+
+		Pointing these tiles at ERPNext's own Stock Ledger and General Ledger would
+		train every branch user on the reports the client asked to have replaced.
+		"""
+		tiles = dict((label, report) for label, report in self._tiles())
+		self.assertEqual(tiles.get("Stock Ledger"), "KATC Stock Ledger")
+		self.assertEqual(tiles.get("General Ledger"), "KATC General Ledger")
+		self.assertEqual(tiles.get("Party Ledger"), "KATC Party and Account Ledger")
+
+	def test_a_branch_user_may_actually_open_each_tile(self):
+		"""A tile the role cannot reach bounces them back to the dashboard."""
+		for label, report in self._tiles():
+			with self.subTest(tile=label):
+				roles = frappe.get_all(
+					"Has Role", filters={"parent": report, "parenttype": "Report"}, pluck="role"
+				)
+				self.assertTrue(
+					set(roles) & {"Branch User", "Branch Manager"},
+					f'"{report}" is on the branch dashboard but no branch role can open it',
+				)

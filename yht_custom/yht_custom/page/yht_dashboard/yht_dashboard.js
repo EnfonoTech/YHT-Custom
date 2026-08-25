@@ -162,9 +162,18 @@ const REPORTS = [
 	{ icon: "wallet", label: "Collection", desc: "Money received", report: "Collection" },
 	{ icon: "clock", label: "Branch Receivables", desc: "Outstanding, aged", report: "Branch Receivables" },
 	{ icon: "layers", label: "Stock Balance", desc: "Current stock levels", report: "Stock Balance" },
-	{ icon: "book", label: "Stock Ledger", desc: "Stock transactions", report: "Stock Ledger" },
+	// 🔴 THESE TWO TILES POINT AT THE KATC REPORTS, NOT ERPNEXT'S.
+	// Client sheet items 7 and 8 ask for a stock ledger and a general ledger with
+	// THEIR column list — qty in and qty out as two columns rather than one signed
+	// number, and six columns on the GL instead of eighteen. Leaving the tiles on
+	// ERPNext's reports would train every branch user on the report the client
+	// asked to have replaced. ERPNext's originals stay reachable by search and on
+	// the KATC Reports workspace for anyone who wants them.
+	{ icon: "book", label: "Stock Ledger", desc: "Every movement, in and out", report: "KATC Stock Ledger" },
 	{ icon: "activity", label: "Receivables Summary", desc: "Party-wise aging", report: "Accounts Receivable Summary" },
-	{ icon: "ledger", label: "General Ledger", desc: "Account transactions", report: "General Ledger" },
+	{ icon: "ledger", label: "General Ledger", desc: "One account, running balance", report: "KATC General Ledger" },
+	// Item 9 — one party's ledger, which is the question asked when a customer rings.
+	{ icon: "statement", label: "Party Ledger", desc: "One customer or supplier", report: "KATC Party and Account Ledger" },
 	// This tile said "Customer Statement" and opened General Ledger from the day the
 	// dashboard was built — a different name, different filters, every party in the
 	// company on it. It now opens the report it always claimed to.
