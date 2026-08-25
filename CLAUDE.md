@@ -238,6 +238,126 @@ accountant: SI→`CN`, DN→`DRN`, PI→`DBN`, PR→`PRN`.
     `Tools/Video Generator` carries both `.profile-capture/` and `.profile-dryrun/`; ignoring only the
     first staged eight `Default/Cookies` databases for commit. Glob `.profile-*/` plus explicit
     `Cookies` / `Login Data` / `Web Data` patterns.
+34. **A Jinja print format gets NO letterhead unless it renders one itself.**
+    `get_rendered_template` puts `letter_head` into the template args as a *string* for every
+    template, but `add_header` — the macro that actually injects it — lives only in
+    `standard.html`. A custom Jinja format that never writes `{{ letter_head }}` simply prints
+    without one, silently. The KATC formats render it inside the OUTER table's `<thead>`, which is
+    also what repeats it on page 2+ (verified: `quote Print 1.pdf` carries it on both pages).
+35. **`get_letter_head` prefers `doc.letter_head` over the default, so pass `letterhead=`
+    EXPLICITLY.** Precedence is explicit argument → `doc.letter_head` → the `is_default` record. On
+    this site documents carry `letter_head = "KATHOOM ALKHOBAR"` (the incumbent image) or the
+    dangling `"Kathoom without letterhead"` (1,266 of them), so a format rendering a bare
+    `{{ letter_head }}` prints the OLD image on a new layout. Two defences, both needed: the buttons
+    pass `letterhead=KATC Letterhead`, and each KATC format renders the letterhead only when it
+    carries the `katc-lh` marker class — so `frappe.get_print` and email attachments are safe too.
+36. **`display:flex` is unreliable under wkhtmltopdf.** 0.12.x runs an old WebKit. Every layout in a
+    print format is a `<table>`. The client's supplied letterhead HTML was flex-based and was
+    rebuilt as a table for exactly this reason.
+37. **`<thead>` repeats the header; `#footer-html` repeats the page number — ⚠️ BUT NOT ON THIS BOX; read gotcha 44 first.** `prepare_header_footer`
+    lifts `id="footer-html"` out of the rendered page and hands it to wkhtmltopdf as
+    `--footer-html`, which is the ONLY way `<span class="page">` / `<span class="topage">` resolve —
+    a browser print dialog leaves them empty, which is why the buttons use `download_pdf` rather
+    than `/printview?trigger_print=1`. Hide it in the browser view with
+    `.print-format-gutter #footer-html { display: none; }`. And the `<thead>` trick only works if the
+    outer `<tbody>` cell sets `page-break-inside: auto` — a table cell defaults to `avoid`, which
+    shoves the whole document onto one page.
+38. **The Arabic item name lives on the CHILD ROW, under a per-doctype fieldname** (extends gotcha
+    22 with measured counts). `Sales Invoice Item.custom_item_arabic_name` 11,507 rows,
+    `item_arabic_name` 8,055; `Quotation Item.custom_item_name_in_arabic` 20,850; Delivery Note Item
+    7,356; Sales Order Item 6,096. At **Item** level, `custom_item_name_in_arabic` has a column and
+    3,857 rows but **no DocField** — purged, data left behind — so the old `yht_item_ar` was reading
+    orphaned data and worked only by accident. Read the row first (it is already loaded: no query),
+    fall back to Item once per distinct `item_code` per request, never per row.
+39. **`Bank Account` must be read with `frappe.db`, never `frappe.get_doc` — including from a print
+    format.** `erpnext`'s controller calls `frappe.has_permission("Bank Account", ptype="read",
+    doc=…, throw=True)`, which **no `ignore_permissions` flag suppresses**, and this project denies
+    branch users that read on purpose. This already broke the payment flow once. The same trap
+    applies to `frappe.db.get_value` *inside a template*: the print sandbox rebinds `frappe.db.*` to
+    `safe_exec`'s permission-checked wrappers, which throw for a role lacking `read`. Resolve
+    anything a print format needs in ordinary server-side Python in `print_helpers`, and hand the
+    template a plain dict.
+40. **A `Letter Head` CANNOT be created as `source = "HTML"` in one call.**
+    `LetterHead.before_insert` runs `self.source = "Image"` unconditionally ("for better UX, let
+    user set from attachment") *after* the field values are applied, so the `source` handed to
+    `get_doc` is discarded on every insert. It survives only because `set_image()` returns early
+    when `image` is empty — so the bilingual `content` prints correctly while the desk shows an
+    Image letterhead with no image, and attaching one silently replaces the whole block. Put it
+    back with `db_set("source", "HTML")` after `.insert()`, and **compare `source` in the
+    "has this changed" check** or the repair branch is unreachable on every later migrate. Same
+    method, same hazard: `validate_disabled_and_default` sets `is_default = 1` whenever the site
+    has no other default.
+41. **`download_pdf`'s language parameter is `language`, not `_lang`.** Frappe's own printview
+    toolbar builds `&_lang=`, which is where it gets copied from — but the API handler filters
+    `frappe.form_dict` through `get_newargs`, so `_lang` never reaches
+    `frappe.utils.print_format.download_pdf(doctype, name, format, doc, no_letterhead, language,
+    letterhead)` and the print silently runs in the user's language. A Print Format's
+    `default_print_language` does NOT cover this either: it is read only by Notification and
+    Workflow Action, never on the print/PDF path.
+42. **`row_net × document_vat_rate` is the wrong way to print a per-line tax.** It is right only
+    when every line carries the same single `On Net Total` charge. One zero-rated line, a second
+    `On Net Total` charge (the rates ADD), an `Actual` charge (`rate` is 0, so the whole column
+    prints `0.00`) or an inclusive tax each give a column that does not sum to the VAT total
+    printed below it. ERPNext already did the split: read `taxes[].item_wise_tax_detail`, keyed on
+    `item_code or item_name`. Two shapes are in the wild — `[rate, amount]` and the current
+    `{"tax_rate", "tax_amount", "net_amount"}` — and the stored amounts are in **company**
+    currency (`× conversion_rate`), so scale the map onto `doc.total_taxes_and_charges`.
+43. **`Total after Discount` is not `net_total`.** `net_total` only carries the additional discount
+    when `apply_discount_on == "Net Total"`; with the discount on Grand Total it is still the
+    pre-discount figure, so the line prints the same number as `Total`. And print
+    `rounded_total or grand_total`, never bare `grand_total` — ERPNext derives `in_words` from the
+    former, so with rounding on, the figure and the words disagree on a customer-facing document.
+44. 🔴 **THIS BOX'S `wkhtmltopdf` IS BUILT AGAINST AN UNPATCHED QT, SO HEADERS AND FOOTERS DO NOT
+    EXIST — and neither does the `<thead>` repeat. This CORRECTS gotcha 37.** `wkhtmltopdf
+    --version` prints a bare `0.12.6` with no `(with patched qt)`, and `--extended-help` says so
+    outright: *"compiled against a version of QT without the wkhtmltopdf patches … some features
+    are missing"*. Measured on EFTSP-013, three ways: `--footer-center "x"` produces a
+    byte-identical PDF; frappe's extracted `--footer-html` (confirmed present in
+    `prepare_options`, pointing at a real temp file) renders nothing; and a `<thead>` does **not**
+    repeat on page 2 even for a 120-row table, with or without `page-break-inside: auto`. So on
+    this bench **`Page N of M` cannot resolve and a letterhead cannot repeat on page 2 by any
+    markup route** — `--header-html` is equally dead. Anything that needs either has to wait for a
+    static/patched wkhtmltopdf build, or move the format to the `chrome` `pdf_generator`. Check
+    the build before promising a client page numbers.
+45. 🔴 **A SECOND `<span dir="ltr">` ON ONE RTL LINE OVERLAPS UNDER wkhtmltopdf.** The KATC
+    letterhead's Arabic address line wrapped three numerics that way and came back as two runs of
+    glyphs printed on top of each other; the CR/VAT line did the same. One span per line is fine —
+    the phone and e-mail lines render correctly. A **bare digit run needs no span at all**: the
+    bidi algorithm already reads European numerals left-to-right inside an RTL paragraph. This is
+    invisible in the browser print view and only a rendered PDF shows it, which is exactly why the
+    spec says to verify RTL by rendering rather than by reading.
+46. ⚠️ **Letterhead column percentages must sum to 100.** The KATC head shipped 47% / 23% / 47%
+    (= 117%) straight out of the artefact's own proportions. With `white-space: nowrap` on the
+    company names the table then exceeds the page, `--disable-smart-shrinking` is on for
+    wkhtmltopdf > 0.12.3, and the right-most (Arabic) column is clipped mid-word. 42/16/42 fits;
+    the logo column only has to clear the image's fixed `31mm`.
+47. 🔴 **A PRINT FORMAT'S CSS `pt` IS NOT A PDF `pt` — NEVER COMPUTE A PAGE POSITION BY ADDING
+    THEM UP.** Measured on the KATC no-letterhead spacer: raising it from **24 pt to 154 pt**, a
+    130 pt change, moved the rendered body **99.7 pt** — a factor of ≈0.767, consistent across
+    formats. So "the letterhead band is 86.2 pt, therefore 86.2 + 24 = a 110 pt spacer" is wrong
+    twice: 110 pt actually produced a 3.7 pt drop, not 24. Set any such length by rendering,
+    measuring with `pdftotext -bbox`, and solving — the spec's own rule, and the reason
+    `katc_letterhead.NO_LH_SPACER_PT` carries its measurement in a comment. It is also why the
+    number lives in ONE place: seven format JSONs reach it through `yht_katc_spacer_pt()`.
+48. ⚠️ **`pdf_generator: "chrome"` on a Print Format does NOTHING unless an app implements the
+    `pdf_generator` HOOK. This narrows gotcha 44's escape route.** `frappe/utils/print_utils.py:44`
+    really does fall back to `frappe.get_cached_value("Print Format", …, "pdf_generator")`, and the
+    field really is on the DocType in v15.118.0 — but `:69-97` only routes a non-`wkhtmltopdf`
+    value through `frappe.get_hooks("pdf_generator")`, and if no hook returns bytes it drops
+    through to `get_pdf()`, i.e. wkhtmltopdf. No installed app on this bench (frappe, erpnext,
+    hrms, ksa_compliance, arabic_translation, grey_theme, yht_custom) registers one; that hook
+    ships with `print_designer`. So switching engines is an app install plus a full layout
+    re-verification, not a JSON field.
+49. ⚠️ **`frappe.log_error(title, message)` — the FIRST positional is the title, and it is 140
+    characters.** Passing a long diagnostic first raises `CharacterLengthExceededError` *from
+    inside the error logger*, which then aborts whatever was only trying to warn. Pass keywords.
+    Several older call sites in this app still pass the message first; they survive only because
+    their text is short.
+50. ⚠️ **`FrappeTestCase` rolls back once per CLASS, not per test — this corrects gotcha 12.**
+    `frappe/tests/utils.py:46` registers the rollback with `addClassCleanup(_rollback_db)`. A test
+    that flips a shared column (here: taking `is_default` off every `Letter Head` to exercise the
+    guard) leaks into every later method of the same class — alphabetical order decides who sees
+    it. Restore what you changed in a `finally`.
 
 ## Deploy
 
@@ -332,6 +452,7 @@ Second round, also 2026-08-20:
 | 6.6 Customer Statement | **done** — ledger-based; the dashboard tile no longer opens General Ledger |
 | **7.1 import gate** | **done** — `Import Gate` + `Stock Valuation Snapshot` reports, 11 checks |
 | Address worklist | **done** — `Address Data Quality` + a Data-Import-ready CSV |
+| **client prints & HTML letterhead** | **in review, NOT done** — `KATC Letterhead` (HTML) + seven `KATC *` Jinja formats + the incumbent's toolbar buttons on all four selling doctypes. Sits BESIDE the `YHT *` set: `DEFAULT_PRINT_FORMATS` unchanged, nothing deleted, nothing re-defaulted. Held at *in review* until the wkhtmltopdf fidelity pass against `.pipeline/client-artefacts/*.pdf` is signed off — the row moves to **done** at DELIVER, not before |
 
 **Still outstanding:** 5.7 pricing (blocked on B9), 6.1 branded tax invoice + 6.9 ZATCA onboarding
 (blocked on CSR/OTP), 4.10 cancel rights (blocked on B8), Step 7.2–7.6 (needs the incumbent backup).
