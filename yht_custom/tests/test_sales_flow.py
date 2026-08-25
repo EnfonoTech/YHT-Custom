@@ -3,6 +3,8 @@
 
 """Tests for the flow policy and the Expense Purchase Invoice."""
 
+import json
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
@@ -218,3 +220,65 @@ class TestExpenseInvoice(FrappeTestCase):
 					),
 					f"{fieldname}.{prop} setter is still present",
 				)
+
+
+class TestGetItemsFromSalesOrder(FrappeTestCase):
+	"""The desk's "Get Items From > Sales Order" 417'd and left the invoice empty."""
+
+	def _open_so(self):
+		return frappe.db.get_value(
+			"Sales Order",
+			{"docstatus": 1, "status": ["not in", ["Closed", "On Hold"]], "per_billed": ["<", 99.99]},
+			"name",
+			order_by="creation desc",
+		)
+
+	def test_the_override_is_registered(self):
+		"""`map_docs` resolves the override before calling, so the hook is the fix."""
+		resolved = frappe.override_whitelisted_method(
+			"erpnext.selling.doctype.sales_order.sales_order.make_sales_invoice"
+		)
+		self.assertEqual(resolved, "yht_custom.sales_flow.make_sales_invoice_from_sales_order")
+
+	def test_the_override_is_whitelisted(self):
+		"""map_docs raises PermissionError if the resolved target is not whitelisted."""
+		method = frappe.get_attr("yht_custom.sales_flow.make_sales_invoice_from_sales_order")
+		self.assertIn(method, frappe.whitelisted)
+
+	def test_args_in_the_third_slot_maps_items(self):
+		"""🔴 THE REGRESSION, in the shape the desk actually sends it.
+
+		`map_docs` calls `method(src, target_doc, args)`. Against ERPNext's own
+		signature that dict lands on `ignore_permissions` and pydantic 417s.
+		"""
+		so = self._open_so()
+		if not so:
+			self.skipTest("no open Sales Order")
+		make = frappe.get_attr("yht_custom.sales_flow.make_sales_invoice_from_sales_order")
+		# A JSON STRING, which is what the desk posts. `get_mapped_doc` handles a str
+		# or a Document; a raw dict reaches `target_doc.has_permission` and raises.
+		target = json.dumps({"doctype": "Sales Invoice", "docstatus": 0})
+		out = make(so, target, {"filtered_children": []})
+		self.assertTrue(out.get("items"), "the desk's calling convention returned no items")
+		for row in out.get("items"):
+			self.assertTrue(row.get("so_detail"), "a mapped row must carry so_detail")
+
+	def test_ignore_permissions_in_the_third_slot_still_works(self):
+		"""ERPNext's own signature invites this, so the shim must not break it."""
+		so = self._open_so()
+		if not so:
+			self.skipTest("no open Sales Order")
+		make = frappe.get_attr("yht_custom.sales_flow.make_sales_invoice_from_sales_order")
+		out = make(so, json.dumps({"doctype": "Sales Invoice", "docstatus": 0}), True)
+		self.assertTrue(out.get("items"))
+
+	def test_it_maps_the_same_items_as_erpnext(self):
+		"""The shim forwards; it must not change what gets mapped."""
+		so = self._open_so()
+		if not so:
+			self.skipTest("no open Sales Order")
+		from erpnext.selling.doctype.sales_order.sales_order import make_sales_invoice
+		make = frappe.get_attr("yht_custom.sales_flow.make_sales_invoice_from_sales_order")
+		theirs = [r.item_code for r in (make_sales_invoice(so).get("items") or [])]
+		ours = [r.item_code for r in (make(so, None, {"filtered_children": []}).get("items") or [])]
+		self.assertEqual(ours, theirs)

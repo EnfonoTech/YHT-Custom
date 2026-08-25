@@ -43,6 +43,18 @@ boot_session = "yht_custom.boot.boot_session"
 # Branch users see only documents tied to their branch's warehouses. Every entry
 # returns a SQL WHERE fragment; see branch_filters for the shared warehouse
 # resolution.
+# 🔴 See `sales_flow.make_sales_invoice_from_sales_order`. ERPNext's Sales Order
+# mapper puts `ignore_permissions` in the third positional slot and `map_docs`
+# puts the dialog's `args` there, so the desk's "Get Items From > Sales Order"
+# 417s and silently leaves the invoice empty. Delivery Note is unaffected — its
+# mapper has `args` in that slot.
+override_whitelisted_methods = {
+	"erpnext.selling.doctype.sales_order.sales_order.make_sales_invoice": (
+		"yht_custom.sales_flow.make_sales_invoice_from_sales_order"
+	),
+}
+
+
 permission_query_conditions = {
 	"Sales Invoice": "yht_custom.branch_filters.sales_invoice_query",
 	"Purchase Invoice": "yht_custom.branch_filters.purchase_invoice_query",

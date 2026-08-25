@@ -158,3 +158,56 @@ def enforce_purchase_receipt_route(doc, method=None):
 def may_use_direct_stock() -> bool:
 	"""Whether the current user may tick update_stock. Drives the form lock."""
 	return _may_bypass()
+
+
+# --------------------------------------------------- Get Items From > Sales Order
+#
+# 🔴 UPSTREAM SIGNATURE CLASH. `frappe.model.mapper.map_docs` — what the desk's
+# "Get Items From" dialog posts to — passes the dialog's `args` POSITIONALLY into
+# slot three:
+#
+#     _args = (src, target_doc, json.loads(args)) if args else (src, target_doc)
+#
+# and the two ERPNext mappers disagree about what slot three is (v15.119.2):
+#
+#     delivery_note.make_sales_invoice(source_name, target_doc=None, args=None)
+#     sales_order.make_sales_invoice(source_name, target_doc=None,
+#                                    ignore_permissions=False, args=None)
+#
+# So Delivery Note works and Sales Order does not: the dialog's payload lands on
+# `ignore_permissions`, frappe's pydantic argument validation rejects a dict for
+# `Union[int, bool, float]`, and the request 417s. The desk swallows it — the
+# dialog closes and the invoice is simply left with no items, which is what
+# "Get items from SO to Invoice not working" looks like from the outside.
+#
+# `map_docs` resolves `frappe.override_whitelisted_method` BEFORE calling, so a
+# hook override is honoured. This shim decides by TYPE rather than by position, so
+# it stays correct for both callers: the desk (a dict/JSON object in slot three)
+# and any code that passes `ignore_permissions` positionally, as ERPNext's own
+# signature invites.
+
+
+@frappe.whitelist()
+def make_sales_invoice_from_sales_order(source_name, target_doc=None, third=None, fourth=None):
+	"""ERPNext's Sales Order -> Sales Invoice mapper, callable the way the desk calls it."""
+	from erpnext.selling.doctype.sales_order.sales_order import (
+		make_sales_invoice as erpnext_make_sales_invoice,
+	)
+
+	def _looks_like_args(value):
+		if isinstance(value, dict):
+			return True
+		# `map_docs` json-decodes before calling, but a direct HTTP caller may not.
+		return isinstance(value, str) and value.strip().startswith("{")
+
+	if _looks_like_args(third):
+		args, ignore_permissions = third, fourth
+	else:
+		ignore_permissions, args = third, fourth
+
+	return erpnext_make_sales_invoice(
+		source_name,
+		target_doc,
+		ignore_permissions=cint(ignore_permissions),
+		args=args,
+	)

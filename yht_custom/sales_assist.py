@@ -26,74 +26,114 @@ guessed at: `payment_terms_coverage()`.
 """
 
 import frappe
-from frappe.utils import cint, flt
+from frappe.utils import cint, cstr, flt
 
-#: (doctype, fieldname, label, read_only) to surface in the item grid.
+#: (fieldname, label, read_only, columns) for the item grid, in the order the
+#: client's sheet asks for them.
 #:
-#: `read_only` matters per column: `actual_qty` is a figure ERPNext fetches and
-#: nobody types, but `uom` is a genuine choice on the line — locking it would stop
-#: an operator selling in cartons.
+#: 🔴 THE GRID HAS AN ELEVEN-UNIT BUDGET AND IT FAILS BY DROPPING COLUMNS SILENTLY.
+#: `grid.js:setup_visible_columns` starts `total_colsize = 1`, adds each visible
+#: column's width, and hits `if (total_colsize > 11) return false;` — which stops
+#: the loop dead. Every column AFTER the one that overflows simply never renders,
+#: with no error anywhere.
 #:
-#: UOM is client-sheet item 10, which spells the item table out field by field:
-#: "(No, Item code, item name, qty, uom, rate, item discount, total)". Only
-#: `Delivery Note Item` ships with `uom` in the grid by ERPNext default; the other
-#: three had it only if a user had added it through Configure Columns, which is a
-#: per-user setting and invisible to everyone else.
-GRID_COLUMNS = (
-	("Sales Invoice Item", "actual_qty", "Stock", "1"),
-	("Sales Order Item", "actual_qty", "Stock", "1"),
-	("Delivery Note Item", "actual_qty", "Stock", "1"),
-	("Quotation Item", "actual_qty", "Stock", "1"),
-	("Sales Invoice Item", "uom", "UOM", "0"),
-	("Sales Order Item", "uom", "UOM", "0"),
-	("Delivery Note Item", "uom", "UOM", "0"),
-	("Quotation Item", "uom", "UOM", "0"),
+#: That is exactly what unhiding UOM did. With ERPNext's own defaults the running
+#: total went item_code 4 + qty 2 + uom 2 + discount 2 = 11, and `rate` took it to
+#: 13 — so Rate, Amount, Warehouse and Stock all disappeared together and the grid
+#: showed four columns. Nobody had ever set an explicit width, so the app had been
+#: living inside whatever ERPNext's defaults happened to add up to.
+#:
+#: These widths are chosen to total exactly 10 (+1 = 11). Changing any one of them
+#: means changing another, or the last column vanishes again.
+GRID_LAYOUT = (
+	("item_code", None, "0", "3"),
+	("qty", None, "0", "1"),
+	("uom", "UOM", "0", "1"),
+	("rate", None, "0", "2"),
+	("discount_percentage", "Discount %", "0", "1"),
+	("amount", None, "0", "1"),
+	("actual_qty", "Stock", "1", "1"),
+)
+
+#: The four selling item tables the layout applies to.
+GRID_DOCTYPES = (
+	"Sales Invoice Item",
+	"Sales Order Item",
+	"Delivery Note Item",
+	"Quotation Item",
+)
+
+#: Shown by ERPNext default but not on the client's list, and there is no room for
+#: it inside the eleven units. A branch user has one warehouse and it is already
+#: set on the header.
+GRID_HIDE = ("warehouse",)
+
+#: Kept for the tests and callers that still read it: (doctype, fieldname, label,
+#: read_only), derived from the layout above so the two can never disagree.
+GRID_COLUMNS = tuple(
+	(doctype, fieldname, label, read_only)
+	for doctype in GRID_DOCTYPES
+	for fieldname, label, read_only, _columns in GRID_LAYOUT
+	if label
 )
 
 
 def setup_sales_assist_columns() -> dict:
-	"""Show available stock and the UOM in the item grid. Idempotent, only unhides."""
+	"""Lay out the item grid: which columns, in what order, how wide. Idempotent.
+
+	Widths are set explicitly for every column because the grid's eleven-unit
+	budget fails by silently dropping whatever comes after the overflow — see
+	`GRID_LAYOUT`.
+	"""
 	applied, already, failed = 0, 0, []
 
-	for doctype, fieldname, label, read_only in GRID_COLUMNS:
-		if not frappe.get_meta(doctype).get_field(fieldname):
-			failed.append(f"{doctype}: no {fieldname}")
-			continue
-
-		for prop, value, prop_type in (
-			("in_list_view", "1", "Check"),
-			("label", label, "Data"),
-			("read_only", read_only, "Check"),
-		):
-			existing = frappe.db.get_value(
-				"Property Setter",
-				{"doc_type": doctype, "field_name": fieldname, "property": prop},
-				["name", "value"],
-				as_dict=True,
-			)
-			if existing:
-				if str(existing.value) != value:
-					frappe.db.set_value("Property Setter", existing.name, "value", value)
-					applied += 1
-				else:
-					already += 1
-				continue
-
-			try:
-				# An args DICT — the positional form belongs to a different function.
-				frappe.make_property_setter(
-					{
-						"doctype": doctype,
-						"fieldname": fieldname,
-						"property": prop,
-						"value": value,
-						"property_type": prop_type,
-					},
-					is_system_generated=True,
-				)
+	def _set(doctype, fieldname, prop, value, prop_type):
+		nonlocal applied, already
+		existing = frappe.db.get_value(
+			"Property Setter",
+			{"doc_type": doctype, "field_name": fieldname, "property": prop},
+			["name", "value"],
+			as_dict=True,
+		)
+		if existing:
+			if cstr(existing.value) != cstr(value):
+				frappe.db.set_value("Property Setter", existing.name, "value", value)
 				applied += 1
-			except Exception as e:
-				failed.append(f"{doctype}.{fieldname}.{prop}: {type(e).__name__}: {e}")
+			else:
+				already += 1
+			return
+		try:
+			# An args DICT — the positional form belongs to a different function.
+			frappe.make_property_setter(
+				{
+					"doctype": doctype,
+					"fieldname": fieldname,
+					"property": prop,
+					"value": value,
+					"property_type": prop_type,
+				},
+				is_system_generated=True,
+			)
+			applied += 1
+		except Exception as e:
+			failed.append(f"{doctype}.{fieldname}.{prop}: {type(e).__name__}: {e}")
+
+	for doctype in GRID_DOCTYPES:
+		meta = frappe.get_meta(doctype)
+		for fieldname, label, read_only, columns in GRID_LAYOUT:
+			if not meta.get_field(fieldname):
+				# Not every selling table carries every field; that is not an error.
+				failed.append(f"{doctype}: no {fieldname}")
+				continue
+			_set(doctype, fieldname, "in_list_view", "1", "Check")
+			_set(doctype, fieldname, "columns", columns, "Int")
+			_set(doctype, fieldname, "read_only", read_only, "Check")
+			if label:
+				_set(doctype, fieldname, "label", label, "Data")
+
+		for fieldname in GRID_HIDE:
+			if meta.get_field(fieldname):
+				_set(doctype, fieldname, "in_list_view", "0", "Check")
 
 	if failed:
 		frappe.log_error("\n".join(failed), "yht_custom: sales assist columns")
