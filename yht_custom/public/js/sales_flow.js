@@ -120,17 +120,25 @@ frappe.router.on("change", () => {
 	const route = frappe.get_route() || [];
 	if (route[0] !== "List" || route[1] !== "Sales Invoice") return;
 
-	// The bundle may still be in flight on a first visit, so poll rather than assume.
+	// 🔴 AND DO NOT ADD IT ONCE BEHIND A "done" FLAG. On a COLD load the list view clears
+	// its own inner toolbar AFTER the first render, so a button added before that is wiped
+	// — measured: the add ran, the flag was set, and the toolbar came back empty, while an
+	// in-app route to the same list worked. Key on the button's presence in the DOM and
+	// keep re-checking for a few seconds, which also covers the bundle still being in
+	// flight on a first visit.
+	const label = __("New Return");
 	let tries = 0;
 	const attach = () => {
 		const lv = window.cur_list;
-		if (!lv || lv.doctype !== "Sales Invoice" || !lv.page) {
-			if (++tries < 20) setTimeout(attach, 150);
-			return;
+		if (lv && lv.doctype === "Sales Invoice" && lv.page && lv.page.inner_toolbar) {
+			const present = lv.page.inner_toolbar
+				.find("button")
+				.filter((i, b) => b.innerText.trim() === label).length;
+			if (!present) {
+				lv.page.add_inner_button(label, () => yht_custom.sales.new_return());
+			}
 		}
-		if (lv.__yht_return_btn) return;
-		lv.__yht_return_btn = true;
-		lv.page.add_inner_button(__("New Return"), () => yht_custom.sales.new_return());
+		if (++tries < 20) setTimeout(attach, 300);
 	};
 	attach();
 });
