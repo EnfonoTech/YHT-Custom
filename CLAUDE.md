@@ -454,6 +454,66 @@ accountant: SI→`CN`, DN→`DRN`, PI→`DBN`, PR→`PRN`.
     nothing. Back up, `git reset --hard FETCH_HEAD`, and check `git log --oneline -1` on the
     box as part of every deploy.
 
+64. 🔴 **THE RETURN ABBREVIATIONS WERE INVENTED, AND TWO OF THEM COLLIDED WITH A LIVE
+    COUNTER.** `RETURN_SUFFIX_OVERRIDES` shipped CN / DRN / DBN / PRN "continuing the
+    client's convention". It did not: measured, the client uses `KSSR-` (98 of 102 sales
+    returns), `KSDR-` (34 of 38), `KSPR-` (56 of 60) and `KSPRR-` (4 of 4), and the four
+    invented series had **zero** documents between them. Worse, `SERIES_TARGETS` gave
+    Purchase Receipt `PR` — which IS the purchase-invoice return prefix, 56 documents,
+    counter `KSPR-26-` at 11 — and Stock Reconciliation `SR`, the sales-return prefix.
+    Frappe keys `tabSeries` on the resolved prefix, so each pair was one shared counter.
+    The fix is one invariant test: **no two document kinds may share an abbreviation**,
+    forward or return. Write that test before adding a series, not after.
+65. 🔴 **`enforce_delivery_note_route` HAD NO `is_return` BRANCH, SO A BRANCH USER'S
+    CREDIT NOTE COULD NEVER RETURN STOCK.** It forced `update_stock = 0` unconditionally.
+    A return is not symmetric with a sale: how the goods LEFT dictates how they come back,
+    and ERPNext itself throws when a return ticks `update_stock` and its original did not
+    (`sales_and_purchase_return.py:76-81`). So on a legacy direct-stock invoice the goods
+    had nowhere to go — measured, `is_return=1, update_stock=1` in, `0` out. Both forward
+    guards now return early on `is_return` and `return_flow` owns the return case.
+66. 🔴 **NOTHING IN ERPNEXT NEGATES A TYPED QUANTITY, AND THE SIGN CHECK RUNS AT A
+    DIFFERENT LIFECYCLE STAGE PER DOCTYPE.** *"For an item {0}, quantity must be negative
+    number"* is thrown in exactly one place, `StatusUpdater.validate_qty`
+    (`status_updater.py:248`) — at `validate()` for Sales/Purchase Invoice
+    (`accounts_controller.py:262`) but only at `on_submit()` for Delivery Note and
+    Purchase Receipt. The only automatic negation is the Create > Return mapper's
+    `update_item`, which a user ticking the box by hand never goes through. `before_validate`
+    is the one event ahead of all four. Mirror the mapper's field set exactly — `qty`,
+    `stock_qty`, plus `received_qty` / `rejected_qty` / `received_stock_qty` on the buying
+    side — or a return passes `validate` and fails at `on_submit`.
+67. 🔴 **THE OVER-RETURN GUARD KEYS ON THE JOIN FIELD AND DEGRADES TO A MESSAGE WHEN IT IS
+    BLANK.** `validate_returned_items` → `validate_quantity` keys on `(item_code, dn_detail)`
+    for Delivery Note and `(item_code, sales_invoice_item)` for Sales Invoice. Measured: a
+    second full return with `dn_detail` intact raises `StockOverReturnError`; with it wiped
+    the same document saves with only a msgprint. **Sales Invoice has no second guard at
+    all** — `on_submit` sets `self.status_updater = []` for every return unless
+    `update_billed_amount_in_sales_order` is ticked (1 of 101 documents here). And there is
+    **no `per_returned` field on Sales Invoice**; return percentage is tracked on Delivery
+    Note and Purchase Receipt only.
+68. 🔴 **`sales_invoice.make_delivery_note` CANNOT BUILD A RETURN, SO "AUTO-CREATE THE
+    DELIVERY RETURN FROM THE CREDIT NOTE" IS NOT IMPLEMENTABLE.** Its row condition is
+    `doc.qty - doc.delivered_qty > 0`, false for every negative line — run against a real
+    return it produced a Delivery Note with **zero items**. `is_return` is `no_copy = 1` on
+    both DocTypes, so even a forced mapping yields an ordinary OUTWARD note. And the
+    over-return guards are scoped per `(doctype, return_against)`, so an SI return and a DN
+    return covering the same goods never see each other — stock comes back twice, silently.
+    The native flow runs the other way: `Delivery Note.issue_credit_note` calls
+    `make_return_invoice()` on submit, which maps, sets `is_return`, saves AND submits the
+    credit note — one-to-one, and it populates `delivery_note` + `dn_detail` so gotcha 67's
+    guard actually fires.
+69. ⚠️ **ERPNext's Delivery Note dashboard has NO "Delivery Note" entry**, so a delivery
+    return never appears in the Connections of the note it reverses, even though
+    `return_against` is right there on the parent. Sales Invoice does it through
+    `non_standard_fieldnames["Sales Invoice"] = "return_against"`; Delivery Note simply
+    omits it. Added via `override_doctype_dashboards`, whose handler is called as
+    `frappe.get_attr(hook)(data=data)` — the keyword is `data`.
+70. ⚠️ **A STANDARD FIELD CANNOT BE MOVED WITH `insert_after`** — that property belongs to
+    Custom Field. The only lever is the DocType's `field_order` Property Setter, and a field
+    takes its tab, section and column purely from WHERE IT LANDS in that list. So moving one
+    silently changes its tab if the anchor is in a different one, and dropping a fieldname
+    removes the field from the form entirely — assert the new order is a permutation of the
+    old before writing it.
+
 ## Deploy
 
 Repo: **`git@github-yht:EnfonoTech/YHT-Custom.git`** (private). The box has a dedicated read-only deploy key at

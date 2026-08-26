@@ -522,12 +522,34 @@
 
 <section id="a-returns">
   <h2>A8 · Returns and credit notes</h2>
+  <p><b>A return starts where the goods are, not where the money is.</b> The same rule as
+  A4, run backwards: stock left the branch on a delivery note, so it comes back on one, and
+  the credit note follows.</p>
   <ol class="steps">
-    <li>Open the original submitted Sales Invoice &rarr; <span class="ui">Create &rarr; Return / Credit Note</span>.</li>
-    <li>Set the quantities actually returned. Rates mirror the original, including zero lines.</li>
-    <li><span class="ui">Submit</span>. The credit note takes its own number, <code>KSCN-26-…</code>.</li>
-    <li>Stock physically coming back needs a return delivery note, <code>KSDRN-26-…</code>.</li>
+    <li>Open the <b>Delivery Note</b> the goods went out on &rarr;
+      <span class="ui">Create &rarr; Sales Return</span>.</li>
+    <li>Set the quantities actually coming back. They show as negative — that is correct,
+      and if you type a positive number the system flips it for you.</li>
+    <li>Tick <span class="ui">Issue Credit Note</span> before you submit.</li>
+    <li><span class="ui">Submit</span>. The return delivery note takes
+      <code>KSDR-26-…</code>, and the credit note is created <b>and submitted for you</b>,
+      numbered <code>KSSR-26-…</code>, already linked to it.</li>
   </ol>
+  <div class="note">
+    <b>Starting from the invoice will be refused.</b>
+    If you open a Sales Invoice and use <span class="ui">Create &rarr; Return / Credit
+    Note</span> for goods that were delivered on a delivery note, the system stops you and
+    points you here. That is deliberate: a credit note raised on its own leaves the stock
+    where it is, and nothing then records that the goods came back — so the same goods can
+    be credited twice.
+  </div>
+  <div class="note">
+    <b>The exception: old invoices that carried their own stock.</b>
+    Some invoices from before the delivery-note rule moved stock themselves. There is no
+    delivery note to return against, so those are returned on the invoice — open it,
+    <span class="ui">Create &rarr; Return / Credit Note</span>, and leave
+    <span class="ui">Update Stock</span> ticked. The system works out which case you are in.
+  </div>
   <div class="note">
     <b>A credit note never opens the payment dialog.</b>
     On a return the money moves outward, so tendering makes no sense. A cash refund is a job
@@ -566,7 +588,7 @@
     <li>Add a row per line on the supplier's bill: description and amount. <b>No item code.</b></li>
     <li>Enter the supplier's own number in <span class="ui">Supplier Invoice No</span>.</li>
     <li>Paid on the spot in cash? Tick <span class="ui">Is Paid</span> and choose the account.</li>
-    <li><span class="ui">Submit</span>. It takes an expense number, <code>KSEXP-26-…</code>.</li>
+    <li><span class="ui">Submit</span>. It takes an expense number, <code>KSEPI-26-…</code>.</li>
   </ol>
   <div class="stop">
     <b>The trap: putting a stock item on an expense invoice.</b>
@@ -746,22 +768,25 @@
     <tbody>
       <tr><td>Quotation</td><td><code>KSSQ-.YY.-.####</code></td><td>—</td></tr>
       <tr><td>Sales Order</td><td><code>KSSO-.YY.-.####</code></td><td>—</td></tr>
-      <tr><td>Delivery Note</td><td><code>KSDN-.YY.-.####</code></td><td><code>KSDRN-.YY.-.####</code></td></tr>
-      <tr><td>Sales Invoice</td><td><code>KSIN-.YY.-.####</code></td><td><code>KSCN-.YY.-.####</code></td></tr>
+      <tr><td>Delivery Note</td><td><code>KSDN-.YY.-.####</code></td><td><code>KSDR-.YY.-.####</code></td></tr>
+      <tr><td>Sales Invoice</td><td><code>KSIN-.YY.-.####</code></td><td><code>KSSR-.YY.-.####</code></td></tr>
       <tr><td>Purchase Order</td><td><code>KSPO-.YY.-.####</code></td><td>—</td></tr>
-      <tr><td>Purchase Receipt</td><td><code>KSPR-.YY.-.####</code></td><td><code>KSPRN-.YY.-.####</code></td></tr>
-      <tr><td>Purchase Invoice</td><td><code>KSPI-.YY.-.####</code></td><td><code>KSDBN-.YY.-.####</code></td></tr>
-      <tr><td>Expense invoice</td><td><code>KSEXP-.YY.-.####</code></td><td>—</td></tr>
+      <tr><td>Purchase Receipt</td><td><code>KSPRN-.YY.-.####</code></td><td><code>KSPRR-.YY.-.####</code></td></tr>
+      <tr><td>Purchase Invoice</td><td><code>KSPI-.YY.-.####</code></td><td><code>KSPR-.YY.-.####</code></td></tr>
+      <tr><td>Expense invoice</td><td><code>KSEPI-.YY.-.####</code></td><td><code>KSPR-.YY.-.####</code></td></tr>
       <tr><td>Payment Entry</td><td><code>KSPY-.YY.-.####</code></td><td>—</td></tr>
       <tr><td>Journal Entry</td><td><code>KSJV-.YY.-.####</code></td><td>—</td></tr>
       <tr><td>Material Request</td><td><code>KSMR-.YY.-.####</code></td><td>—</td></tr>
       <tr><td>Stock Entry</td><td><code>KSSE-.YY.-.####</code></td><td>—</td></tr>
-      <tr><td>Stock Reconciliation</td><td><code>KSSR-.YY.-.####</code></td><td>—</td></tr>
+      <tr><td>Stock Reconciliation</td><td><code>KSRC-.YY.-.####</code></td><td>—</td></tr>
     </tbody>
   </table>
   <div class="note">
     <b>A credit note is not "an invoice, return flavour".</b>
     It gets its own series so anyone reading a ledger can tell the two apart at a glance.
+    Every return series above is one Kathoom was already using before the new system —
+    <code>KSSR-</code>, <code>KSDR-</code>, <code>KSPR-</code> — so the numbering runs
+    straight on from the old records rather than restarting.
   </div>
 </section>
 
