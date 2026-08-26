@@ -14,6 +14,10 @@ BRANCH = "_Test YHT Return Branch"
 USER = "_test_yht_return_user@example.invalid"
 
 
+def _first(doctype, filters=None):
+	return frappe.db.get_value(doctype, filters or {}, "name")
+
+
 class TestReturnSeriesInvariants(FrappeTestCase):
 	"""🔴 THE TEST THAT SHOULD HAVE EXISTED.
 
