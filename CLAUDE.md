@@ -514,6 +514,36 @@ accountant: SI→`CN`, DN→`DRN`, PI→`DBN`, PR→`PRN`.
     removes the field from the form entirely — assert the new order is a permutation of the
     old before writing it.
 
+71. 🔴 **"THE ORIGINAL DID NOT CARRY ITS OWN STOCK" IS NOT "THE GOODS WENT OUT ON A NOTE".**
+    It equally means the original moved NO goods — a service line, a non-stock item, an
+    expense bill. A return guard that conflated the two refused returns against 345 expense
+    invoices, 366 purchase invoices with no receipt and 150 sales invoices with no delivery
+    note, and for an expense bill it was unsatisfiable **by construction**: `Purchase Receipt
+    Item.item_code` is `reqd = 1` while `Purchase Invoice Item.item_code` is not, which is
+    exactly why an expense invoice is a flagged Purchase Invoice rather than a receipt. Ask
+    whether the ORIGINAL has a stock document behind it, never infer it from `update_stock`.
+72. 🔴 **EXEMPTING RETURNS FROM A `update_stock` RULE OPENS A HOLE UNLESS THE RETURN'S OWN
+    ROWS ARE CHECKED.** Letting a return keep `update_stock` because its original carried
+    stock, without looking at the return's rows, let a branch user tick *Is Return* against
+    any of 950 legacy direct-stock invoices and post ANY item at ANY quantity into the
+    warehouse. ERPNext is no backstop: its over-return guard keys on `sales_invoice_item` /
+    `purchase_invoice_item`, which a hand-typed row does not have, and its own `update_stock`
+    check is written `if doc.doctype == "Sales Invoice"` — so the purchase side, where the
+    movement is OUTBOUND, had strictly less protection. Require the row link on any
+    stock-moving return; measured, 145 of 145 real rows already carry it.
+73. ⚠️ **A HANDLER REGISTERED ON BOTH SIDES NEEDS BOTH SIDES' WORDING.** `STOCK_LINK` covered
+    Sales and Purchase Invoice, but both `frappe.throw` messages said *"Open the Delivery
+    Note, use Create > Sales Return, and tick Issue Credit Note"*. A buyer returning goods to
+    a supplier has no Delivery Note, no Sales Return menu entry and no Issue Credit Note
+    checkbox — an instruction they cannot follow is worse than no instruction.
+74. 🔴 **`frappe.db.commit()` IN A TEST IS PERMANENT — `tearDown`'s rollback CANNOT UNDO IT.**
+    `test_existing_entries_survive_a_reseed` appended a marker series to the real Purchase
+    Invoice `naming_series` options and committed, so `_TEST-KEEPME-.YY.-.####` became a
+    choosable entry in the live picker on every site the suite had ever run against — and the
+    union in `_sync_naming_series_options` then preserved it forever by design. The commit was
+    never needed: the code under test reads through `frappe.db` in the same transaction and
+    sees the uncommitted write. Restore what a test changes in a `finally`, and never commit.
+
 ## Deploy
 
 Repo: **`git@github-yht:EnfonoTech/YHT-Custom.git`** (private). The box has a dedicated read-only deploy key at
