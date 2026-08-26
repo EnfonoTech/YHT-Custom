@@ -459,12 +459,21 @@ class TestSalesReturnEntryPoints(FrappeTestCase):
 				with self.subTest(workspace=workspace, doctype=doctype):
 					self.assertEqual(filters, {"is_return": 0})
 
-	def test_branch_users_can_reach_the_returns_shortcut(self):
-		"""boot.py trims a branch user to one workspace, so it must carry the pair."""
-		from yht_custom import workspace_shortcuts as ws
+	def test_a_branch_user_reaches_returns_without_a_workspace(self):
+		"""⚠️ THE WORKSPACE SHORTCUT IS NOT A BRANCH USER'S ROUTE — measured.
 
-		self.assertIn("Branch User", ws.FILTERED_SHORTCUTS)
-		self.assertIn("Branch User", ws.NARROW_SHORTCUTS)
+		`/app/branch-user` redirects to `yht-dashboard`: `branch_user_restrict.js`
+		whitelists the literal slug `workspace`, and a named workspace's slug is its
+		own name, so every one of them is sent home. The Branch User workspace still
+		carries the pair (it is correct config, and right if the restriction is ever
+		lifted) but a branch user gets there through the dashboard tile and the list
+		button instead. Both are asserted elsewhere in this class; this test pins the
+		reason so nobody "fixes" the tile by pointing it at the workspace.
+		"""
+		path = frappe.get_app_path("yht_custom", "public", "js", "branch_user_restrict.js")
+		src = open(path, encoding="utf-8").read()
+		self.assertIn('"workspace"', src)
+		self.assertNotIn('"branch-user"', src)
 
 	def test_the_narrowing_leaves_the_other_shortcuts_alone(self):
 		"""It matches on the bare doctype label, so New/Returns are untouched."""
