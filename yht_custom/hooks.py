@@ -110,26 +110,48 @@ _DISCOUNT_EVENTS = {
 	for doctype in ("Sales Invoice", "Sales Order", "Delivery Note", "Quotation")
 }
 
+# --- returns -------------------------------------------------------------
+# `negate_return_quantities` runs LAST on before_validate for every return-capable
+# doctype: on Purchase Invoice `expense_invoice.before_validate` stamps qty = 1 on
+# a blank row, and a positive 1 on a return is exactly what this exists to fix.
+_RETURN_NEGATE = "yht_custom.return_flow.negate_return_quantities"
+_RETURN_ROUTE = "yht_custom.return_flow.enforce_return_stock_route"
+
 _FLOW_EVENTS = {
 	"Sales Invoice": {
-		"before_validate": "yht_custom.sales_flow.enforce_delivery_note_route",
+		"before_validate": [
+			"yht_custom.sales_flow.enforce_delivery_note_route",
+			_RETURN_ROUTE,
+			_RETURN_NEGATE,
+		],
 		# Item 5: a rate fetched from a Sales Order or Delivery Note is not
 		# editable here. The JS makes the cell read-only; this is the boundary.
 		"validate": "yht_custom.rate_lock.enforce_fetched_rate",
 	},
 	"Delivery Note": {
+		"before_validate": _RETURN_NEGATE,
 		"validate": "yht_custom.sales_flow.validate_delivery_note",
 		"on_update_after_submit": "yht_custom.sales_flow.lock_submitted_delivery_note",
 	},
+	"Purchase Receipt": {"before_validate": _RETURN_NEGATE},
 	"Purchase Invoice": {
 		"before_validate": [
 			"yht_custom.sales_flow.enforce_purchase_receipt_route",
 			"yht_custom.expense_invoice.before_validate",
+			_RETURN_ROUTE,
+			# LAST — see the note above _RETURN_NEGATE.
+			_RETURN_NEGATE,
 		],
 		"validate": "yht_custom.expense_invoice.validate",
 		"before_insert": "yht_custom.expense_invoice.set_expense_series",
 		"on_submit": "yht_custom.expense_invoice.on_submit",
 	},
+}
+
+# ERPNext's Delivery Note dashboard has no Delivery Note entry, so a delivery
+# return never appears on the note it reverses. See return_flow.
+override_doctype_dashboards = {
+	"Delivery Note": "yht_custom.return_flow.delivery_note_dashboard",
 }
 
 doc_events.update({

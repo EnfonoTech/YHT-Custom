@@ -51,7 +51,17 @@ def enforce_delivery_note_route(doc, method=None):
 
 	Server-side rather than JS-only: the form lock stops the ordinary user, this
 	stops a REST call, an import and a Server Script as well.
+
+	🔴 A RETURN IS NOT A SALE, and this had no `is_return` branch until 2026-08-26.
+	How the goods LEFT decides how they come back, so `update_stock` on a return is
+	dictated by the original document, not by this rule — ERPNext itself throws
+	when a return ticks it and its original did not. Zeroing it unconditionally
+	meant a branch user returning a legacy direct-stock invoice could never bring
+	the goods back at all (measured: `is_return=1, update_stock=1` in, `0` out).
+	`return_flow.enforce_return_stock_route` owns the return case.
 	"""
+	if cint(doc.get("is_return")):
+		return
 	if _may_bypass():
 		return
 	if not cint(doc.get("update_stock")):
@@ -137,8 +147,18 @@ def enforce_purchase_receipt_route(doc, method=None):
 	"""Stock arrives on the Purchase Receipt, per the client's module sheet.
 
 	Expense invoices are exempt: they carry no stock at all.
+
+	🔴 A RETURN IS NOT A SALE, and this had no `is_return` branch until 2026-08-26.
+	How the goods LEFT decides how they come back, so `update_stock` on a return is
+	dictated by the original document, not by this rule — ERPNext itself throws
+	when a return ticks it and its original did not. Zeroing it unconditionally
+	meant a branch user returning a legacy direct-stock bill could never bring
+	the goods back at all (measured: `is_return=1, update_stock=1` in, `0` out).
+	`return_flow.enforce_return_stock_route` owns the return case.
 	"""
 	if cint(doc.get("custom_is_expense_invoice")):
+		return
+	if cint(doc.get("is_return")):
 		return
 	if _may_bypass():
 		return

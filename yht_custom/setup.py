@@ -21,6 +21,7 @@ from yht_custom.letterhead import setup_branch_letterheads
 from yht_custom.katc_letterhead import setup_katc_letterhead
 from yht_custom.hr_setup import setup_hr
 from yht_custom.sales_assist import setup_sales_assist_columns
+from yht_custom.field_layout import apply_field_moves
 from yht_custom.workspace_shortcuts import setup_new_shortcuts
 
 #: What a Branch User may touch. Per the MoM document set — Quotation, Sales
@@ -196,6 +197,7 @@ PROVISIONING_STEPS = (
 	"setup_katc_letterhead",
 	"setup_default_print_formats",
 	"setup_form_layout",
+	"apply_field_moves",
 	"setup_discount_grid_columns",
 	"setup_sales_assist_columns",
 	"setup_new_shortcuts",
@@ -253,6 +255,7 @@ def _imported(name):
 		"setup_hr": setup_hr,
 		"setup_sales_assist_columns": setup_sales_assist_columns,
 		"setup_new_shortcuts": setup_new_shortcuts,
+		"apply_field_moves": apply_field_moves,
 	}[name]
 
 

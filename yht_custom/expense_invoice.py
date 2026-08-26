@@ -50,7 +50,11 @@ import frappe
 from frappe import _
 from frappe.utils import cint, flt
 
-EXPENSE_SERIES = "KSEXP-.YY.-.####"
+#: 🔴 KSEPI-, not KSEXP- — corrected 2026-08-26. The client has 889 expense
+#: invoices already named ``KSEPI-`` (counters KSEPI-24- 165, -25- 563, -26- 227);
+#: ``KSEXP-`` was invented here and has ZERO documents. Continuing the client's own
+#: convention is the whole rationale for the series design, and this broke it.
+EXPENSE_SERIES = "KSEPI-.YY.-.####"
 
 
 def _is_expense(doc) -> bool:
@@ -273,5 +277,13 @@ def set_expense_series(doc, method=None):
 	only for expenses.
 	"""
 	if not _is_expense(doc):
+		return
+	# 🔴 A RETURN KEEPS THE BRANCH'S RETURN SERIES. This function runs after
+	# `branch_defaults.set_naming_series_from_branch` on purpose, so without this
+	# guard it overwrote the debit-note series and a returned expense invoice drew
+	# from the ordinary expense counter — measured: KSDBN- picked, then clobbered
+	# back to the expense series. A debit note is a debit note whether the bill it
+	# reverses was for stock or for rent.
+	if cint(doc.get("is_return")):
 		return
 	doc.naming_series = EXPENSE_SERIES
