@@ -85,6 +85,45 @@ def apply_branch_defaults(doc, method=None):
 # -------------------------------------------------------------- naming series
 
 
+def _branch_series_rows(doctype: str):
+	"""``(prefix, rows)`` for the calling user's branch, or ``("", [])``.
+
+	``("", [])`` means "leave the form's choice alone": a bypass role, no branch
+	configuration, or no series configured for this doctype.
+	"""
+	if _is_bypass():
+		return "", []
+
+	config = _user_branch_config()
+	if not config:
+		return "", []
+
+	branch = frappe.db.get_value("Branch Configuration", config, "branch")
+	if not branch:
+		return "", []
+
+	prefix = frappe.db.get_value("Branch", branch, "custom_doc_prefix") or ""
+	rows = frappe.get_all(
+		"Branch Naming Series",
+		filters={"parent": branch, "parent_doctype": doctype},
+		fields=["naming_series", "use_for_return"],
+	)
+	return prefix, rows
+
+
+def configured_series(doctype: str, is_return=0) -> str | None:
+	"""The series this user's branch will give a document of this flavour, or None.
+
+	Exists so an entry point can SHOW the answer. The picker keeps the form's
+	pre-filled invoice series after ``is_return`` is ticked, because the real choice
+	happens here at ``before_insert`` — an operator who sees ``KSIN-`` and gets
+	``KSCN-`` reads that as a bug.
+	"""
+	_prefix, rows = _branch_series_rows(doctype)
+	match = next((r for r in rows if cint(r.use_for_return) == cint(is_return)), None)
+	return match.naming_series if match else None
+
+
 def set_naming_series_from_branch(doc, method=None):
 	"""Override ``naming_series`` with the one configured for the user's branch.
 
@@ -107,28 +146,13 @@ def set_naming_series_from_branch(doc, method=None):
 	"""
 	if not doc.meta.has_field("naming_series"):
 		return
-	if _is_bypass():
-		return
 
-	config = _user_branch_config()
-	if not config:
-		return
-
-	branch = frappe.db.get_value("Branch Configuration", config, "branch")
-	if not branch:
-		return
-
-	prefix = frappe.db.get_value("Branch", branch, "custom_doc_prefix") or ""
-	current = doc.get("naming_series") or ""
-
-	is_return = cint(doc.get("is_return"))
-	rows = frappe.get_all(
-		"Branch Naming Series",
-		filters={"parent": branch, "parent_doctype": doc.doctype},
-		fields=["naming_series", "use_for_return"],
-	)
+	prefix, rows = _branch_series_rows(doc.doctype)
 	if not rows:
 		return
+
+	current = doc.get("naming_series") or ""
+	is_return = cint(doc.get("is_return"))
 
 	match = next((r for r in rows if cint(r.use_for_return) == is_return), None)
 	if not match:

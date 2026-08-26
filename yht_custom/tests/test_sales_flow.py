@@ -405,6 +405,18 @@ class TestSalesReturnEntryPoints(FrappeTestCase):
 		)
 		self.assertNotIn("frappe.listview_settings", code)
 		self.assertIn('frappe.router.on("change"', code)
+		# The form must show the series it will actually get, not the form default.
+		self.assertIn("yht_custom.sales_flow.return_naming_series", code)
+
+	def test_return_naming_series_reports_what_the_hook_will_do(self):
+		"""The endpoint the form reads must agree with the hook that names the doc."""
+		from yht_custom import branch_defaults, sales_flow
+
+		frappe.set_user("Administrator")
+		# Administrator holds a bypass role, so the branch override does not apply and
+		# the endpoint must say so rather than promise a series it will not deliver.
+		self.assertIsNone(sales_flow.return_naming_series("Sales Invoice"))
+		self.assertIsNone(branch_defaults.configured_series("Sales Invoice", is_return=1))
 
 	def test_the_dashboard_offers_a_return_tile(self):
 		path = frappe.get_app_path(

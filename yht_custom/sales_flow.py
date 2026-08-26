@@ -21,7 +21,9 @@ two incompatible habits, and no way to reconcile a delivery against an invoice.
 
 import frappe
 from frappe import _
-from frappe.utils import cint, flt
+from frappe.utils import cint, cstr, flt
+
+from yht_custom import branch_defaults
 
 #: Roles that may still tick `update_stock` on a Sales Invoice, i.e. bill and
 #: ship in one document. Everyone else goes through a Delivery Note.
@@ -211,3 +213,19 @@ def make_sales_invoice_from_sales_order(source_name, target_doc=None, third=None
 		ignore_permissions=cint(ignore_permissions),
 		args=args,
 	)
+
+
+@frappe.whitelist()
+def return_naming_series(doctype: str = "Sales Invoice") -> str | None:
+	"""The series a RETURN of ``doctype`` will take, for the calling user's branch.
+
+	``None`` means "leave the picker alone" — the caller holds a bypass role, or the
+	branch configures no return series for this doctype.
+
+	The entry point calls this so the form shows the series it will actually get.
+	Without it the picker keeps the form's pre-filled ``KSIN-`` after ``is_return`` is
+	ticked and the document saves as ``KSCN-``, which reads as a bug.
+	"""
+	doctype = cstr(doctype)
+	frappe.has_permission(doctype, "create", throw=True)
+	return branch_defaults.configured_series(doctype, is_return=1)

@@ -100,8 +100,30 @@ yht_custom.sales.new_return = async function () {
 	await frappe.after_ajax(() => {});
 	if (!cur_frm || cur_frm.doc.doctype !== "Sales Invoice") return;
 	await cur_frm.set_value("is_return", 1);
+
+	// The picker still shows the form's pre-filled invoice series: the real choice happens
+	// server-side at before_insert. Ask for the answer and show it, or the operator sees
+	// KSIN- on screen, saves, and gets KSCN- — which reads as a bug rather than a feature.
+	let series = null;
+	try {
+		const r = await frappe.call({
+			method: "yht_custom.sales_flow.return_naming_series",
+			args: { doctype: "Sales Invoice" },
+		});
+		series = r && r.message;
+	} catch (e) {
+		// A bypass role or an unconfigured branch is not an error — leave the picker alone.
+	}
+	if (series) {
+		const df = cur_frm.get_field("naming_series");
+		const options = (df && df.df.options ? df.df.options.split("\n") : []).map((o) => o.trim());
+		if (options.includes(series)) await cur_frm.set_value("naming_series", series);
+	}
+
 	frappe.show_alert({
-		message: __("Return ticked — this is a credit note. Pick the invoice it is against."),
+		message: series
+			? __("Credit note — this will be numbered {0}", [series])
+			: __("Return ticked — this is a credit note. Pick the invoice it is against."),
 		indicator: "blue",
 	});
 };
