@@ -29,6 +29,20 @@ NEW_SHORTCUTS = {
 	"Accounting": ["Sales Invoice", "Purchase Invoice", "Payment Entry", "Journal Entry"],
 }
 
+#: Filtered-LIST shortcuts. A return is a different document to an accountant — it carries
+#: its own KSCN- series (for a branch user) — so it gets its own way in.
+#:
+#: 🔴 IT CANNOT BE A `doc_view: "New"` SHORTCUT. `Sales Invoice.is_return` is `no_copy = 1`
+#: and `create_new.js` skips no_copy fields when applying `frappe.route_options`, so a
+#: shortcut (or a URL, or a #hash — all measured) lands on a blank invoice with the box
+#: CLEAR. Only setting it after the form exists works, and a Workspace Shortcut is config,
+#: not code. So the shortcut opens the filtered LIST, and `sales_flow.js` puts a
+#: "New Return" button on that list which ticks the box properly.
+FILTERED_SHORTCUTS = {
+	"Selling": [("Sales Invoice", "Sales Returns", {"is_return": 1})],
+	"Accounting": [("Sales Invoice", "Sales Returns", {"is_return": 1})],
+}
+
 LABEL = "New {0}"
 
 
@@ -69,6 +83,32 @@ def setup_new_shortcuts() -> dict:
 				added += 1
 
 			# The layout half. Without this the shortcut exists and shows nowhere.
+			if not _content_has(content, label):
+				content.append({"id": f"yht-{label.lower().replace(' ', '-')}",
+				                "type": "shortcut",
+				                "data": {"shortcut_name": label, "col": 3}})
+				changed = True
+
+		for doctype, label, filters in FILTERED_SHORTCUTS.get(workspace, []):
+			if not frappe.db.exists("DocType", doctype):
+				skipped.append(f"{workspace}: no doctype {doctype}")
+				continue
+			if label in existing:
+				already += 1
+			else:
+				doc.append(
+					"shortcuts",
+					{
+						"type": "DocType",
+						"link_to": doctype,
+						"doc_view": "List",
+						"stats_filter": json.dumps(filters),
+						"label": label,
+						"color": "Orange",
+					},
+				)
+				changed = True
+				added += 1
 			if not _content_has(content, label):
 				content.append({"id": f"yht-{label.lower().replace(' ', '-')}",
 				                "type": "shortcut",

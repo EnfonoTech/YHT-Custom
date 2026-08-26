@@ -146,6 +146,10 @@ function icon(name) {
 
 const ACTIONS = [
 	{ icon: "invoice", label: "Sales Invoice", desc: "Create new invoice", doctype: "Sales Invoice", mode: "new" },
+	// Its own tile, because a return is a different document to an accountant and gets its
+	// own KSCN- series for a branch user. `is_return` is no_copy, so this cannot be a plain route — the tile
+	// is intercepted and ticks the box after the form exists. See sales_flow.js.
+	{ icon: "invoice", label: "Sales Return", desc: "Credit note to a customer", ret: "Sales Invoice" },
 	{ icon: "quote", label: "Quotation", desc: "View quotations", doctype: "Quotation", mode: "list" },
 	{ icon: "order", label: "Sales Order", desc: "View orders", doctype: "Sales Order", mode: "list" },
 	{ icon: "truck", label: "Delivery Note", desc: "View delivery notes", doctype: "Delivery Note", mode: "list" },
@@ -248,6 +252,13 @@ function render(page, d) {
 		if (window.yht && yht.simple_party) yht.simple_party.open(doctype);
 	});
 
+	page.body.off("click.yht-return").on("click.yht-return", "[data-yht-return]", function (e) {
+		e.preventDefault();
+		if (window.yht_custom && yht_custom.sales && yht_custom.sales.new_return) {
+			yht_custom.sales.new_return();
+		}
+	});
+
 	setTimeout(() => {
 		page.body.find(".yht-kpi, .yht-card, .yht-pending-item").each(function (i) {
 			const $el = $(this);
@@ -289,6 +300,10 @@ function action_card(a) {
 	// the card styling and keyboard focus; the click is intercepted below.
 	if (a.dialog) {
 		return card("#", a.icon, __(a.label), __(a.desc), `data-yht-dialog="${a.dialog}"`);
+	}
+	// Same shape as a dialog tile: no route, click intercepted below.
+	if (a.ret) {
+		return card("#", a.icon, __(a.label), __(a.desc), `data-yht-return="${a.ret}"`);
 	}
 	const slug = frappe.router.slug(a.doctype);
 	const route = a.mode === "new" ? `/app/${slug}/new` : `/app/${slug}`;

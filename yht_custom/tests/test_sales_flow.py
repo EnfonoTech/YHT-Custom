@@ -282,3 +282,141 @@ class TestGetItemsFromSalesOrder(FrappeTestCase):
 		theirs = [r.item_code for r in (make_sales_invoice(so).get("items") or [])]
 		ours = [r.item_code for r in (make(so, None, {"filtered_children": []}).get("items") or [])]
 		self.assertEqual(ours, theirs)
+
+
+class TestSalesReturnEntryPoints(FrappeTestCase):
+	"""A return gets its own way in, because it gets its own series."""
+
+	def test_is_return_is_no_copy(self):
+		"""🔴 THE REASON THIS NEEDED CODE AND NOT CONFIG.
+
+		`create_new.js` applies `frappe.route_options` but skips `no_copy` fields, so a
+		shortcut, a ?is_return=1 URL and frappe.new_doc(dt, {is_return: 1}) ALL land on a
+		blank invoice with the box clear — measured on the site, all three. If this ever
+		flips to 0 upstream, the JS helper becomes unnecessary and this test says so.
+		"""
+		df = frappe.get_meta("Sales Invoice").get_field("is_return")
+		self.assertTrue(df.no_copy, "is_return is no longer no_copy — revisit sales_flow.js")
+
+	def test_a_return_takes_the_credit_note_series(self):
+		"""The whole point of splitting the entry point: KSCN-, not KSIN-.
+
+		This asserts the HOOK'S OUTPUT, not the configuration. The first version of
+		this test only checked the constant and the options string, so it stayed
+		green for the entire time the behaviour was broken: the prefix guard in
+		``set_naming_series_from_branch`` returned before the ``use_for_return``
+		branch ran, because the form pre-fills the branch's own invoice series and
+		that starts with the branch prefix.
+		"""
+		from yht_custom import branch_defaults, setup_branch_series
+
+		self.assertEqual(setup_branch_series.RETURN_SUFFIX_OVERRIDES["Sales Invoice"], "CN")
+
+		company = _first("Company")
+		warehouse = frappe.db.get_value(
+			"Warehouse", {"company": company, "is_group": 0, "disabled": 0}, "name"
+		)
+		if not (company and warehouse):
+			self.skipTest("site lacks a company or warehouse")
+
+		# This class has no shared fixture — build the branch the hook reads.
+		if not frappe.db.exists("Branch", BRANCH):
+			frappe.get_doc({"doctype": "Branch", "branch": BRANCH}).insert(ignore_permissions=True)
+		if not frappe.db.exists("User", USER):
+			frappe.get_doc(
+				{"doctype": "User", "email": USER, "first_name": "Flow", "send_welcome_email": 0}
+			).insert(ignore_permissions=True)
+		if frappe.db.exists("Branch Configuration", BRANCH):
+			frappe.delete_doc("Branch Configuration", BRANCH, force=1, ignore_permissions=True)
+		cfg = frappe.new_doc("Branch Configuration")
+		cfg.branch = BRANCH
+		cfg.company = company
+		cfg.append("warehouse", {"warehouse": warehouse})
+		cfg.append("user", {"user": USER, "role": "Branch User"})
+		cfg.insert(ignore_permissions=True)
+		frappe.clear_cache(user=USER)
+		if hasattr(frappe.local, "yht_branch_config_cache"):
+			delattr(frappe.local, "yht_branch_config_cache")
+
+		prefix = "ZQ"
+		plain, credit = f"{prefix}IN-.YY.-.####", f"{prefix}CN-.YY.-.####"
+		branch = frappe.get_doc("Branch", BRANCH)
+		if not branch.meta.has_field("custom_naming_series_table"):
+			self.skipTest("Branch has no naming series table on this site")
+		branch.custom_doc_prefix = prefix
+		branch.custom_naming_series_table = []
+		for template, use_for_return in ((plain, 0), (credit, 1)):
+			branch.append(
+				"custom_naming_series_table",
+				{
+					"parent_doctype": "Sales Invoice",
+					"naming_series": template,
+					"use_for_return": use_for_return,
+				},
+			)
+		branch.flags.ignore_permissions = True
+		branch.save()
+
+		frappe.set_user(USER)
+		try:
+			# Exactly what the desk hands the hook: the form's pre-filled series,
+			# which starts with this branch's prefix.
+			ret = frappe.new_doc("Sales Invoice")
+			ret.naming_series = plain
+			ret.is_return = 1
+			branch_defaults.set_naming_series_from_branch(ret)
+			self.assertEqual(
+				ret.naming_series,
+				credit,
+				"a return kept the invoice series — the prefix guard fired first",
+			)
+
+			# The same guard must still leave a plain invoice alone.
+			inv = frappe.new_doc("Sales Invoice")
+			inv.naming_series = plain
+			inv.is_return = 0
+			branch_defaults.set_naming_series_from_branch(inv)
+			self.assertEqual(inv.naming_series, plain)
+
+			# And a deliberate in-prefix pick that is not the other flavour's
+			# series is still honoured.
+			odd = frappe.new_doc("Sales Invoice")
+			odd.naming_series = f"{prefix}XX-.YY.-.####"
+			odd.is_return = 1
+			branch_defaults.set_naming_series_from_branch(odd)
+			self.assertEqual(odd.naming_series, f"{prefix}XX-.YY.-.####")
+		finally:
+			frappe.set_user("Administrator")
+			if hasattr(frappe.local, "yht_branch_config_cache"):
+				delattr(frappe.local, "yht_branch_config_cache")
+
+	def test_the_helper_is_wired_into_the_js(self):
+		"""The dashboard tile and the list button both call one helper."""
+		path = frappe.get_app_path("yht_custom", "public", "js", "sales_flow.js")
+		src = open(path, encoding="utf-8").read()
+		self.assertIn("yht_custom.sales.new_return", src)
+		self.assertIn('set_value("is_return", 1)', src)
+		# The list button must NOT go through frappe.listview_settings — erpnext
+		# reassigns that key wholesale when the list bundle loads, which is after
+		# app_include_js, so a merge there is discarded with no error.
+		self.assertNotIn("frappe.listview_settings", src)
+		self.assertIn('frappe.router.on("change"', src)
+
+	def test_the_dashboard_offers_a_return_tile(self):
+		path = frappe.get_app_path(
+			"yht_custom", "yht_custom", "page", "yht_dashboard", "yht_dashboard.js"
+		)
+		src = open(path, encoding="utf-8").read()
+		self.assertIn('label: "Sales Return"', src)
+		# The tile must be intercepted, not routed — a plain route cannot tick the box.
+		self.assertIn("data-yht-return", src)
+
+	def test_the_returns_shortcut_is_a_filtered_list(self):
+		"""NOT doc_view New — that would open a blank invoice with the box clear."""
+		from yht_custom import workspace_shortcuts
+
+		for workspace, rows in workspace_shortcuts.FILTERED_SHORTCUTS.items():
+			for doctype, label, filters in rows:
+				with self.subTest(workspace=workspace, label=label):
+					self.assertEqual(doctype, "Sales Invoice")
+					self.assertEqual(filters, {"is_return": 1})

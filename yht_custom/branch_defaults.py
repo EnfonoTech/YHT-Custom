@@ -92,9 +92,18 @@ def set_naming_series_from_branch(doc, method=None):
 	branch's templates, so leaving the form's choice alone lets a Khobar user
 	consume another branch's counter. Two exceptions:
 
-	* the series already starts with this branch's prefix — the operator picked
-	  it on purpose
+	* the series is already this branch's series for this kind of document —
+	  nothing to change — or it starts with this branch's prefix and is not the
+	  branch's series for the OTHER return flavour, i.e. the operator picked it
+	  on purpose
 	* the user holds a bypass role
+
+	That second clause is load-bearing and was missing until 2026-08-26. A plain
+	``startswith(prefix)`` guard made the return series unreachable: the form
+	pre-fills ``KSIN-.YY.-.####`` on every Sales Invoice, that starts with ``KS``,
+	so the guard returned before the ``use_for_return`` branch ever ran and a
+	credit note took the invoice counter. Blanking the field does not help either
+	— ``Document.insert`` calls ``_set_defaults()`` and puts it straight back.
 	"""
 	if not doc.meta.has_field("naming_series"):
 		return
@@ -110,8 +119,7 @@ def set_naming_series_from_branch(doc, method=None):
 		return
 
 	prefix = frappe.db.get_value("Branch", branch, "custom_doc_prefix") or ""
-	if prefix and (doc.get("naming_series") or "").startswith(prefix):
-		return
+	current = doc.get("naming_series") or ""
 
 	is_return = cint(doc.get("is_return"))
 	rows = frappe.get_all(
@@ -123,5 +131,16 @@ def set_naming_series_from_branch(doc, method=None):
 		return
 
 	match = next((r for r in rows if cint(r.use_for_return) == is_return), None)
-	if match:
-		doc.naming_series = match.naming_series
+	if not match:
+		return
+	if current == match.naming_series:
+		return
+
+	# The branch's series for the other return flavour is what the form pre-fills,
+	# so it is never a deliberate choice on this document — the prefix guard must
+	# not protect it.
+	other = {r.naming_series for r in rows if cint(r.use_for_return) != is_return}
+	if prefix and current.startswith(prefix) and current not in other:
+		return
+
+	doc.naming_series = match.naming_series
