@@ -93,13 +93,33 @@ frappe.ui.form.on("Delivery Note", {
 
 frappe.provide("yht_custom.sales");
 
+// `frappe.new_doc` resolves before the form has finished rendering, and how long that
+// takes depends on where the click came from: from a list view the form is ready almost
+// at once, from a Page (the branch dashboard) it is not. A single readiness check passed
+// on the list and bailed out silently on the dashboard, leaving an ORDINARY invoice open
+// — the operator's next click was a sale, not a credit note. Wait for the form instead.
+function wait_for_new_form(doctype, tries = 40) {
+	return new Promise((resolve) => {
+		const tick = () => {
+			const frm = window.cur_frm;
+			if (frm && frm.doc && frm.doc.doctype === doctype && frm.doc.__islocal) {
+				return resolve(frm);
+			}
+			if (--tries <= 0) return resolve(null);
+			setTimeout(tick, 100);
+		};
+		tick();
+	});
+}
+
 yht_custom.sales.new_return = async function () {
 	await frappe.new_doc("Sales Invoice");
-	// new_doc resolves before the form has finished rendering; set_value on a form that
-	// is still building silently loses the value.
-	await frappe.after_ajax(() => {});
-	if (!cur_frm || cur_frm.doc.doctype !== "Sales Invoice") return;
-	await cur_frm.set_value("is_return", 1);
+	const frm = await wait_for_new_form("Sales Invoice");
+	if (!frm) {
+		frappe.show_alert({ message: __("Could not open a return — try again"), indicator: "red" });
+		return;
+	}
+	await frm.set_value("is_return", 1);
 
 	// The picker still shows the form's pre-filled invoice series: the real choice happens
 	// server-side at before_insert. Ask for the answer and show it, or the operator sees
@@ -115,9 +135,9 @@ yht_custom.sales.new_return = async function () {
 		// A bypass role or an unconfigured branch is not an error — leave the picker alone.
 	}
 	if (series) {
-		const df = cur_frm.get_field("naming_series");
+		const df = frm.get_field("naming_series");
 		const options = (df && df.df.options ? df.df.options.split("\n") : []).map((o) => o.trim());
-		if (options.includes(series)) await cur_frm.set_value("naming_series", series);
+		if (options.includes(series)) await frm.set_value("naming_series", series);
 	}
 
 	frappe.show_alert({

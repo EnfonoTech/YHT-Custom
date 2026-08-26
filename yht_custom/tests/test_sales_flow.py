@@ -396,6 +396,10 @@ class TestSalesReturnEntryPoints(FrappeTestCase):
 		src = open(path, encoding="utf-8").read()
 		self.assertIn("yht_custom.sales.new_return", src)
 		self.assertIn('set_value("is_return", 1)', src)
+		# It must WAIT for the form. A single readiness check passed from a list view
+		# and bailed out silently from the dashboard Page, leaving an ordinary invoice
+		# open — so the operator's next click was a sale, not a credit note.
+		self.assertIn("wait_for_new_form", src)
 		# The list button must NOT go through frappe.listview_settings — erpnext
 		# reassigns that key wholesale when the list bundle loads, which is after
 		# app_include_js, so a merge there is discarded with no error. Comments are
