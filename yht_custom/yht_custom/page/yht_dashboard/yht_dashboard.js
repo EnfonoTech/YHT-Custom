@@ -147,7 +147,7 @@ function icon(name) {
 const ACTIONS = [
 	{ icon: "invoice", label: "Sales Invoice", desc: "Create new invoice", doctype: "Sales Invoice", mode: "new" },
 	// Its own tile, because a return is a different document to an accountant and gets its
-	// own KSCN- series for a branch user. `is_return` is no_copy, so this cannot be a plain route — the tile
+	// own KSSR- series for a branch user. `is_return` is no_copy, so this cannot be a plain route — the tile
 	// is intercepted and ticks the box after the form exists. See sales_flow.js.
 	{ icon: "invoice", label: "Sales Return", desc: "Credit note to a customer", ret: "Sales Invoice" },
 	{ icon: "quote", label: "Quotation", desc: "View quotations", doctype: "Quotation", mode: "list" },

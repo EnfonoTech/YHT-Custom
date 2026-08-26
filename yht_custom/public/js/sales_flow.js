@@ -86,7 +86,7 @@ frappe.ui.form.on("Delivery Note", {
 //
 // Ticking it is what earns the separate entry point — `branch_defaults` picks the
 // naming series from `is_return` at before_insert, so a BRANCH USER's document numbers
-// KSCN- (credit note) instead of KSIN-, which is the whole reason an accountant wants
+// KSSR- (credit note) instead of KSIN-, which is the whole reason an accountant wants
 // the two apart. A user holding a bypass role (System Manager, Accounts Manager, Sales
 // Manager, …) is exempt from that override by design and keeps whatever the picker
 // shows, so the alert below does not promise a series.
@@ -123,7 +123,7 @@ yht_custom.sales.new_return = async function () {
 
 	// The picker still shows the form's pre-filled invoice series: the real choice happens
 	// server-side at before_insert. Ask for the answer and show it, or the operator sees
-	// KSIN- on screen, saves, and gets KSCN- — which reads as a bug rather than a feature.
+	// KSIN- on screen, saves, and gets KSSR- — which reads as a bug rather than a feature.
 	let series = null;
 	try {
 		const r = await frappe.call({

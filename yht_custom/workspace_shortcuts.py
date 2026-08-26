@@ -30,7 +30,7 @@ NEW_SHORTCUTS = {
 }
 
 #: Filtered-LIST shortcuts. A return is a different document to an accountant — it carries
-#: its own KSCN- series (for a branch user) — so it gets its own way in.
+#: its own KSSR- series (for a branch user) — so it gets its own way in.
 #:
 #: 🔴 IT CANNOT BE A `doc_view: "New"` SHORTCUT. `Sales Invoice.is_return` is `no_copy = 1`
 #: and `create_new.js` skips no_copy fields when applying `frappe.route_options`, so a

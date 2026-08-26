@@ -117,7 +117,7 @@ def configured_series(doctype: str, is_return=0) -> str | None:
 	Exists so an entry point can SHOW the answer. The picker keeps the form's
 	pre-filled invoice series after ``is_return`` is ticked, because the real choice
 	happens here at ``before_insert`` — an operator who sees ``KSIN-`` and gets
-	``KSCN-`` reads that as a bug.
+	``KSSR-`` reads that as a bug.
 	"""
 	_prefix, rows = _branch_series_rows(doctype)
 	match = next((r for r in rows if cint(r.use_for_return) == cint(is_return)), None)

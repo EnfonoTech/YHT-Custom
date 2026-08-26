@@ -244,7 +244,7 @@ def return_naming_series(doctype: str = "Sales Invoice") -> str | None:
 
 	The entry point calls this so the form shows the series it will actually get.
 	Without it the picker keeps the form's pre-filled ``KSIN-`` after ``is_return`` is
-	ticked and the document saves as ``KSCN-``, which reads as a bug.
+	ticked and the document saves as ``KSSR-``, which reads as a bug.
 	"""
 	doctype = cstr(doctype)
 	frappe.has_permission(doctype, "create", throw=True)

@@ -299,7 +299,7 @@ class TestSalesReturnEntryPoints(FrappeTestCase):
 		self.assertTrue(df.no_copy, "is_return is no longer no_copy — revisit sales_flow.js")
 
 	def test_a_return_takes_the_credit_note_series(self):
-		"""The whole point of splitting the entry point: KSCN-, not KSIN-.
+		"""The whole point of splitting the entry point: KSSR-, not KSIN-.
 
 		This asserts the HOOK'S OUTPUT, not the configuration. The first version of
 		this test only checked the constant and the options string, so it stayed
@@ -310,7 +310,10 @@ class TestSalesReturnEntryPoints(FrappeTestCase):
 		"""
 		from yht_custom import branch_defaults, setup_branch_series
 
-		self.assertEqual(setup_branch_series.RETURN_SUFFIX_OVERRIDES["Sales Invoice"], "CN")
+		# SR, not CN: KSSR- is what 98 of the client's 102 returns already use.
+		# `TestReturnSeriesInvariants` owns the reasoning; this only pins the value
+		# the rest of this test builds on.
+		self.assertEqual(setup_branch_series.RETURN_SUFFIX_OVERRIDES["Sales Invoice"], "SR")
 
 		company = _first("Company")
 		warehouse = frappe.db.get_value(
@@ -339,7 +342,7 @@ class TestSalesReturnEntryPoints(FrappeTestCase):
 			delattr(frappe.local, "yht_branch_config_cache")
 
 		prefix = "ZQ"
-		plain, credit = f"{prefix}IN-.YY.-.####", f"{prefix}CN-.YY.-.####"
+		plain, credit = f"{prefix}IN-.YY.-.####", f"{prefix}SR-.YY.-.####"
 		branch = frappe.get_doc("Branch", BRANCH)
 		if not branch.meta.has_field("custom_naming_series_table"):
 			self.skipTest("Branch has no naming series table on this site")
