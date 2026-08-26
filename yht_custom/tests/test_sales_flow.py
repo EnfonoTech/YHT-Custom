@@ -398,9 +398,13 @@ class TestSalesReturnEntryPoints(FrappeTestCase):
 		self.assertIn('set_value("is_return", 1)', src)
 		# The list button must NOT go through frappe.listview_settings — erpnext
 		# reassigns that key wholesale when the list bundle loads, which is after
-		# app_include_js, so a merge there is discarded with no error.
-		self.assertNotIn("frappe.listview_settings", src)
-		self.assertIn('frappe.router.on("change"', src)
+		# app_include_js, so a merge there is discarded with no error. Comments are
+		# stripped first: the file explains that trap in prose and would match itself.
+		code = "\n".join(
+			line for line in src.splitlines() if not line.lstrip().startswith("//")
+		)
+		self.assertNotIn("frappe.listview_settings", code)
+		self.assertIn('frappe.router.on("change"', code)
 
 	def test_the_dashboard_offers_a_return_tile(self):
 		path = frappe.get_app_path(
