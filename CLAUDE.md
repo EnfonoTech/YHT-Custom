@@ -412,6 +412,48 @@ accountant: SI→`CN`, DN→`DRN`, PI→`DBN`, PR→`PRN`.
     visible fast-forward. The head of a report clip is loading, which the narration never
     describes: trim the head, keep the tail, aim for ~1.15× the narration.
 
+58. 🔴 **A `startswith(prefix)` GUARD ON `naming_series` MAKES THE RETURN SERIES UNREACHABLE.**
+    `branch_defaults.set_naming_series_from_branch` honoured a series that already starts
+    with the branch prefix, as "the operator picked it on purpose". But the form pre-fills
+    the branch's own invoice series — `KSIN-.YY.-.####`, which starts with `KS` — on EVERY
+    Sales Invoice, so the guard fired before the `use_for_return` branch ever ran and a
+    credit note took the invoice counter. **Blanking the field does not help:**
+    `Document.insert` calls `_set_defaults()` before `before_insert`, so the default comes
+    straight back. Measured: a return inserted as `branchtest` came out `KSIN-26-0609`; with
+    the guard fixed, `KSCN-26-0001`. The guard now never protects the branch's series for
+    the OTHER return flavour. ⚠️ **And the test was green throughout** — it asserted the
+    `RETURN_SUFFIX_OVERRIDES` constant and the `naming_series` options string, i.e. the
+    configuration, never the hook's output. Assert what the hook DOES.
+59. 🔴 **`frappe.listview_settings["X"] = { … }` IS A WHOLESALE ASSIGNMENT IN ERPNEXT, AND
+    THE LIST BUNDLE LOADS AFTER `app_include_js`.** `sales_invoice_list.js` opens with that
+    assignment on line 5, and a doctype's list JS is fetched when the list is first opened —
+    long after boot. Anything merged into that object from `app_include_js` is discarded
+    silently: no error, the button simply never appears. Attach from `frappe.router.on(
+    "change")` instead.
+60. 🔴 **THE LIST VIEW CLEARS ITS INNER TOOLBAR AFTER THE FIRST RENDER, SO ADD-ONCE LOSES.**
+    Following gotcha 59, adding the button once behind a `__done` flag worked on an in-app
+    route to the list and produced an EMPTY toolbar on a cold load — measured both ways, the
+    add had run and the flag was set. Key on the button being present in
+    `page.inner_toolbar` and re-check for a few seconds.
+61. ⚠️ **`frappe.new_doc` RESOLVES BEFORE THE FORM EXISTS, AND HOW LONG THAT TAKES DEPENDS
+    ON THE CALLER.** From a list view `cur_frm` is the new form almost at once; from a Page
+    (the branch dashboard) it is not. A single `if (!cur_frm …) return;` readiness check
+    therefore passed on the list and returned SILENTLY on the dashboard, leaving an ordinary
+    Sales Invoice open with `is_return` clear — the operator's next click was a sale, not a
+    credit note. Poll for `cur_frm.doc.__islocal` with the right doctype instead.
+62. ⚠️ **A BRANCH USER CANNOT OPEN ANY NAMED WORKSPACE, SO A SHORTCUT THERE IS NOT THEIR
+    ROUTE.** `branch_user_restrict.js` whitelists the literal slug `workspace`, but
+    `/app/branch-user` has slug `branch-user`, so every named workspace redirects to
+    `yht-dashboard` — verified live. Workspace shortcuts are for managers; a branch user
+    reaches the same thing through a dashboard tile or a list-view button.
+63. ⚠️ **THE SERVER CLONE HAD UNCOMMITTED EDITS FROM DIRECT `scp` DEPLOYS, AND THEY BLOCKED
+    `git pull` — WHILE `set -e` DID NOT NOTICE.** Iterating by copying files onto the box
+    leaves the worktree dirty, and the next pull aborts with "local changes would be
+    overwritten". Piping the pull into `tail` hides the non-zero exit from `set -e`, so the
+    script cheerfully went on to `migrate` and `restart` and printed DEPLOYED having deployed
+    nothing. Back up, `git reset --hard FETCH_HEAD`, and check `git log --oneline -1` on the
+    box as part of every deploy.
+
 ## Deploy
 
 Repo: **`git@github-yht:EnfonoTech/YHT-Custom.git`** (private). The box has a dedicated read-only deploy key at
