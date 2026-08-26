@@ -440,3 +440,37 @@ class TestSalesReturnEntryPoints(FrappeTestCase):
 				with self.subTest(workspace=workspace, label=label):
 					self.assertEqual(doctype, "Sales Invoice")
 					self.assertEqual(filters, {"is_return": 1})
+
+	def test_the_split_is_real_on_both_sides(self):
+		"""A returns shortcut alone is cosmetic — the plain one must exclude them.
+
+		And every workspace that gets one must get the other, or one side of the
+		split is missing on that workspace.
+		"""
+		from yht_custom import workspace_shortcuts as ws
+
+		self.assertEqual(
+			set(ws.FILTERED_SHORTCUTS),
+			set(ws.NARROW_SHORTCUTS),
+			"a workspace has one half of the split without the other",
+		)
+		for workspace, rows in ws.NARROW_SHORTCUTS.items():
+			for doctype, filters in rows:
+				with self.subTest(workspace=workspace, doctype=doctype):
+					self.assertEqual(filters, {"is_return": 0})
+
+	def test_branch_users_can_reach_the_returns_shortcut(self):
+		"""boot.py trims a branch user to one workspace, so it must carry the pair."""
+		from yht_custom import workspace_shortcuts as ws
+
+		self.assertIn("Branch User", ws.FILTERED_SHORTCUTS)
+		self.assertIn("Branch User", ws.NARROW_SHORTCUTS)
+
+	def test_the_narrowing_leaves_the_other_shortcuts_alone(self):
+		"""It matches on the bare doctype label, so New/Returns are untouched."""
+		from yht_custom import workspace_shortcuts as ws
+
+		labels = {ws.LABEL.format("Sales Invoice")}
+		labels |= {label for rows in ws.FILTERED_SHORTCUTS.values() for _, label, _ in rows}
+		for doctype, _filters in ws.NARROW_SHORTCUTS["Selling"]:
+			self.assertNotIn(doctype, labels, "the narrowing target collides with another shortcut")

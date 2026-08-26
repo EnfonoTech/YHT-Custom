@@ -38,9 +38,27 @@ NEW_SHORTCUTS = {
 #: CLEAR. Only setting it after the form exists works, and a Workspace Shortcut is config,
 #: not code. So the shortcut opens the filtered LIST, and `sales_flow.js` puts a
 #: "New Return" button on that list which ticks the box properly.
+#:
+#: `Branch User` is in the list because a branch user sees NO other workspace — `boot.py`
+#: trims them to that one — so a shortcut on Selling or Accounting is invisible to the
+#: people who raise most of the credit notes.
 FILTERED_SHORTCUTS = {
 	"Selling": [("Sales Invoice", "Sales Returns", {"is_return": 1})],
 	"Accounting": [("Sales Invoice", "Sales Returns", {"is_return": 1})],
+	"Branch User": [("Sales Invoice", "Sales Returns", {"is_return": 1})],
+}
+
+#: Existing shortcuts that must be NARROWED, so the split is real rather than cosmetic.
+#: Without this the plain "Sales Invoice" shortcut still lists every credit note beside
+#: the invoices, which is the thing the two shortcuts exist to stop.
+#:
+#: ⚠️ This is the ONE place the module modifies a shortcut it did not create. It matches
+#: only the shortcut whose label IS the doctype name, so "New Sales Invoice" and
+#: "Sales Returns" are left alone, and it is idempotent — it writes only on a difference.
+NARROW_SHORTCUTS = {
+	"Selling": [("Sales Invoice", {"is_return": 0})],
+	"Accounting": [("Sales Invoice", {"is_return": 0})],
+	"Branch User": [("Sales Invoice", {"is_return": 0})],
 }
 
 LABEL = "New {0}"
@@ -50,7 +68,8 @@ def setup_new_shortcuts() -> dict:
 	"""Idempotent. Only ever ADDS — never reorders or removes what is there."""
 	added, already, skipped = 0, 0, []
 
-	for workspace, doctypes in NEW_SHORTCUTS.items():
+	workspaces = list(dict.fromkeys([*NEW_SHORTCUTS, *FILTERED_SHORTCUTS, *NARROW_SHORTCUTS]))
+	for workspace in workspaces:
 		if not frappe.db.exists("Workspace", workspace):
 			skipped.append(f"{workspace}: no such workspace")
 			continue
@@ -60,7 +79,7 @@ def setup_new_shortcuts() -> dict:
 		content = _load_content(doc)
 		changed = False
 
-		for doctype in doctypes:
+		for doctype in NEW_SHORTCUTS.get(workspace, []):
 			if not frappe.db.exists("DocType", doctype):
 				skipped.append(f"{workspace}: no doctype {doctype}")
 				continue
@@ -114,6 +133,19 @@ def setup_new_shortcuts() -> dict:
 				                "type": "shortcut",
 				                "data": {"shortcut_name": label, "col": 3}})
 				changed = True
+
+		for doctype, filters in NARROW_SHORTCUTS.get(workspace, []):
+			wanted = json.dumps(filters)
+			for row in doc.shortcuts:
+				# The plain shortcut only — its label is the bare doctype name.
+				if row.type != "DocType" or row.link_to != doctype or row.label != doctype:
+					continue
+				if (row.stats_filter or "") != wanted:
+					row.stats_filter = wanted
+					changed = True
+				if not row.doc_view:
+					row.doc_view = "List"
+					changed = True
 
 		if changed:
 			doc.content = json.dumps(content)
