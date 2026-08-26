@@ -70,7 +70,11 @@ RETURN_SUFFIX_OVERRIDES = {
 RETIRED_SERIES = {
 	"Sales Invoice": ["KSCN-.YY.-.####"],
 	"Delivery Note": ["KSDRN-.YY.-.####"],
-	"Purchase Invoice": ["KSDBN-.YY.-.####", "KSEXP-.YY.-.####"],
+	# `_TEST-KEEPME-` is not a wrong series, it is TEST DEBRIS: an older version of
+	# test_existing_entries_survive_a_reseed appended it and called frappe.db.commit(),
+	# which tearDown's rollback could not undo, so it became a permanent choosable
+	# entry in the live picker on every site the suite had run against.
+	"Purchase Invoice": ["KSDBN-.YY.-.####", "KSEXP-.YY.-.####", "_TEST-KEEPME-.YY.-.####"],
 	"Purchase Receipt": ["KSPR-.YY.-.####", "KSPRN-.YY.-.####"],
 	"Stock Reconciliation": ["KSSR-.YY.-.####"],
 }

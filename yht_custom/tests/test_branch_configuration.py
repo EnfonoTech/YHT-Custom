@@ -167,7 +167,14 @@ class TestNamingSeriesOptionsMerge(FrappeTestCase):
 	def test_existing_entries_survive_a_reseed(self):
 		from yht_custom.setup_branch_series import setup_branch_series
 
-		marker = "_TEST-KEEPME-.YY.-.####"
+		# 🔴 NEVER frappe.db.commit() HERE. The first version did, and tearDown's
+		# rollback cannot undo a committed write — so the marker became a PERMANENT
+		# entry in the real Purchase Invoice naming-series picker on every site the
+		# suite had ever run against, offered to operators as a choosable series. The
+		# old marker `_TEST-KEEPME-` is listed in RETIRED_SERIES to clean it up.
+		# The commit was never needed: setup_branch_series reads through frappe.db in
+		# this same transaction and sees the uncommitted write.
+		marker = "_TEST-SURVIVES-.YY.-.####"
 		row = frappe.db.get_value(
 			"Property Setter",
 			{"doc_type": "Purchase Invoice", "field_name": "naming_series", "property": "options"},
@@ -177,13 +184,13 @@ class TestNamingSeriesOptionsMerge(FrappeTestCase):
 		if not row:
 			self.skipTest("no naming_series Property Setter on Purchase Invoice yet")
 
-		frappe.db.set_value("Property Setter", row.name, "value", (row.value or "") + "\n" + marker)
-		frappe.db.commit()
-
-		setup_branch_series()
-
-		after = frappe.db.get_value("Property Setter", row.name, "value") or ""
-		self.assertIn(marker, after.split("\n"), "reseeding deleted an unrelated series")
+		try:
+			frappe.db.set_value("Property Setter", row.name, "value", (row.value or "") + "\n" + marker)
+			setup_branch_series()
+			after = frappe.db.get_value("Property Setter", row.name, "value") or ""
+			self.assertIn(marker, after.split("\n"), "reseeding deleted an unrelated series")
+		finally:
+			frappe.db.set_value("Property Setter", row.name, "value", row.value)
 
 	def test_expense_series_is_present_after_reseed(self):
 		from yht_custom.expense_invoice import EXPENSE_SERIES, setup_expense_invoice

@@ -166,6 +166,174 @@ class TestNegateReturnQuantities(FrappeTestCase):
 					)
 
 
+def _make_branch_user(test):
+	"""A user with NO bypass role.
+
+	🔴 Without this every route test passes vacuously: `enforce_return_stock_route`
+	returns immediately for a bypass role, and the suite runs as Administrator, which
+	`_is_bypass` treats as one.
+	"""
+	company = _first("Company")
+	warehouse = frappe.db.get_value(
+		"Warehouse", {"company": company, "is_group": 0, "disabled": 0}, "name"
+	)
+	if not (company and warehouse):
+		test.skipTest("site lacks a company or warehouse")
+
+	if not frappe.db.exists("Branch", BRANCH):
+		frappe.get_doc({"doctype": "Branch", "branch": BRANCH}).insert(ignore_permissions=True)
+	if not frappe.db.exists("User", USER):
+		frappe.get_doc(
+			{"doctype": "User", "email": USER, "first_name": "Return", "send_welcome_email": 0}
+		).insert(ignore_permissions=True)
+	if frappe.db.exists("Branch Configuration", BRANCH):
+		frappe.delete_doc("Branch Configuration", BRANCH, force=1, ignore_permissions=True)
+	cfg = frappe.new_doc("Branch Configuration")
+	cfg.branch, cfg.company = BRANCH, company
+	cfg.append("warehouse", {"warehouse": warehouse})
+	cfg.append("user", {"user": USER, "role": "Branch User"})
+	cfg.insert(ignore_permissions=True)
+	frappe.clear_cache(user=USER)
+	return company
+
+
+class TestReturnRouteBlockers(FrappeTestCase):
+	"""One test per blocker the adversarial review confirmed on 2026-08-26.
+
+	Every one of these reproduced against real data before the fix.
+	"""
+
+	def setUp(self):
+		self.company = _make_branch_user(self)
+		frappe.set_user(USER)
+		from yht_custom.sales_flow import _may_bypass
+
+		if _may_bypass():
+			frappe.set_user("Administrator")
+			self.skipTest("test user holds a bypass role — the guard would no-op")
+
+	def tearDown(self):
+		frappe.set_user("Administrator")
+		if hasattr(frappe.local, "yht_branch_config_cache"):
+			delattr(frappe.local, "yht_branch_config_cache")
+		frappe.db.rollback()
+
+	def _return_of(self, original_name, doctype="Sales Invoice"):
+		original = frappe.get_doc(doctype, original_name)
+		doc = frappe.new_doc(doctype)
+		doc.company = original.company
+		if doctype == "Sales Invoice":
+			doc.customer = original.customer
+		else:
+			doc.supplier = original.supplier
+		doc.is_return, doc.return_against = 1, original_name
+		return original, doc
+
+	# ---------------------------------------------------- blocker 1 + major
+
+	def test_an_expense_debit_note_is_not_refused(self):
+		"""🔴 It was, and unsatisfiably.
+
+		An expense bill is itemless by design, and the route the guard demanded — a
+		Purchase Receipt — cannot hold an itemless row, because
+		`Purchase Receipt Item.item_code` is mandatory while `Purchase Invoice Item`'s
+		is not. That asymmetry is the whole reason an expense invoice IS a flagged
+		Purchase Invoice. 345 expense invoices plus every future one were affected.
+		"""
+		doc = frappe.new_doc("Purchase Invoice")
+		doc.is_return = 1
+		doc.custom_is_expense_invoice = 1
+		doc.append("items", {"item_name": "Rent", "qty": -1, "rate": 100})
+		# Must not throw.
+		return_flow.enforce_return_stock_route(doc)
+
+	def test_a_return_of_something_never_shipped_is_not_refused(self):
+		"""🔴 'The original did not carry its own stock' is NOT 'it went out on a note'.
+
+		It equally means nothing moved at all. 150 sales invoices and 366 purchase
+		invoices on this site have no stock document behind them.
+		"""
+		doc = frappe.new_doc("Sales Invoice")
+		doc.is_return = 1
+		doc.return_against = None
+		doc.append("items", {"item_name": "Consulting", "qty": -1, "rate": 500})
+		# No original to point at, so nothing shipped — must not throw.
+		return_flow.enforce_return_stock_route(doc)
+
+	# ------------------------------------------------------------ blocker 2
+
+	def test_a_stock_moving_return_cannot_be_typed_by_hand(self):
+		"""🔴 THE HOLE THIS CHANGE OPENED, AND THEN CLOSED.
+
+		Exempting returns from the forward rule meant a branch user could tick
+		`is_return` against any of 950 legacy direct-stock invoices and post ANY item
+		at ANY quantity into the warehouse — `update_stock` was left as typed and the
+		return's own rows were never examined. ERPNext is no backstop: its over-return
+		guard keys on `sales_invoice_item`, which a hand-typed row does not have.
+		"""
+		src = frappe.db.get_value(
+			"Sales Invoice", {"docstatus": 1, "is_return": 0, "update_stock": 1}, "name"
+		)
+		if not src:
+			self.skipTest("no direct-stock invoice on this site")
+
+		original, doc = self._return_of(src)
+		doc.update_stock = 1
+		row = original.items[0]
+		# A row that did NOT come from the original: no sales_invoice_item.
+		doc.append("items", {"item_code": row.item_code, "qty": -1, "rate": row.rate,
+		                     "uom": row.uom, "conversion_factor": row.conversion_factor})
+		with self.assertRaises(frappe.ValidationError):
+			return_flow.enforce_return_stock_route(doc)
+
+	def test_a_mapped_stock_moving_return_is_allowed(self):
+		"""The same document, built the supported way, must pass."""
+		src = frappe.db.get_value(
+			"Sales Invoice", {"docstatus": 1, "is_return": 0, "update_stock": 1}, "name"
+		)
+		if not src:
+			self.skipTest("no direct-stock invoice on this site")
+
+		original, doc = self._return_of(src)
+		doc.update_stock = 1
+		row = original.items[0]
+		doc.append("items", {"item_code": row.item_code, "qty": -1, "rate": row.rate,
+		                     "uom": row.uom, "conversion_factor": row.conversion_factor,
+		                     "sales_invoice_item": row.name})
+		return_flow.enforce_return_stock_route(doc)
+		self.assertEqual(doc.update_stock, 1, "the goods must still come back on this document")
+
+	# -------------------------------------------------------------- wording
+
+	def test_the_purchase_side_gets_purchase_side_wording(self):
+		"""A buyer has no Delivery Note, no Sales Return menu and no Issue Credit Note."""
+		si_title, si_msg = return_flow.ROUTE_MESSAGE["Sales Invoice"]
+		pi_title, pi_msg = return_flow.ROUTE_MESSAGE["Purchase Invoice"]
+		self.assertIn("Delivery Note", si_msg)
+		self.assertNotIn("Delivery Note", pi_msg)
+		self.assertNotIn("Issue Credit Note", pi_msg)
+		self.assertIn("Purchase Receipt", pi_msg)
+		self.assertNotEqual(si_title, pi_title)
+
+	# ----------------------------------------------------- every row, not any
+
+	def test_one_linked_row_does_not_admit_the_others(self):
+		"""🔴 It did. A single legitimate line carried unlimited unrelated ones through,
+		and it was the one path that admitted a return with `return_against` blank —
+		which switches off every ERPNext return check."""
+		dn_return = frappe.db.get_value("Delivery Note", {"is_return": 1, "docstatus": 1}, "name")
+		if not dn_return:
+			self.skipTest("no delivery return on this site")
+
+		doc = frappe.new_doc("Sales Invoice")
+		doc.append("items", {"item_name": "linked", "qty": -1, "delivery_note": dn_return})
+		doc.append("items", {"item_name": "stowaway", "qty": -1})
+		self.assertFalse(
+			return_flow._came_back_on_a_stock_return(doc),
+			"a row with no delivery note behind it was carried through by a linked sibling",
+		)
+
+
 class TestReturnStockRoute(FrappeTestCase):
 	def test_negation_runs_last_on_purchase_invoice(self):
 		"""expense_invoice.before_validate stamps qty = 1 on a blank row — a

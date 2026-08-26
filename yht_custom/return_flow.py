@@ -62,6 +62,35 @@ STOCK_LINK = {
 	"Purchase Invoice": ("purchase_receipt", "Purchase Receipt"),
 }
 
+#: doctype → the item fieldname the return mapper stamps with the ORIGINAL row's name.
+#: ERPNext's over-return guard keys on exactly this; with it blank a second full return
+#: saves with a msgprint instead of an error, so a stock-moving return that does not
+#: carry it can post any item at any quantity. Measured on this site: 145 of 145 rows on
+#: stock-moving returns already have it, so requiring it rejects nothing real.
+RETURN_ROW_LINK = {
+	"Sales Invoice": "sales_invoice_item",
+	"Purchase Invoice": "purchase_invoice_item",
+}
+
+#: Per-side wording. The handler is registered on BOTH invoice doctypes, and a buyer
+#: returning goods to a supplier has no Delivery Note, no "Sales Return" menu entry and
+#: no "Issue Credit Note" checkbox — sales-side text there is an instruction they cannot
+#: follow.
+ROUTE_MESSAGE = {
+	"Sales Invoice": (
+		"Deliver the Return First",
+		"These goods were delivered on a Delivery Note, so they have to come back on one. "
+		"Open the Delivery Note, use <b>Create &gt; Sales Return</b>, and tick "
+		"<b>Issue Credit Note</b> — the credit note is then raised and linked for you.",
+	),
+	"Purchase Invoice": (
+		"Return the Goods First",
+		"These goods arrived on a Purchase Receipt, so they have to go back on one. "
+		"Open the Purchase Receipt and use <b>Create &gt; Return</b>, then raise the debit "
+		"note from that return.",
+	),
+}
+
 
 def negate_return_quantities(doc, method=None):
 	"""`before_validate` — flip a positive quantity on a return to negative.
@@ -120,44 +149,117 @@ def _original_moved_its_own_stock(doc) -> bool | None:
 
 
 def _came_back_on_a_stock_return(doc) -> bool:
-	"""True when a row points at a stock document that is itself a return."""
+	"""True when EVERY row points at a stock document that is itself a return.
+
+	⚠️ Every, not any. The first version asked whether one row was linked and let the
+	whole document through — so a single legitimate line could carry an unlimited
+	number of unrelated ones past the guard, and that was also the one path that
+	admitted a return with `return_against` blank, which switches off ERPNext's own
+	party, date and over-return checks entirely.
+	"""
 	link = STOCK_LINK.get(doc.doctype)
 	if not link:
 		return False
 	fieldname, stock_doctype = link
 
-	names = {cstr(row.get(fieldname)) for row in doc.get("items") or []}
-	names.discard("")
-	if not names:
+	rows = doc.get("items") or []
+	if not rows:
 		return False
 
-	# One query, not one per row. `limit_page_length`, not `limit` — get_all sets
-	# the former and only the former is part of the query API.
-	return bool(
+	names = {cstr(row.get(fieldname)) for row in rows}
+	if "" in names:
+		return False  # a row with no stock document behind it at all
+
+	# One query, not one per row.
+	returns = set(
 		frappe.get_all(
 			stock_doctype,
 			filters={"name": ("in", list(names)), "is_return": 1},
+			pluck="name",
+			limit_page_length=0,
+		)
+	)
+	return names <= returns
+
+
+def _original_shipped_on_a_stock_document(doc) -> bool:
+	"""Did the document being reversed actually move goods on a stock document?
+
+	This is the question the first version never asked, and the omission was a
+	blocker: it treated "the original did not carry its own stock" as proof that the
+	goods had gone out on a Delivery Note, when it equally means the original moved
+	no goods at all. Measured on this site, that mistake refused returns against 345
+	expense invoices, 366 purchase invoices with no receipt and 150 sales invoices
+	with no delivery note.
+	"""
+	ref = cstr(doc.get("return_against"))
+	if not ref:
+		return False
+	fieldname, _stock_doctype = STOCK_LINK[doc.doctype]
+	return bool(
+		frappe.get_all(
+			f"{doc.doctype} Item",
+			filters={"parent": ref, "parenttype": doc.doctype, fieldname: ("is", "set")},
 			pluck="name",
 			limit_page_length=1,
 		)
 	)
 
 
+def _require_rows_mapped_from_the_original(doc):
+	"""A stock-moving return must be built FROM the original document.
+
+	Otherwise the rows carry no `RETURN_ROW_LINK`, ERPNext's over-return guard has no
+	key to count against, and the return posts whatever item and quantity was typed —
+	including items that never appeared on the invoice being reversed.
+	"""
+	fieldname = RETURN_ROW_LINK.get(doc.doctype)
+	if not fieldname:
+		return
+	unlinked = [cint(row.idx) for row in doc.get("items") or [] if not cstr(row.get(fieldname))]
+	if not unlinked:
+		return
+
+	frappe.throw(
+		_(
+			"Row {0}: a return that brings stock back has to be raised from the document "
+			"it reverses — open {1} and use <b>Create &gt; Return</b>. Typing the rows by "
+			"hand leaves nothing to check the quantity against."
+		).format(", ".join(str(i) for i in unlinked), cstr(doc.get("return_against")) or _("the original")),
+		title=_("Raise the Return From the Original"),
+	)
+
+
 def enforce_return_stock_route(doc, method=None):
 	"""`before_validate` — the return half of the delivery-note rule.
 
-	Client decision, 2026-08-26: **a credit note means goods physically coming
-	back.** So a return of a delivered document has to be raised on the stock
-	document, not on the invoice — which is also the only route that links the two
-	well enough for ERPNext's own over-return guard to fire (that guard keys on
-	``dn_detail``; with it blank a second full return passes with a message
-	instead of an error).
+	Client decision, 2026-08-26: **a credit note means goods physically coming back.**
+	So a return of DELIVERED goods has to be raised on the stock document — which is
+	also the only route that links the two well enough for ERPNext's own over-return
+	guard to fire (that guard keys on the row link; with it blank a second full return
+	passes with a message instead of an error).
 
-	⚠️ The evidence does not entirely agree with the decision, and this is the
-	place to say so: 8 submitted returns on this site have no `return_against` at
-	all, and 11 span between 2 and 23 source Delivery Notes. Those look like
-	pricing credits rather than goods coming back. They are left to a bypass role
-	rather than made impossible.
+	🔴 THREE THINGS THE FIRST VERSION GOT WRONG, all measured on this site:
+
+	1. It read "the original did not carry its own stock" as "the goods went out on a
+	   Delivery Note". It equally means the original moved NO goods — a service line, a
+	   non-stock item, an expense bill. That refused returns against 345 expense
+	   invoices, 366 purchase invoices with no receipt and 150 sales invoices with no
+	   delivery note, and for an expense bill it was unsatisfiable by construction:
+	   `Purchase Receipt Item.item_code` is mandatory and `Purchase Invoice Item`'s is
+	   not, which is precisely why an expense invoice is a flagged Purchase Invoice.
+	2. It returned the moment the original carried its own stock, leaving `update_stock`
+	   exactly as typed and never looking at the return's own rows — so a branch user
+	   could tick *Is Return* against any of 950 legacy direct-stock invoices and post
+	   ANY item at ANY quantity into the warehouse. On the purchase side the same hole
+	   ran stock OUT, with strictly less protection: ERPNext's own `update_stock` check
+	   in `validate_return_against` is written `if doc.doctype == "Sales Invoice"`.
+	3. Both messages were sales-side, on a handler registered for Purchase Invoice too.
+
+	⚠️ The evidence still argues with the decision, and this is the place to say so: 8
+	submitted returns have no `return_against` at all and 11 span 2 to 23 source
+	delivery notes. Those look like pricing credits rather than goods coming back. They
+	are left to a bypass role rather than made impossible.
 	"""
 	from yht_custom.sales_flow import _may_bypass
 
@@ -168,39 +270,33 @@ def enforce_return_stock_route(doc, method=None):
 	if _may_bypass():
 		return
 
-	moved_own_stock = _original_moved_its_own_stock(doc)
-
-	if moved_own_stock:
-		# The original carried its own stock, so this document is where the goods
-		# come back. Leave `update_stock` exactly as the mapper copied it — the
-		# forward rule must NOT zero it here, or the stock never returns.
+	# An expense bill is itemless by design and can never have a stock document behind
+	# it, so there is no route to demand. `enforce_purchase_receipt_route` exempts it
+	# first thing for the same reason; this had no such exemption and made an expense
+	# debit note unsaveable — while the same commit taught `set_expense_series` to give
+	# that document the branch debit-note series. The two halves contradicted.
+	if cint(doc.get("custom_is_expense_invoice")):
 		return
 
-	# Everything below is a return of goods that left on a stock document.
+	if _original_moved_its_own_stock(doc):
+		# The goods come back on THIS document. Leave `update_stock` as the mapper
+		# copied it — the forward rule must not zero it, or the stock never returns —
+		# but only for rows that genuinely came from the original.
+		_require_rows_mapped_from_the_original(doc)
+		return
+
+	if not _original_shipped_on_a_stock_document(doc):
+		# Nothing was ever shipped or received: a service, a non-stock item, an expense.
+		# There are no goods to come back, so there is no stock route to insist on.
+		return
+
 	doc.update_stock = 0
 
 	if _came_back_on_a_stock_return(doc):
 		return
 
-	if moved_own_stock is None:
-		frappe.throw(
-			_(
-				"A credit note has to say which document it reverses. Open the "
-				"delivery return and use <b>Create &gt; Sales Invoice</b>, or tick "
-				"<b>Issue Credit Note</b> on the delivery return so it is raised for you."
-			),
-			title=_("Return Against Required"),
-		)
-
-	frappe.throw(
-		_(
-			"These goods were delivered on a Delivery Note, so they have to come back "
-			"on one. Open the Delivery Note, use <b>Create &gt; Sales Return</b>, and "
-			"tick <b>Issue Credit Note</b> — the credit note is then raised and linked "
-			"for you."
-		),
-		title=_("Deliver the Return First"),
-	)
+	title, message = ROUTE_MESSAGE[doc.doctype]
+	frappe.throw(_(message), title=_(title))
 
 
 def delivery_note_dashboard(data=None):
