@@ -82,15 +82,30 @@ ARTEFACT_BANK = "AL RAJHI BANK"
 ARTEFACT_IBAN = "SA6880000139608013397744"
 ARTEFACT_ACCOUNT_NO = "139000010006083397744"
 
-#: (print format, doctype). All seven.
+#: (print format, doctype). All ten.
 FORMATS = (
 	("KATC Delivery Note", "Delivery Note"),
 	("KATC Tax Invoice", "Sales Invoice"),
 	("KATC Proforma Invoice", "Sales Order"),
+	("KATC Sales Order", "Sales Order"),
+	("KATC Sales Order Arabic", "Sales Order"),
 	("KATC Sales Order No LH", "Sales Order"),
 	("KATC Quotation", "Quotation"),
 	("KATC Quotation No LH", "Quotation"),
 	("KATC Quotation Arabic", "Quotation"),
+	("KATC Quotation Proforma", "Quotation"),
+)
+
+#: Formats whose whole body is a two-line shim over a shared template. A variant is a
+#: FLAG, not a copy — see yht_custom/templates/includes/katc/.
+SHIMMED = (
+	"KATC Quotation",
+	"KATC Quotation Arabic",
+	"KATC Proforma Invoice",
+	"KATC Quotation Proforma",
+	"KATC Sales Order",
+	"KATC Sales Order Arabic",
+	"KATC Sales Order No LH",
 )
 
 #: The pair that is ONE format toggled by `no_letterhead` (Q2).
@@ -264,6 +279,11 @@ def strip_first_thead(html):
 	exactly what makes the header repeat on page 2.
 	"""
 	return re.sub(r"<thead\b.*?</thead>", "", html or "", count=1, flags=re.S | re.I)
+
+
+def strip_bank_block(html: str) -> str:
+	"""Remove the VAT / bank block so two formats can be compared without it."""
+	return re.sub(r'<div class="katc-bank">.*?</div>', "", html, flags=re.S)
 
 
 def strip_arabic_column(html):
@@ -599,13 +619,13 @@ class TestKatcLetterhead(FrappeTestCase):
 		self.assertTrue(callable(resolved))
 
 
-# ============================================================== all seven
+# =============================================================== all ten
 
 
 class TestKatcFormatsInstalled(FrappeTestCase):
 	"""Checks 10-17."""
 
-	def test_all_seven_install_correctly(self):
+	def test_all_ten_install_correctly(self):
 		# check 10
 		for print_format, doctype in FORMATS:
 			with self.subTest(print_format=print_format):
@@ -886,8 +906,17 @@ class TestTwoFormatDoctypes(FrappeTestCase):
 					f"{print_format} must spacer the body down when the header is absent",
 				)
 
-	def test_the_arabic_quotation_differs_by_exactly_one_column(self):
-		"""check 26 — a divergence beyond that one column is a review finding."""
+	def test_the_arabic_quotation_differs_by_exactly_two_things(self):
+		"""check 26 — the Arabic column AND the bank block, and nothing else.
+
+		It used to assert ONE difference, and that assertion held a real fidelity gap
+		in place: `quote print 2 with arabic.pdf` carries Print 2's VAT # / BANK DETAILS
+		block on its last page, and Print 1 — the base this format is built on, which the
+		artefact mapping confirmed is the correct base — does not. Adding the block to
+		the Arabic format alone failed this test; adding it to both would have put a bank
+		block on Print 1's output, which the artefact does not have. So it hangs off its
+		own `katc_show_bank` flag and this test knows about both differences.
+		"""
 		name = artefact_or_any("Quotation")
 		if not name:
 			self.skipTest("no submitted Quotation")
@@ -895,10 +924,12 @@ class TestTwoFormatDoctypes(FrappeTestCase):
 		arabic = format_body(render("Quotation", name, "KATC Quotation Arabic", no_letterhead=1))
 
 		self.assertNotEqual(squash(plain), squash(arabic), "the Arabic column is missing")
+		self.assertIn("BANK DETAILS", arabic, "the artefact's VAT / bank block is missing")
+		self.assertNotIn("BANK DETAILS", plain, "Print 1 does not carry a bank block")
 		self.assertEqual(
-			squash(strip_first_thead(plain)),
-			squash(strip_arabic_column(strip_first_thead(arabic))),
-			"KATC Quotation Arabic diverges from KATC Quotation beyond the Arabic column",
+			squash(strip_bank_block(strip_first_thead(plain))),
+			squash(strip_bank_block(strip_arabic_column(strip_first_thead(arabic)))),
+			"KATC Quotation Arabic diverges beyond the Arabic column and the bank block",
 		)
 
 
@@ -1587,15 +1618,15 @@ class TestButtonsAndWiring(FrappeTestCase):
 		"""check 46 — the name is duplicated between two files by necessity."""
 		self.assertIn(katc_letterhead().KATC_LETTER_HEAD, js_source())
 
-	def test_the_js_names_seven_formats_that_all_exist(self):
+	def test_the_js_names_only_formats_that_exist(self):
 		"""check 47 — catches a typo in a `format=` before a user does."""
 		source = js_source()
 		named = {s["format"] for s in button_specs(source) if s["format"]}
 		self.assertTrue(named, "no button map could be parsed out of katc_print_buttons.js")
-		self.assertEqual(
-			named,
-			{f for f, _dt in FORMATS},
-			"the JS must name exactly the seven KATC formats",
+		known = {f for f, _dt in FORMATS}
+		self.assertTrue(
+			named <= known,
+			f"the JS names a format that is not in FORMATS: {sorted(named - known)}",
 		)
 		for print_format in named:
 			with self.subTest(print_format=print_format):
@@ -2208,3 +2239,77 @@ class TestBuyerBlockFields(FrappeTestCase):
 	def test_no_party_and_no_tax_id_is_blank_not_none(self):
 		vat = frappe.get_attr("yht_custom.print_helpers.yht_party_vat")
 		self.assertEqual(vat(frappe._dict(customer=None, tax_id=None)), "")
+
+
+# ================================================== the shared-template refactor
+
+
+class TestSharedTemplates(FrappeTestCase):
+	"""A variant is a FLAG, not a hand-synced copy of the whole layout."""
+
+	def test_the_variants_are_shims_not_copies(self):
+		"""🔴 The old pair carried a comment reading 'KATC Quotation and KATC Quotation
+		Arabic must stay identical outside the katc-ar-col cells — edit BOTH, or the
+		check fails.' That trap would have multiplied from one pair to four."""
+		for print_format in SHIMMED:
+			with self.subTest(print_format=print_format):
+				html = frappe.db.get_value("Print Format", print_format, "html") or ""
+				self.assertIn("{% include", html, f"{print_format} is not a shim")
+				self.assertLess(
+					len(html), 260, f"{print_format} still carries a copy of the layout"
+				)
+
+	def test_every_included_template_ships(self):
+		import os
+		import re
+
+		for print_format in SHIMMED:
+			html = frappe.db.get_value("Print Format", print_format, "html") or ""
+			for path in re.findall(r'{%\s*include\s+"([^"]+)"', html):
+				with self.subTest(print_format=print_format, path=path):
+					# "yht_custom/templates/..." resolves under the app's parent dir.
+					full = os.path.join(
+						os.path.dirname(frappe.get_app_path("yht_custom")), path
+					)
+					self.assertTrue(os.path.exists(full), f"{path} does not ship")
+
+	def test_the_arabic_column_is_a_flag(self):
+		for print_format in ("KATC Quotation Arabic", "KATC Sales Order Arabic"):
+			with self.subTest(print_format=print_format):
+				html = frappe.db.get_value("Print Format", print_format, "html") or ""
+				self.assertIn("katc_show_arabic", html)
+
+	def test_the_proforma_serves_both_doctypes(self):
+		"""One template, two doctypes — so every Sales-Order-only field must be read
+		with doc.get(). A Quotation has no delivery_date, and an unguarded attribute
+		renders frappe's DebugUndefined marker straight onto a customer document."""
+		import os
+
+		path = os.path.join(
+			frappe.get_app_path("yht_custom"), "templates", "includes", "katc",
+			"proforma_invoice.html",
+		)
+		body = open(path, encoding="utf-8").read()
+		self.assertNotIn("doc.delivery_date", body, "unguarded Sales-Order-only field")
+		self.assertEqual(
+			frappe.db.get_value("Print Format", "KATC Proforma Invoice", "doc_type"),
+			"Sales Order",
+		)
+		self.assertEqual(
+			frappe.db.get_value("Print Format", "KATC Quotation Proforma", "doc_type"),
+			"Quotation",
+		)
+
+	def test_sales_invoice_and_delivery_note_have_no_arabic_button(self):
+		"""🔴 Both already print the Arabic name inside the item cell, so a column
+		would print it twice. Measured on the formats, not assumed."""
+		specs = button_specs(js_source())
+		for doctype in ("Sales Invoice", "Delivery Note"):
+			labels = [s["label"] for s in specs if s.get("doctype") == doctype]
+			if not labels:
+				continue
+			with self.subTest(doctype=doctype):
+				self.assertFalse(
+					[l for l in labels if "Arabic" in l],
+					f"{doctype} already prints Arabic inline — a column duplicates it",
+				)

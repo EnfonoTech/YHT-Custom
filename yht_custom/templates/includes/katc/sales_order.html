@@ -1,0 +1,102 @@
+{#- SHARED TEMPLATE — see quotation.html. The letterhead is driven by the BUTTON
+    (letterhead= / no_letterhead=1), not by a separate format: the spacer used to be
+    unconditional here, which is why there was no with-letterhead Sales Order at all.
+    Flag: katc_show_arabic. -#}
+{%- set cur = yht_currency(doc) -%}
+<style>
+.print-format { font-family: Arial, "Noto Sans", sans-serif; font-size: 9pt; color: #000; }
+table.katc-doc { width: 100%; border-collapse: collapse; }
+table.katc-doc > thead > tr > td { padding: 0; border: 0; }
+/* The outer cell MUST be allowed to break. A table cell defaults to
+   page-break-inside: avoid, which pushes the whole document onto one page and
+   defeats the <thead> that repeats the letterhead. */
+table.katc-doc > tbody > tr > td { padding: 0; border: 0; page-break-inside: auto !important; }
+.katc-title { text-align: center; font-size: 14pt; font-weight: bold; letter-spacing: 1px; margin: 8px 0 0; }
+.katc-title-ar { text-align: center; font-size: 12pt; font-weight: bold; direction: rtl; margin-bottom: 8px; }
+.katc-meta { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+.katc-meta td { border: 1px solid #999; padding: 3px 5px; font-size: 8.5pt; vertical-align: top; }
+.katc-meta td.lbl { background: #f2f2f2; font-weight: bold; width: 18%; }
+table.katc-items { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+/* Repeats the column headers on every page. */
+table.katc-items thead { display: table-header-group; }
+table.katc-items th, table.katc-items td { border: 1px solid #999; padding: 3px 5px; font-size: 8.5pt; vertical-align: top; }
+table.katc-items th { background: #f2f2f2; text-align: center; font-size: 8pt; }
+table.katc-items td.num { text-align: right; }
+table.katc-items td.ctr { text-align: center; }
+.katc-ar { direction: rtl; text-align: right; }
+.katc-totals { width: 55%; margin-left: auto; border-collapse: collapse; page-break-inside: avoid; }
+.katc-totals td { border: 1px solid #999; padding: 3px 6px; font-size: 8.5pt; }
+.katc-totals td.lbl { background: #f2f2f2; font-weight: bold; }
+.katc-totals td.num { text-align: right; }
+.katc-grand td { font-weight: bold; font-size: 9.5pt; }
+.katc-words { font-size: 8.5pt; margin: 6px 0; text-align: center; }
+.katc-terms { font-size: 8pt; color: #333; margin-top: 6px; }
+.katc-sign { width: 100%; margin-top: 20px; border-collapse: collapse; page-break-inside: avoid; }
+.katc-sign td { width: 50%; font-size: 8.5pt; vertical-align: top; padding: 4px 8px; }
+.katc-rule { border-bottom: 1px solid #000; height: 13px; }
+.katc-bank { font-size: 8.5pt; line-height: 1.45; page-break-inside: avoid; }
+.katc-qr img { width: 26mm; height: 26mm; }
+#footer-html { font-size: 8pt; text-align: center; color: #444; }
+/* wkhtmltopdf is handed this as --footer-html, which is the ONLY way the page
+   spans resolve. In the browser print view it would render inline instead. */
+.print-format-gutter #footer-html { display: none; }
+</style>
+<table class="katc-doc">
+  <thead><tr><td>{% if letter_head and 'katc-lh' in letter_head %}{{ letter_head }}{% elif no_letterhead %}<div class="katc-spacer" style="height: {{ yht_katc_spacer_pt() }}pt"></div>{% endif %}</td></tr></thead>
+  <tbody><tr><td>
+{#- `net_total` only reflects the additional discount when it was applied ON the
+    net total; with `apply_discount_on = "Grand Total"` it is still the PRE-discount
+    figure, and "Total after Discount" would print the same number as "Total". -#}
+{%- set net_after_discount = (doc.total - (doc.discount_amount or 0)) if doc.apply_discount_on == "Grand Total" else doc.net_total -%}
+<div class="katc-title">SALES ORDER</div>
+<div class="katc-title-ar">أمر بيع</div>
+
+<table class="katc-meta"><tbody>
+  <tr>
+    <td class="lbl">Customer Name:</td><td>{{ doc.customer_name or doc.customer or "" }}</td>
+    <td class="lbl">Sales Order No:</td><td>{{ doc.name }}</td>
+  </tr>
+  <tr>
+    <td class="lbl">Delivery Date:</td><td>{{ yht_date(doc.delivery_date) }}</td>
+    <td class="lbl">Customer's Purchase Order:</td><td>{{ doc.po_no or "" }}</td>
+  </tr>
+  <tr>
+    <td class="lbl">Tax Id:</td><td>{{ doc.tax_id or "" }}</td>
+    <td class="lbl">Date:</td><td>{{ yht_date(doc.transaction_date) }}</td>
+  </tr>
+</tbody></table>
+
+<table class="katc-items">
+  <thead><tr>
+    <th style="width:6%">Sr</th>
+    <th>Item Name</th>{% if katc_show_arabic %}<th class="katc-ar-col" style="width:20%">Item Name in Arabic</th>{% endif %}
+    <th style="width:14%">Quantity</th>
+    <th style="width:15%">Rate</th>
+    <th style="width:17%">Amount</th>
+  </tr></thead>
+  <tbody>
+{%- for row in doc.items %}
+    <tr>
+      <td class="ctr">{{ loop.index }}</td>
+      <td>{{ row.item_name or row.item_code or "" }}</td>{% if katc_show_arabic %}<td class="katc-ar-col katc-ar">{{ yht_item_ar(row) }}</td>{% endif %}
+      <td class="ctr">{{ row.qty }} {{ row.uom or row.stock_uom or "" }}</td>
+      <td class="num">{{ yht_money(row.rate, cur) }}</td>
+      <td class="num">{{ yht_money(row.amount, cur) }}</td>
+    </tr>
+{%- endfor %}
+  </tbody>
+</table>
+
+<table class="katc-totals"><tbody>
+  <tr><td class="lbl">Total</td><td class="num">{{ yht_money(doc.total, cur) }}</td></tr>
+  <tr><td class="lbl">Discount :</td><td class="num">- {{ yht_money(doc.discount_amount or 0, cur) }}</td></tr>
+  <tr><td class="lbl">Total after Discount:</td><td class="num">{{ yht_money(net_after_discount, cur) }}</td></tr>
+  <tr><td class="lbl">Total VAT:</td><td class="num">{{ yht_money(doc.total_taxes_and_charges, cur) }}</td></tr>
+  <tr class="katc-grand"><td class="lbl">Grand Total:</td><td class="num">{{ yht_money(doc.rounded_total or doc.grand_total, cur) }}</td></tr>
+</tbody></table>
+
+<div class="katc-words" style="text-align:left"><b>In Words:</b> {{ doc.in_words or "" }}</div>
+<div class="katc-terms"><b>Terms and Conditions:</b><br>{{ doc.terms or "" }}</div>
+  </td></tr></tbody>
+</table>
+<div id="footer-html">Page <span class="page"></span> of <span class="topage"></span></div>

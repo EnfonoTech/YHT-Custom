@@ -32,7 +32,21 @@ frappe.provide("yht_custom.katc_prints");
 // import Python. A test greps this file and asserts the two strings are equal.
 const KATC_LETTER_HEAD = "KATC Letterhead";
 
-// Labels and order exactly as the client's incumbent toolbar.
+// One row per toolbar button, in the order the client asked for them:
+// Print → With Arabic → Proforma Invoice → Without LH.
+//
+// 🔴 SALES INVOICE AND DELIVERY NOTE GET NO ARABIC BUTTON, DELIBERATELY. Both formats
+// already print the Arabic item name INSIDE the item cell —
+// `{% set ar = yht_item_ar(row) %}{% if ar %}<div class="katc-ar">{{ ar }}</div>{% endif %}`
+// — so an "Item Name in Arabic" COLUMN would print it twice. The Arabic column is the
+// idiom of one client artefact (quote print 2 with arabic.pdf) and applies only where
+// the base format carries no Arabic at all: Quotation and Sales Order.
+//
+// ⚠️ Print and Without LH now name the SAME format for every doctype. The letterhead is
+// the button's job, not the format's — each shared template renders `{{ letter_head }}`
+// when one is passed and a measured spacer when `no_letterhead` is set. Before this,
+// Sales Order had no with-letterhead plain print at all, because its spacer was
+// unconditional.
 const KATC_BUTTONS = {
 	"Delivery Note": [
 		{ label: __("Print PDF"), format: "KATC Delivery Note", no_letterhead: 0, letterhead: KATC_LETTER_HEAD },
@@ -42,17 +56,17 @@ const KATC_BUTTONS = {
 		{ label: __("Print PDF"), format: "KATC Tax Invoice", no_letterhead: 0, letterhead: KATC_LETTER_HEAD },
 		{ label: __("Print Without LH"), format: "KATC Tax Invoice", no_letterhead: 1 },
 	],
-	// Sales Order and Quotation select a DIFFERENT format rather than toggling the
-	// letterhead: the client's two supplied PDFs are different documents, not the
-	// same document with the header removed.
 	"Sales Order": [
-		{ label: __("Print PDF"), format: "KATC Proforma Invoice", no_letterhead: 0, letterhead: KATC_LETTER_HEAD },
+		{ label: __("Print PDF"), format: "KATC Sales Order", no_letterhead: 0, letterhead: KATC_LETTER_HEAD },
+		{ label: __("Print with Arabic"), format: "KATC Sales Order Arabic", no_letterhead: 0, letterhead: KATC_LETTER_HEAD },
+		{ label: __("Proforma Invoice"), format: "KATC Proforma Invoice", no_letterhead: 0, letterhead: KATC_LETTER_HEAD },
 		{ label: __("Print Without LH"), format: "KATC Sales Order No LH", no_letterhead: 1 },
 	],
 	Quotation: [
 		{ label: __("Print PDF"), format: "KATC Quotation", no_letterhead: 0, letterhead: KATC_LETTER_HEAD },
+		{ label: __("Print with Arabic"), format: "KATC Quotation Arabic", no_letterhead: 0, letterhead: KATC_LETTER_HEAD },
+		{ label: __("Proforma Invoice"), format: "KATC Quotation Proforma", no_letterhead: 0, letterhead: KATC_LETTER_HEAD },
 		{ label: __("Print Without LH"), format: "KATC Quotation No LH", no_letterhead: 1 },
-		{ label: __("Print Arabic with LH"), format: "KATC Quotation Arabic", no_letterhead: 0, letterhead: KATC_LETTER_HEAD },
 	],
 };
 
