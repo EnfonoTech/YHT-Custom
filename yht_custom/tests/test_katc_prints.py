@@ -281,6 +281,24 @@ def strip_first_thead(html):
 	return re.sub(r"<thead\b.*?</thead>", "", html or "", count=1, flags=re.S | re.I)
 
 
+def format_source(print_format: str) -> str:
+	"""The format's EFFECTIVE template source, with any `{% include %}` resolved.
+
+	A Print Format record is now a two-line shim over a shared template, so grepping
+	the stored `html` for markup finds the include statement and nothing else. Every
+	check that asks "does this format contain X" has to look where X actually lives.
+	"""
+	import os
+
+	html = frappe.db.get_value("Print Format", print_format, "html") or ""
+	app_parent = os.path.dirname(frappe.get_app_path("yht_custom"))
+	for path in re.findall(r'{%-?\s*include\s+"([^"]+)"', html):
+		full = os.path.join(app_parent, path)
+		if os.path.exists(full):
+			html += "\n" + open(full, encoding="utf-8").read()
+	return html
+
+
 def strip_bank_block(html: str) -> str:
 	"""Remove the VAT / bank block so two formats can be compared without it."""
 	return re.sub(r'<div class="katc-bank">.*?</div>', "", html, flags=re.S)
@@ -678,7 +696,7 @@ class TestKatcFormatsInstalled(FrappeTestCase):
 		"""check 13 — gotcha 24. `frappe.defaults` is a function in the sandbox."""
 		for print_format, _doctype in FORMATS:
 			with self.subTest(print_format=print_format):
-				html = frappe.db.get_value("Print Format", print_format, "html") or ""
+				html = format_source(print_format)
 				self.assertNotIn("frappe.defaults", html)
 
 	def test_every_format_emits_exactly_one_footer_html(self):
@@ -1900,7 +1918,7 @@ class TestArtefactFidelity(FrappeTestCase):
 		not something this assertion can carry.
 		"""
 		for print_format, _doctype in FORMATS:
-			html = frappe.db.get_value("Print Format", print_format, "html") or ""
+			html = format_source(print_format)
 			with self.subTest(print_format=print_format):
 				self.assertIn("<thead", html, f"{print_format} has no repeating header row")
 				self.assertRegex(
@@ -1937,7 +1955,7 @@ class TestArtefactFidelity(FrappeTestCase):
 		"""check 56 — in the browser it would render inline instead."""
 		for print_format, _doctype in FORMATS:
 			css = (frappe.db.get_value("Print Format", print_format, "css") or "") + (
-				frappe.db.get_value("Print Format", print_format, "html") or ""
+				format_source(print_format)
 			)
 			with self.subTest(print_format=print_format):
 				self.assertIn("print-format-gutter", css)
@@ -2253,7 +2271,7 @@ class TestSharedTemplates(FrappeTestCase):
 		check fails.' That trap would have multiplied from one pair to four."""
 		for print_format in SHIMMED:
 			with self.subTest(print_format=print_format):
-				html = frappe.db.get_value("Print Format", print_format, "html") or ""
+				html = format_source(print_format)
 				self.assertIn("{% include", html, f"{print_format} is not a shim")
 				self.assertLess(
 					len(html), 260, f"{print_format} still carries a copy of the layout"
@@ -2264,7 +2282,7 @@ class TestSharedTemplates(FrappeTestCase):
 		import re
 
 		for print_format in SHIMMED:
-			html = frappe.db.get_value("Print Format", print_format, "html") or ""
+			html = format_source(print_format)
 			for path in re.findall(r'{%\s*include\s+"([^"]+)"', html):
 				with self.subTest(print_format=print_format, path=path):
 					# "yht_custom/templates/..." resolves under the app's parent dir.
@@ -2276,7 +2294,7 @@ class TestSharedTemplates(FrappeTestCase):
 	def test_the_arabic_column_is_a_flag(self):
 		for print_format in ("KATC Quotation Arabic", "KATC Sales Order Arabic"):
 			with self.subTest(print_format=print_format):
-				html = frappe.db.get_value("Print Format", print_format, "html") or ""
+				html = format_source(print_format)
 				self.assertIn("katc_show_arabic", html)
 
 	def test_the_proforma_serves_both_doctypes(self):
