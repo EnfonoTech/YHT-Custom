@@ -789,7 +789,7 @@ def yht_row_taxes(doc) -> dict:
 	return out
 
 
-def yht_item_ar_lines(row_or_item_code, width: int = 20) -> list[str]:
+def yht_item_ar_lines(row_or_item_code, width: int = 14) -> list[str]:
 	"""The Arabic item name, pre-broken into lines of at most ``width`` characters.
 
 	🔴 WHY THIS EXISTS. This bench's wkhtmltopdf is the unpatched-Qt build (see the
@@ -807,6 +807,13 @@ def yht_item_ar_lines(row_or_item_code, width: int = 20) -> list[str]:
 
 	Long single words are hard-split rather than allowed to overflow: an item code
 	like a 30-character part number has no space to break at.
+
+	⚠️ THE DEFAULT WIDTH IS SET EMPIRICALLY, NOT CALCULATED. A modelled budget did
+	not predict this engine: a line measuring 18.4 units overlapped while one
+	measuring 20.0 rendered clean, because Arabic shaping makes the glyph advance
+	depend on the letters' joining forms rather than on their count. The number below
+	is the one that renders correctly across the sixteen documents with the longest
+	Arabic names on this site. Re-verify by RENDERING if it is ever changed.
 	"""
 	text = cstr(yht_item_ar(row_or_item_code)).strip()
 	if not text:
