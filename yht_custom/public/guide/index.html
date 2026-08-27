@@ -837,11 +837,11 @@
       <tr><td rowspan="2">Sales Invoice</td><td><span class="ui">Print PDF</span></td><td><code>KATC Tax Invoice</code> on the letterhead</td></tr>
       <tr><td><span class="ui">Print Without LH</span></td><td>The same layout, header band clear</td></tr>
       <tr><td rowspan="4">Sales Order</td><td><span class="ui">Print PDF</span></td><td><code>KATC Sales Order</code> on the letterhead</td></tr>
-      <tr><td><span class="ui">Print with Arabic</span></td><td><code>KATC Sales Order Arabic</code> — prints the Arabic item name under each English one</td></tr>
+      <tr><td><span class="ui">Print with Arabic</span></td><td><code>KATC Sales Order Arabic</code> — adds an Arabic item-name column</td></tr>
       <tr><td><span class="ui">Proforma Invoice</span></td><td><code>KATC Proforma Invoice</code> — prices, tax and bank details. What you send when the customer needs to pay before delivery.</td></tr>
       <tr><td><span class="ui">Print Without LH</span></td><td>The plain sales order, header band left clear for pre-printed paper</td></tr>
       <tr><td rowspan="4">Quotation</td><td><span class="ui">Print PDF</span></td><td><code>KATC Quotation</code> on the letterhead</td></tr>
-      <tr><td><span class="ui">Print with Arabic</span></td><td><code>KATC Quotation Arabic</code> — prints the Arabic item name under each English one, and adds the bank details</td></tr>
+      <tr><td><span class="ui">Print with Arabic</span></td><td><code>KATC Quotation Arabic</code> — adds an Arabic item-name column and the bank details</td></tr>
       <tr><td><span class="ui">Proforma Invoice</span></td><td><code>KATC Quotation Proforma</code> — the same proforma layout as the Sales Order one</td></tr>
       <tr><td><span class="ui">Print Without LH</span></td><td><code>KATC Quotation No LH</code> — a <b>different document</b>, not the same page with the header removed</td></tr>
     </tbody>
@@ -853,11 +853,10 @@
     Order, where the plain layout carries no Arabic at all.
   </div>
   <div class="note">
-    <b>The Arabic name prints under the English one, not in its own column.</b>
-    Most of your Arabic item names are long — seven in ten run past eighteen characters
-    and some reach sixty-nine — and a narrow extra column on this server either clips
-    them or lets them run over the Quantity figures. Printing the Arabic on its own line
-    under the English name shows the whole name, every time.
+    <b>Long Arabic names wrap onto several lines in their column.</b>
+    Seven in ten of your Arabic item names run past eighteen characters and some reach
+    sixty-six, so a row with a long name is taller than the others. That is deliberate —
+    the whole name is shown rather than cut short.
   </div>
   <div class="note">
     <b>The older <code>YHT</code> formats are untouched and still available</b> from the printer
