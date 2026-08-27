@@ -40,7 +40,7 @@ table.katc-items td.ctr { text-align: center; }
    table out on one metric then draws the text on another, so a cell width is not a
    drawing boundary. A BLOCK with an explicit width is: it wraps its own text at that
    width, and overflow:hidden guarantees nothing can reach the next column. */
-.katc-ar-box { width: 32mm; overflow: hidden; word-wrap: break-word; }
+.katc-ar-box { width: 32mm; overflow: hidden; word-wrap: break-word; word-break: break-all; white-space: normal; }
 {% endif %}
 .katc-totals { width: 55%; margin-left: auto; border-collapse: collapse; page-break-inside: avoid; }
 .katc-totals td { border: 1px solid #999; padding: 3px 6px; font-size: 8.5pt; }
