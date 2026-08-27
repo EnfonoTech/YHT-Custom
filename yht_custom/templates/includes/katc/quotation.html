@@ -98,7 +98,7 @@ table.katc-items td.ctr { text-align: center; }
 {%- for row in doc.items %}
     <tr>
       <td class="ctr">{{ loop.index }}</td>
-      <td>{{ row.item_name or row.item_code or "" }}</td>{% if katc_show_arabic %}<td class="katc-ar">{{ yht_item_ar(row) }}</td>{% endif %}
+      <td>{{ row.item_name or row.item_code or "" }}</td>{% if katc_show_arabic %}<td class="katc-ar">{%- for line in yht_item_ar_lines(row) %}{{ line }}{%- if not loop.last %}<br>{% endif %}{%- endfor %}</td>{% endif %}
       <td class="ctr">{{ row.qty }} {{ row.uom or row.stock_uom or "" }}</td>
       <td class="num">{{ yht_money(row.rate, cur) }}</td>
       <td class="num">{{ yht_money(row.amount, cur) }}</td>

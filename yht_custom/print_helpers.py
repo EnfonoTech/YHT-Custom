@@ -18,7 +18,7 @@ be one upgrade away from silently shadowing, or being shadowed by, another app's
 import json
 
 import frappe
-from frappe.utils import cstr, flt, fmt_money, formatdate
+from frappe.utils import cint, cstr, flt, fmt_money, formatdate
 
 #: RTL rule (inherited from RMAX, learned the hard way): never put a colon inside
 #: an Arabic value cell. The bidi algorithm moves it to the visual LEFT of the
@@ -787,3 +787,47 @@ def yht_row_taxes(doc) -> dict:
 		out[row.name] = booked[key] * scale * share
 
 	return out
+
+
+def yht_item_ar_lines(row_or_item_code, width: int = 20) -> list[str]:
+	"""The Arabic item name, pre-broken into lines of at most ``width`` characters.
+
+	🔴 WHY THIS EXISTS. This bench's wkhtmltopdf is the unpatched-Qt build (see the
+	app's gotcha 44), and its WebKit will not line-break an RTL run inside a table
+	cell — measured every way: `table-layout: fixed`, explicit percentage widths on
+	every column, `word-wrap`, `word-break: break-all`, and a fixed-width block. In
+	each case a long Arabic name was drawn straight across the Quantity column, and
+	`overflow: hidden` only traded the overlap for a clipped name. Names here run to
+	66 characters and 71% are past 18, so the column cannot simply be widened.
+
+	Breaking the string in Python removes the decision from the engine: each line is
+	emitted separately and there is nothing left to wrap. Returns a LIST rather than
+	markup so the template does the joining — no escaping questions, and nothing here
+	has to be marked safe.
+
+	Long single words are hard-split rather than allowed to overflow: an item code
+	like a 30-character part number has no space to break at.
+	"""
+	text = cstr(yht_item_ar(row_or_item_code)).strip()
+	if not text:
+		return []
+
+	width = max(cint(width), 8)
+	lines, current = [], ""
+	for word in text.split():
+		while len(word) > width:
+			if current:
+				lines.append(current)
+				current = ""
+			lines.append(word[:width])
+			word = word[width:]
+		if not current:
+			current = word
+		elif len(current) + 1 + len(word) <= width:
+			current = f"{current} {word}"
+		else:
+			lines.append(current)
+			current = word
+	if current:
+		lines.append(current)
+	return lines
