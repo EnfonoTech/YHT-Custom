@@ -112,9 +112,24 @@ function wait_for_new_form(doctype, tries = 40) {
 	});
 }
 
-yht_custom.sales.new_return = async function () {
-	await frappe.new_doc("Sales Invoice");
-	const frm = await wait_for_new_form("Sales Invoice");
+// ⚠️ ONLY Sales Invoice and Purchase Invoice can start life as a return. `is_return`
+// is READ-ONLY on Delivery Note and Purchase Receipt (measured on the meta), so a blank
+// return of those cannot be created at all — theirs must be raised from the document
+// being reversed, which is also what the return policy requires.
+yht_custom.sales.RETURNABLE = ["Sales Invoice", "Purchase Invoice"];
+
+yht_custom.sales.new_return = async function (doctype) {
+	doctype = doctype || "Sales Invoice";
+	if (!yht_custom.sales.RETURNABLE.includes(doctype)) {
+		frappe.msgprint({
+			title: __("Start From the Original"),
+			indicator: "orange",
+			message: __("A {0} return has to be raised from the document it reverses — open it and use <b>Create &gt; Return</b>.", [__(doctype)]),
+		});
+		return;
+	}
+	await frappe.new_doc(doctype);
+	const frm = await wait_for_new_form(doctype);
 	if (!frm) {
 		frappe.show_alert({ message: __("Could not open a return — try again"), indicator: "red" });
 		return;
@@ -128,7 +143,7 @@ yht_custom.sales.new_return = async function () {
 	try {
 		const r = await frappe.call({
 			method: "yht_custom.sales_flow.return_naming_series",
-			args: { doctype: "Sales Invoice" },
+			args: { doctype: doctype },
 		});
 		series = r && r.message;
 	} catch (e) {
