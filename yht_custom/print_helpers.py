@@ -832,6 +832,15 @@ def yht_item_ar_lines(row_or_item_code, width: int = 14) -> list[str]:
 			word = word[cut:]
 		if not current:
 			current = word
+		elif _mixes_scripts(current, word):
+			# 🔴 NEVER put a Latin/digit token on the same line as Arabic. This
+			# engine draws a mixed-direction line's runs on top of each other —
+			# the app's gotcha 45, seen again here as "اسبستوس 3 ملي" rendering
+			# as stacked glyphs. Width was not the trigger: that line was well
+			# inside the budget. Keeping each line to one script removes the
+			# bidi reordering that the broken build mishandles.
+			lines.append(current)
+			current = word
 		elif _ar_width(f"{current} {word}") <= width:
 			current = f"{current} {word}"
 		else:
@@ -840,6 +849,15 @@ def yht_item_ar_lines(row_or_item_code, width: int = 14) -> list[str]:
 	if current:
 		lines.append(current)
 	return lines
+
+
+def _is_latin(token: str) -> bool:
+	"""A token frappe's bidi pass will lay out left-to-right."""
+	return any(ch.isascii() and ch.isalnum() for ch in token)
+
+
+def _mixes_scripts(line: str, word: str) -> bool:
+	return _is_latin(line) != _is_latin(word)
 
 
 #: A Latin letter or digit is materially wider than an Arabic glyph at the same point
