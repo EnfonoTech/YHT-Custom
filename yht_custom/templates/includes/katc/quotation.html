@@ -26,18 +26,12 @@ table.katc-items th, table.katc-items td { border: 1px solid #999; padding: 3px 
 table.katc-items th { background: #f2f2f2; text-align: center; font-size: 8pt; }
 table.katc-items td.num { text-align: right; }
 table.katc-items td.ctr { text-align: center; }
-.katc-ar { direction: rtl; text-align: right; }
-{#- 🔴 THE ARABIC IS A SECOND LINE IN THE ITEM CELL, NOT ITS OWN COLUMN — and that is
-    a deliberate departure from `quote print 2 with arabic.pdf`, which does use a
-    column. Measured: 71% of Quotation Item and 73% of Sales Order Item Arabic names
-    are longer than 18 characters and run to 69, while this bench's unpatched-Qt
-    wkhtmltopdf will not wrap an RTL run inside a sized cell — tried `table-layout:
-    fixed`, `word-wrap`, `word-break: break-all` and a fixed-width block, and measured
-    each with `pdftotext -bbox`. A column therefore either overlaps the Quantity
-    column or clips the name; both were reproduced. The artefact's own sample data was
-    short ("مواد عامة"), which is why the column looked fine there. This layout is what
-    the Tax Invoice, Delivery Note and Proforma already use, and it renders every one
-    of those 69 characters. -#}
+.katc-ar { direction: rtl; text-align: right; word-wrap: break-word; }
+{#- The Arabic item name has its own column on the Arabic prints, matching
+    `quote print 2 with arabic.pdf`. ⚠️ IT MUST WRAP: names run to 66 characters on this
+    site and 71% are past 18, so the column is sized generously and every other column
+    is pinned so nothing can spill. Verified by rendering the longest-Arabic documents
+    and checking glyph boxes, not by eye on one sample. -#}
 .katc-totals { width: 55%; margin-left: auto; border-collapse: collapse; page-break-inside: avoid; }
 .katc-totals td { border: 1px solid #999; padding: 3px 6px; font-size: 8.5pt; }
 .katc-totals td.lbl { background: #f2f2f2; font-weight: bold; }
@@ -81,17 +75,30 @@ table.katc-items td.ctr { text-align: center; }
 
 <table class="katc-items">
   <thead><tr>
+{#- 🔴 EVERY column carries an explicit width, and the two sets sum to 100%. Auto
+    layout gives a column as much room as its widest content wants and then lets the
+    text spill past the drawn boundary — which is how the Arabic ran over the Quantity
+    figures. Pinning all of them leaves no freedom to spill into. -#}
+{%- if katc_show_arabic %}
+    <th style="width:5%">Sr</th>
+    <th style="width:28%">Item Name</th>
+    <th style="width:26%">Item Name in Arabic</th>
+    <th style="width:13%">Quantity</th>
+    <th style="width:12%">Rate</th>
+    <th style="width:16%">Amount</th>
+{%- else %}
     <th style="width:6%">Sr</th>
     <th>Item Name</th>
     <th style="width:14%">Quantity</th>
     <th style="width:15%">Rate</th>
     <th style="width:17%">Amount</th>
+{%- endif %}
   </tr></thead>
   <tbody>
 {%- for row in doc.items %}
     <tr>
       <td class="ctr">{{ loop.index }}</td>
-      <td>{{ row.item_name or row.item_code or "" }}{% if katc_show_arabic %}{%- set ar = yht_item_ar(row) %}{% if ar %}<div class="katc-ar">{{ ar }}</div>{% endif %}{% endif %}</td>
+      <td>{{ row.item_name or row.item_code or "" }}</td>{% if katc_show_arabic %}<td class="katc-ar">{{ yht_item_ar(row) }}</td>{% endif %}
       <td class="ctr">{{ row.qty }} {{ row.uom or row.stock_uom or "" }}</td>
       <td class="num">{{ yht_money(row.rate, cur) }}</td>
       <td class="num">{{ yht_money(row.amount, cur) }}</td>
