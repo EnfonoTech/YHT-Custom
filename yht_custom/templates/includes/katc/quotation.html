@@ -35,8 +35,12 @@ table.katc-items td.ctr { text-align: center; }
    starts at x=346 — four overlapping glyph boxes on one row, checked with
    `pdftotext -bbox`. Auto table layout sizes a column to its widest content and
    then lets it spill; fixed layout honours the declared widths and wraps. */
-table.katc-items { table-layout: fixed; }
-table.katc-items td, table.katc-items th { word-wrap: break-word; overflow-wrap: break-word; }
+/* ⚠️ `table-layout: fixed` DOES NOT WORK HERE — measured, the overlap survived it.
+   This wkhtmltopdf is the unpatched-Qt build (gotcha 44) and its WebKit lays the
+   table out on one metric then draws the text on another, so a cell width is not a
+   drawing boundary. A BLOCK with an explicit width is: it wraps its own text at that
+   width, and overflow:hidden guarantees nothing can reach the next column. */
+.katc-ar-box { width: 32mm; overflow: hidden; word-wrap: break-word; }
 {% endif %}
 .katc-totals { width: 55%; margin-left: auto; border-collapse: collapse; page-break-inside: avoid; }
 .katc-totals td { border: 1px solid #999; padding: 3px 6px; font-size: 8.5pt; }
@@ -91,7 +95,7 @@ table.katc-items td, table.katc-items th { word-wrap: break-word; overflow-wrap:
 {%- for row in doc.items %}
     <tr>
       <td class="ctr">{{ loop.index }}</td>
-      <td>{{ row.item_name or row.item_code or "" }}</td>{% if katc_show_arabic %}<td class="katc-ar-col katc-ar">{{ yht_item_ar(row) }}</td>{% endif %}
+      <td>{{ row.item_name or row.item_code or "" }}</td>{% if katc_show_arabic %}<td class="katc-ar-col katc-ar"><div class="katc-ar-box">{{ yht_item_ar(row) }}</div></td>{% endif %}
       <td class="ctr">{{ row.qty }} {{ row.uom or row.stock_uom or "" }}</td>
       <td class="num">{{ yht_money(row.rate, cur) }}</td>
       <td class="num">{{ yht_money(row.amount, cur) }}</td>
