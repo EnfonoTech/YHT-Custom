@@ -865,16 +865,35 @@ class TestTwoFormatDoctypes(FrappeTestCase):
 		self.assertIn("QUOTATION", two)
 		self.assertTrue(ARABIC.search(two), "the No LH quotation is the bilingual layout")
 
-	def test_the_no_lh_formats_never_render_a_letterhead(self):
-		"""check 24 — even handed one explicitly. They carry the spacer instead."""
+	def test_the_without_lh_button_never_asks_for_a_letterhead(self):
+		"""check 24, restated — the guarantee moved from the format to the button.
+
+		🔴 It used to be structural: the No-LH formats simply had no letterhead markup,
+		so handing them one changed nothing. That is also why there was no
+		with-letterhead plain Sales Order at all — its spacer was unconditional. The
+		templates are now shared and render `{{ letter_head }}` when one is passed, so
+		the guarantee is the BUTTON's: the Without-LH path must send `no_letterhead=1`
+		and must NOT send a `letterhead=`. Asserting the old structural property would
+		now assert the bug back in.
+		"""
+		specs = button_specs(js_source())
+		without = [s for s in specs if s["no_letterhead"] == "1"]
+		self.assertTrue(without, "no Without-LH buttons found")
+		for spec in without:
+			with self.subTest(print_format=spec["format"]):
+				self.assertFalse(
+					spec.get("letterhead"),
+					f"the Without LH button for {spec['format']} passes a letterhead",
+				)
+
+	def test_the_no_lh_formats_render_no_letterhead_when_none_is_passed(self):
+		"""And the way the button actually calls them, nothing leaks in."""
 		for print_format, doctype in NO_LH_FORMATS:
 			name = artefact_or_any(doctype)
 			if not name:
 				self.skipTest(f"no submitted {doctype}")
 			with self.subTest(print_format=print_format):
-				html = render(
-					doctype, name, print_format, letterhead=EXPECTED_LETTER_HEAD, no_letterhead=0
-				)
+				html = render(doctype, name, print_format, no_letterhead=1)
 				self.assertNotIn("katc_logo.jpg", html)
 				self.assertNotIn("KhobarHeading1.jpg", html)
 
@@ -1664,7 +1683,11 @@ class TestButtonsAndWiring(FrappeTestCase):
 		asserts. If the client really wants only three, the table is what has to change.
 		"""
 		specs = button_specs(js_source())
-		self.assertEqual(len(specs), 9, "nine buttons across the four doctypes")
+		# Four on Quotation and Sales Order (Print / With Arabic / Proforma / Without
+		# LH), two on Sales Invoice and Delivery Note — those two already print the
+		# Arabic name inline, so a column would duplicate it and they get no Arabic
+		# button.
+		self.assertEqual(len(specs), 12, "twelve buttons across the four doctypes")
 
 		without = [s for s in specs if s["no_letterhead"] == "1"]
 		self.assertEqual(
@@ -1712,7 +1735,7 @@ class TestButtonsAndWiring(FrappeTestCase):
 	def test_every_label_is_translated_and_top_level(self):
 		"""check 57's automatable half — the incumbent's exact labels."""
 		source = js_source()
-		for label in ("Print PDF", "Print Without LH", "Print Arabic with LH"):
+		for label in ("Print PDF", "Print Without LH", "Print with Arabic", "Proforma Invoice"):
 			with self.subTest(label=label):
 				self.assertRegex(
 					source,
@@ -2271,7 +2294,8 @@ class TestSharedTemplates(FrappeTestCase):
 		check fails.' That trap would have multiplied from one pair to four."""
 		for print_format in SHIMMED:
 			with self.subTest(print_format=print_format):
-				html = format_source(print_format)
+				# The RAW record, not format_source — that helper resolves the include.
+				html = frappe.db.get_value("Print Format", print_format, "html") or ""
 				self.assertIn("{% include", html, f"{print_format} is not a shim")
 				self.assertLess(
 					len(html), 260, f"{print_format} still carries a copy of the layout"
@@ -2282,7 +2306,7 @@ class TestSharedTemplates(FrappeTestCase):
 		import re
 
 		for print_format in SHIMMED:
-			html = format_source(print_format)
+			html = frappe.db.get_value("Print Format", print_format, "html") or ""
 			for path in re.findall(r'{%\s*include\s+"([^"]+)"', html):
 				with self.subTest(print_format=print_format, path=path):
 					# "yht_custom/templates/..." resolves under the app's parent dir.
