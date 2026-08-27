@@ -836,13 +836,23 @@
       <tr><td><span class="ui">Print Without LH</span></td><td>The same layout, header band left clear for pre-printed paper</td></tr>
       <tr><td rowspan="2">Sales Invoice</td><td><span class="ui">Print PDF</span></td><td><code>KATC Tax Invoice</code> on the letterhead</td></tr>
       <tr><td><span class="ui">Print Without LH</span></td><td>The same layout, header band clear</td></tr>
-      <tr><td rowspan="2">Sales Order</td><td><span class="ui">Print PDF</span></td><td><code>KATC Proforma Invoice</code> — prices and tax</td></tr>
-      <tr><td><span class="ui">Print Without LH</span></td><td><code>KATC Sales Order No LH</code> — a <b>different document</b>, not the same page with the header removed</td></tr>
-      <tr><td rowspan="3">Quotation</td><td><span class="ui">Print PDF</span></td><td><code>KATC Quotation</code> on the letterhead</td></tr>
-      <tr><td><span class="ui">Print Without LH</span></td><td><code>KATC Quotation No LH</code></td></tr>
-      <tr><td><span class="ui">Print Arabic with LH</span></td><td><code>KATC Quotation Arabic</code> — adds an Arabic item-name column</td></tr>
+      <tr><td rowspan="4">Sales Order</td><td><span class="ui">Print PDF</span></td><td><code>KATC Sales Order</code> on the letterhead</td></tr>
+      <tr><td><span class="ui">Print with Arabic</span></td><td><code>KATC Sales Order Arabic</code> — adds an Arabic item-name column</td></tr>
+      <tr><td><span class="ui">Proforma Invoice</span></td><td><code>KATC Proforma Invoice</code> — prices, tax and bank details. What you send when the customer needs to pay before delivery.</td></tr>
+      <tr><td><span class="ui">Print Without LH</span></td><td>The plain sales order, header band left clear for pre-printed paper</td></tr>
+      <tr><td rowspan="4">Quotation</td><td><span class="ui">Print PDF</span></td><td><code>KATC Quotation</code> on the letterhead</td></tr>
+      <tr><td><span class="ui">Print with Arabic</span></td><td><code>KATC Quotation Arabic</code> — adds an Arabic item-name column and the bank details</td></tr>
+      <tr><td><span class="ui">Proforma Invoice</span></td><td><code>KATC Quotation Proforma</code> — the same proforma layout as the Sales Order one</td></tr>
+      <tr><td><span class="ui">Print Without LH</span></td><td><code>KATC Quotation No LH</code> — a <b>different document</b>, not the same page with the header removed</td></tr>
     </tbody>
   </table>
+  <div class="note">
+    <b>Why the Sales Invoice and Delivery Note have no Arabic button.</b>
+    They do not need one — both already print the Arabic item name underneath the English
+    one, inside the same cell. A separate Arabic column there would print it twice. The
+    Arabic button exists only on the Quotation and the Sales Order, where the plain layout
+    carries no Arabic at all.
+  </div>
   <div class="note">
     <b>The older <code>YHT</code> formats are untouched and still available</b> from the printer
     icon — including <code>YHT Delivery Note</code> with its customer and office copies. Nothing

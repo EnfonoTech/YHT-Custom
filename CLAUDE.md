@@ -544,6 +544,37 @@ accountant: SI→`CN`, DN→`DRN`, PI→`DBN`, PR→`PRN`.
     never needed: the code under test reads through `frappe.db` in the same transaction and
     sees the uncommitted write. Restore what a test changes in a `finally`, and never commit.
 
+75. ✅ **A PRINT FORMAT CAN `{% include %}` AN APP TEMPLATE, SO A VARIANT IS A FLAG RATHER
+    THAN A COPY.** `printview.get_rendered_template` compiles the format with
+    `jenv.from_string(...)`, but `get_jenv` builds a `FrappeSandboxedEnvironment(loader=
+    get_jloader())` — a real loader over every app's template paths — so
+    `{% include "yht_custom/templates/includes/katc/quotation.html" %}` resolves, and a
+    `{% set %}` before the include IS visible inside it. Verified live. Each KATC document
+    now has ONE template and the Print Format records are two-line shims. The pair this
+    replaced carried a comment reading *"KATC Quotation and KATC Quotation Arabic must stay
+    identical outside the `katc-ar-col` cells — edit BOTH, or the check fails"*; that trap
+    was about to multiply from one pair to four.
+76. 🔴 **A TEST THAT ASSERTS "EXACTLY ONE DIFFERENCE" CAN HOLD A REAL DEFECT IN PLACE.**
+    `test_the_arabic_quotation_differs_by_exactly_one_column` compared the Arabic format to
+    the plain one with the Arabic cells stripped and demanded equality. The client artefact
+    also carries a VAT / bank block that the plain format does not — so the honest fix
+    *failed the test*, and adding the block to both would have put a bank block on a document
+    that has none. A same-shape assertion is only safe while the shapes are genuinely meant
+    to match; when the artefact says otherwise, the test changes with the format.
+77. ⚠️ **ONE TEMPLATE SERVING TWO DOCTYPES MUST READ EVERY DOCTYPE-SPECIFIC FIELD WITH
+    `doc.get()`.** The proforma template now backs both a Sales Order and a Quotation, and a
+    Quotation has no `delivery_date`. Frappe's print env uses `DebugUndefined`, so an
+    unguarded `doc.delivery_date` does not raise — it renders the literal marker text onto a
+    customer-facing PDF.
+78. ⚠️ **THE "NO LH" FORMATS WERE NOT LETTERHEAD VARIANTS.** For Sales Invoice and Delivery
+    Note, Print 1 and Print 2 really are one document with the header toggled — proven three
+    ways (byte-identical text streams, the letterhead JPEG as the only differing image,
+    matching ink bands). For Quotation and Sales Order they are DIFFERENT DOCUMENTS: the
+    Quotation "No LH" carries bilingual headers, bank details and a VAT number the plain one
+    does not. And the Sales Order "No LH" emitted its spacer UNCONDITIONALLY, which is why
+    there was no with-letterhead plain Sales Order at all until the spacer became
+    `{% if letter_head %}…{% elif no_letterhead %}…{% endif %}`.
+
 ## Deploy
 
 Repo: **`git@github-yht:EnfonoTech/YHT-Custom.git`** (private). The box has a dedicated read-only deploy key at
