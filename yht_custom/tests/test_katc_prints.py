@@ -1675,12 +1675,14 @@ class TestButtonsAndWiring(FrappeTestCase):
 	def test_the_flags_land_on_the_right_paths(self):
 		"""check 48 — the letterhead flags land on the right paths.
 
-		🔴 SPEC CONFLICT, encoded in favour of the button map. Check 48 says
-		"no_letterhead=1 on exactly the THREE Print Without LH paths and letterhead=
-		on exactly the five with-letterhead paths", but Step 11's button table gives
-		`Print Without LH` to all FOUR doctypes — and 5 + 3 = 8, not the 9 buttons the
-		table lists. Four is the arithmetic the table supports, so four is what this
-		asserts. If the client really wants only three, the table is what has to change.
+		Twelve buttons since the 2026-08-27 rework: Print / With Arabic / Proforma /
+		Without LH on Quotation and Sales Order, Print / Without LH on Sales Invoice and
+		Delivery Note. Those last two get no Arabic button because both already print
+		the Arabic item name inside the item cell — a column would print it twice.
+
+		Eight letterhead= paths and four no_letterhead=1, and the two sets are disjoint
+		by construction: the letterhead is now the BUTTON's job for every doctype, since
+		the shared templates render one whenever they are handed one.
 		"""
 		specs = button_specs(js_source())
 		# Four on Quotation and Sales Order (Print / With Arabic / Proforma / Without
@@ -1709,15 +1711,18 @@ class TestButtonsAndWiring(FrappeTestCase):
 				)
 
 		with_lh = [s for s in specs if s["letterhead"]]
-		self.assertEqual(len(with_lh), 5, "letterhead= belongs on exactly five paths")
+		self.assertEqual(len(with_lh), 8, "letterhead= belongs on exactly eight paths")
 		self.assertEqual(
 			{s["format"] for s in with_lh},
 			{
 				"KATC Delivery Note",
 				"KATC Tax Invoice",
+				"KATC Sales Order",
+				"KATC Sales Order Arabic",
 				"KATC Proforma Invoice",
 				"KATC Quotation",
 				"KATC Quotation Arabic",
+				"KATC Quotation Proforma",
 			},
 		)
 		for spec in with_lh:
