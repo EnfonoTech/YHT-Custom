@@ -813,17 +813,19 @@ def yht_item_ar_lines(row_or_item_code, width: int = 20) -> list[str]:
 		return []
 
 	width = max(cint(width), 8)
+
 	lines, current = [], ""
 	for word in text.split():
-		while len(word) > width:
+		while _ar_width(word) > width:
 			if current:
 				lines.append(current)
 				current = ""
-			lines.append(word[:width])
-			word = word[width:]
+			cut = _ar_cut(word, width)
+			lines.append(word[:cut])
+			word = word[cut:]
 		if not current:
 			current = word
-		elif len(current) + 1 + len(word) <= width:
+		elif _ar_width(f"{current} {word}") <= width:
 			current = f"{current} {word}"
 		else:
 			lines.append(current)
@@ -831,3 +833,25 @@ def yht_item_ar_lines(row_or_item_code, width: int = 20) -> list[str]:
 	if current:
 		lines.append(current)
 	return lines
+
+
+#: A Latin letter or digit is materially wider than an Arabic glyph at the same point
+#: size, so a budget counted in characters overflows exactly on the rows that mix them.
+#: Measured: the rows that still collided after a plain 20-character break were the ones
+#: ending in a Latin token — "1 Kg", "3 ملي 6\"". Weighting closes that.
+_LATIN_WEIGHT = 1.45
+
+
+def _ar_width(text: str) -> float:
+	"""Approximate rendered width, in Arabic-glyph units."""
+	return sum(_LATIN_WEIGHT if ch.isascii() and not ch.isspace() else 1.0 for ch in text)
+
+
+def _ar_cut(word: str, width: float) -> int:
+	"""How many characters of an unbreakable word fit inside the budget."""
+	total = 0.0
+	for i, ch in enumerate(word):
+		total += _LATIN_WEIGHT if ch.isascii() and not ch.isspace() else 1.0
+		if total > width:
+			return max(i, 1)
+	return len(word)
