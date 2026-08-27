@@ -299,6 +299,16 @@ def format_source(print_format: str) -> str:
 	return html
 
 
+def strip_column_widths(html: str) -> str:
+	"""Drop `width:N%` declarations so two column sets can be compared.
+
+	The Arabic variant pins EVERY column width; the plain one lets Item Name size
+	itself. That is deliberate — auto layout is what let the Arabic spill over the
+	Quantity figures — so it is a third expected difference, not a divergence.
+	"""
+	return re.sub(r'\s*style="width:\s*[0-9.]+%\s*"', "", html or "", flags=re.I)
+
+
 def strip_bank_block(html: str) -> str:
 	"""Remove the VAT / bank block so two formats can be compared without it."""
 	return re.sub(r'<div class="katc-bank">.*?</div>', "", html, flags=re.S)
@@ -950,8 +960,8 @@ class TestTwoFormatDoctypes(FrappeTestCase):
 					f"{print_format} must spacer the body down when the header is absent",
 				)
 
-	def test_the_arabic_quotation_differs_by_exactly_two_things(self):
-		"""check 26 — the Arabic column AND the bank block, and nothing else.
+	def test_the_arabic_quotation_differs_by_exactly_three_things(self):
+		"""check 26 — the Arabic column, the bank block, the pinned widths. No more.
 
 		It used to assert ONE difference, and that assertion held a real fidelity gap
 		in place: `quote print 2 with arabic.pdf` carries Print 2's VAT # / BANK DETAILS
@@ -971,9 +981,14 @@ class TestTwoFormatDoctypes(FrappeTestCase):
 		self.assertIn("BANK DETAILS", arabic, "the artefact's VAT / bank block is missing")
 		self.assertNotIn("BANK DETAILS", plain, "Print 1 does not carry a bank block")
 		self.assertEqual(
-			squash(strip_bank_block(strip_first_thead(plain))),
-			squash(strip_bank_block(strip_arabic_column(strip_first_thead(arabic)))),
-			"KATC Quotation Arabic diverges beyond the Arabic column and the bank block",
+			squash(strip_column_widths(strip_bank_block(strip_first_thead(plain)))),
+			squash(
+				strip_column_widths(
+					strip_bank_block(strip_arabic_column(strip_first_thead(arabic)))
+				)
+			),
+			"KATC Quotation Arabic diverges beyond the Arabic column, the bank block "
+			"and the pinned column widths",
 		)
 
 
