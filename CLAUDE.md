@@ -575,6 +575,28 @@ accountant: SI→`CN`, DN→`DRN`, PI→`DBN`, PR→`PRN`.
     there was no with-letterhead plain Sales Order at all until the spacer became
     `{% if letter_head %}…{% elif no_letterhead %}…{% endif %}`.
 
+79. 🔴 **THIS wkhtmltopdf WILL NOT WRAP AN RTL RUN INSIDE A SIZED CELL — SO AN ARABIC
+    COLUMN IS NOT VIABLE ON THIS BENCH.** Tried, and measured each attempt with
+    `pdftotext -bbox`: `table-layout: fixed` (ignored — the overlap survived it),
+    `word-wrap: break-word`, `word-break: break-all`, and a fixed-width block with
+    `overflow: hidden`. The first three left the Arabic glyphs running from x=299 to
+    x=396 straight across a Quantity column starting at x=346 — four overlapping glyph
+    boxes on one row; the last one stopped the collision by CLIPPING, so a 30-character
+    name printed as `M16`. This is the same unpatched-Qt build as gotcha 44: it lays the
+    table out on one metric and draws the text on another, so a cell width is not a
+    drawing boundary. **Put the Arabic on a second line inside the item cell instead** —
+    what `katc_tax_invoice`, `katc_delivery_note` and `katc_proforma_invoice` have always
+    done, and it renders all 69 characters. ⚠️ And measure the DATA before copying an
+    artefact's layout: `quote print 2 with arabic.pdf` uses a column and looks fine
+    because its sample rows all read `مواد عامة`, while **71% of Quotation Item and 73%
+    of Sales Order Item Arabic names exceed 18 characters**.
+80. ⚠️ **A `pdftotext -bbox` BACKWARD STEP IS NOT AUTOMATICALLY AN OVERLAP.** On a line
+    mixing RTL and LTR runs, words come out in LOGICAL order, so an x that moves
+    backwards is normal bidi and not a defect. Confirm a suspected collision by
+    rasterising the region (`pdftoppm -png -r 150 -x -y -W -H`) and looking at it —
+    comparing the boxes alone reports false positives on every bilingual line, including
+    the letterhead.
+
 ## Deploy
 
 Repo: **`git@github-yht:EnfonoTech/YHT-Custom.git`** (private). The box has a dedicated read-only deploy key at
