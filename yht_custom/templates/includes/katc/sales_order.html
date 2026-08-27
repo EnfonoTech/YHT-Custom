@@ -24,6 +24,17 @@ table.katc-items th { background: #f2f2f2; text-align: center; font-size: 8pt; }
 table.katc-items td.num { text-align: right; }
 table.katc-items td.ctr { text-align: center; }
 .katc-ar { direction: rtl; text-align: right; }
+{% if katc_show_arabic %}
+/* 🔴 ONLY on the Arabic prints, so the approved non-Arabic layouts keep their
+   content-sized columns. Measured on KSSO-26-0625: a long Arabic item name
+   ("بولت مجلفن مع صامولة ووردة M16") did not wrap under wkhtmltopdf's old WebKit
+   and its glyphs ran from x=299 to x=396, straight over the Quantity column that
+   starts at x=346 — four overlapping glyph boxes on one row, checked with
+   `pdftotext -bbox`. Auto table layout sizes a column to its widest content and
+   then lets it spill; fixed layout honours the declared widths and wraps. */
+table.katc-items { table-layout: fixed; }
+table.katc-items td, table.katc-items th { word-wrap: break-word; overflow-wrap: break-word; }
+{% endif %}
 .katc-totals { width: 55%; margin-left: auto; border-collapse: collapse; page-break-inside: avoid; }
 .katc-totals td { border: 1px solid #999; padding: 3px 6px; font-size: 8.5pt; }
 .katc-totals td.lbl { background: #f2f2f2; font-weight: bold; }
