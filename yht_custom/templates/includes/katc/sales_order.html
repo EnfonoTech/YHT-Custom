@@ -80,7 +80,7 @@ table.katc-items td.ctr { text-align: center; }
 {%- if katc_show_arabic %}
     <th style="width:5%">Sr</th>
     <th style="width:28%">Item Name</th>
-    <th style="width:26%">Item Name in Arabic</th>
+    <th class="katc-ar-col" style="width:26%">Item Name in Arabic</th>
     <th style="width:13%">Quantity</th>
     <th style="width:12%">Rate</th>
     <th style="width:16%">Amount</th>
@@ -96,7 +96,7 @@ table.katc-items td.ctr { text-align: center; }
 {%- for row in doc.items %}
     <tr>
       <td class="ctr">{{ loop.index }}</td>
-      <td>{{ row.item_name or row.item_code or "" }}</td>{% if katc_show_arabic %}<td class="katc-ar">{%- for line in yht_item_ar_lines(row) %}{{ line }}{%- if not loop.last %}<br>{% endif %}{%- endfor %}</td>{% endif %}
+      <td>{{ row.item_name or row.item_code or "" }}</td>{% if katc_show_arabic %}<td class="katc-ar-col katc-ar">{%- for line in yht_item_ar_lines(row) %}{{ line }}{%- if not loop.last %}<br>{% endif %}{%- endfor %}</td>{% endif %}
       <td class="ctr">{{ row.qty }} {{ row.uom or row.stock_uom or "" }}</td>
       <td class="num">{{ yht_money(row.rate, cur) }}</td>
       <td class="num">{{ yht_money(row.amount, cur) }}</td>

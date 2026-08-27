@@ -2099,12 +2099,8 @@ class TestDegenerateDocuments(FrappeTestCase):
 		)
 		self.assertIn("Discount", html)
 
-	def test_a_row_with_no_arabic_still_renders(self):
-		"""3,857 Item rows and a variable share of child rows carry no Arabic.
-
-		The Arabic is a line inside the item cell now, so "no value" must mean "no
-		line" — not an empty div leaving a blank second row in every cell.
-		"""
+	def test_an_empty_arabic_cell_does_not_collapse_the_column(self):
+		"""3,857 Item rows and a variable share of child rows carry no Arabic."""
 		name = artefact_or_any("Quotation")
 		if not name:
 			self.skipTest("no submitted Quotation")
@@ -2116,9 +2112,8 @@ class TestDegenerateDocuments(FrappeTestCase):
 			html = render("Quotation", name, "KATC Quotation Arabic", no_letterhead=1)
 		finally:
 			print_helpers.yht_item_ar = original
-		self.assertIn("katc-items", html, "the item table did not render")
-		self.assertNotIn(
-			'<div class="katc-ar"></div>', html, "an empty Arabic line was emitted"
+		self.assertIn(
+			"katc-ar-col", html, "the Arabic column collapsed when every value was empty"
 		)
 
 	def test_a_negative_line_discount_is_not_printed(self):
