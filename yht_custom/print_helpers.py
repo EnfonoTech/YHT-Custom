@@ -789,7 +789,7 @@ def yht_row_taxes(doc) -> dict:
 	return out
 
 
-def yht_item_ar_lines(row_or_item_code, width: int = 14) -> list[str]:
+def yht_item_ar_lines(row_or_item_code, width: int = 26) -> list[str]:
 	"""The Arabic item name, pre-broken into lines of at most ``width`` characters.
 
 	🔴 WHY THIS EXISTS. This bench's wkhtmltopdf is the unpatched-Qt build (see the
@@ -808,12 +808,14 @@ def yht_item_ar_lines(row_or_item_code, width: int = 14) -> list[str]:
 	Long single words are hard-split rather than allowed to overflow: an item code
 	like a 30-character part number has no space to break at.
 
-	⚠️ THE DEFAULT WIDTH IS SET EMPIRICALLY, NOT CALCULATED. A modelled budget did
-	not predict this engine: a line measuring 18.4 units overlapped while one
-	measuring 20.0 rendered clean, because Arabic shaping makes the glyph advance
-	depend on the letters' joining forms rather than on their count. The number below
-	is the one that renders correctly across the sixteen documents with the longest
-	Arabic names on this site. Re-verify by RENDERING if it is ever changed.
+	⚠️ THE DEFAULT WIDTH IS SET EMPIRICALLY, NOT CALCULATED, AND IT IS PAIRED WITH THE
+	COLUMN WIDTH IN THE TEMPLATES (34%). It was chosen by rendering the same worst-case
+	rows at budgets 14/18/22/26/30 against column widths 26/30/34% in ONE pdf and
+	comparing: 26-at-34% is the largest that never overflows into the Quantity column,
+	and smaller budgets wrap short names into three or four needless lines. A modelled
+	budget does not work here — Arabic shaping makes the glyph advance depend on the
+	letters' joining forms rather than on their count. **Re-run that sweep if either
+	number changes; do not reason about it.**
 	"""
 	text = cstr(yht_item_ar(row_or_item_code)).strip()
 	if not text:
