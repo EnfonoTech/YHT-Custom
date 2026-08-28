@@ -575,42 +575,51 @@ accountant: SI→`CN`, DN→`DRN`, PI→`DBN`, PR→`PRN`.
     there was no with-letterhead plain Sales Order at all until the spacer became
     `{% if letter_head %}…{% elif no_letterhead %}…{% endif %}`.
 
-79. 🔴 **THIS wkhtmltopdf WILL NOT LINE-BREAK AN RTL RUN — SO BREAK IT IN PYTHON.**
-    Every CSS route fails, measured with `pdftotext -bbox` and confirmed by rasterising:
-    `table-layout: fixed` (ignored), explicit percentage widths on EVERY column summing
-    to 100% (still spilled), `word-wrap: break-word`, `word-break: break-all`, and a
-    fixed-width block with `overflow: hidden` (traded the overlap for a 30-character name
-    clipped to `M16`). Same unpatched-Qt build as gotcha 44. **The fix is
-    `print_helpers.yht_item_ar_lines`:** pre-break the string into a LIST of lines and let
-    the template emit one per `<br>`, so the engine has no wrapping decision left. A list
-    rather than markup keeps escaping out of it.
-80. 🔴 **TWO RULES THE LINE-BREAKER NEEDS, BOTH FOUND BY RENDERING, NEITHER PREDICTED BY
-    MODELLING.** (a) **Never put a Latin/digit token on the same line as Arabic** — a
-    mixed-direction line has its runs drawn on top of each other, which is gotcha 45 seen
-    again: `اسبستوس 3 ملي` came out as stacked glyphs while sitting well inside the width
-    budget, so width was never the trigger. (b) **The character budget is empirical.** A
-    weighted model failed: a line measuring 18.4 units overlapped while one measuring 20.0
-    rendered clean, because Arabic shaping makes the glyph advance depend on joining forms
-    rather than character count. 14 is the number that renders correctly across the sixteen
-    documents with the longest Arabic names. Re-verify by RENDERING if it changes.
-81. ⚠️ **A `pdftotext -bbox` BACKWARD STEP IS NOT AUTOMATICALLY AN OVERLAP.** On a line
-    mixing RTL and LTR runs, words come out in LOGICAL order, so an x that moves backwards
-    is normal bidi. It reports false positives on every bilingual line, the letterhead
-    included. Confirm by rasterising the region (`pdftoppm -png -r 140 -x -y -W -H`) and
-    LOOKING. Equally: a bbox check that comes back clean is not proof either — the two
-    rows that still overlapped after one fix were invisible to it.
-82. 🔴 **TEST A LAYOUT AGAINST THE WORST DATA, NOT THE FIRST DOCUMENT.** The Arabic column
-    was declared unworkable on the evidence of ONE contrived Sales Order with two test
-    items, and the artefact it was copied from looked fine only because its sample rows all
-    read `مواد عامة`. The real distribution: **71% of Quotation Item and 73% of Sales Order
-    Item Arabic names exceed 18 characters, to a maximum of 66.** Query the length
-    distribution and render the top of it before concluding anything about a layout — and
-    never conclude it from a green test suite, which cannot see a page.
-83. ⚠️ **`is_return` IS READ-ONLY ON DELIVERY NOTE AND PURCHASE RECEIPT** (`read_only = 1`
-    on both, versus `0` on Sales Invoice and Purchase Invoice). So a "new return" entry
-    point cannot exist for those two — a blank document can never have the box ticked, and
-    their returns must be raised from the document being reversed. On the branch dashboard
-    they are filtered LISTS, not create tiles.
+79. 🔴 **THE ARABIC OVERFLOW WAS A BIDI *ANCHORING* BUG, NOT A WIDTH PROBLEM — this
+    REPLACES the old 79/80.** This wkhtmltopdf mis-computes the alignment offset of a
+    right-aligned RTL line **unless the line contains no U+0020 AND its first and last
+    characters are strong RTL**. Both conditions; neither alone. Measured through
+    `download_pdf` across eight markup variants: `white-space: nowrap`, `<span dir="rtl">`
+    and a single trailing RLM all do nothing; `word-break`/`word-wrap` are logged as
+    *Unknown Property* and ignored. The overflow scaled with **word count, not width** — a
+    single 28-character Arabic token (99 pt) sat perfectly inside a 193 pt column while
+    four short words ran 46 pt past the rule. **Fix: join with U+00A0 and wrap every line
+    in U+200F at both ends** (`print_helpers._rtl`). Three earlier attempts failed because
+    they all tuned a character budget, which could never have worked.
+80. ⚠️ **A REAL SHAPER PREDICTS THE WIDTH; A CHARACTER MODEL DOES NOT.** Pillow in the
+    bench venv has RAQM/HarfBuzz, and `getlength(text, direction="rtl", language="ar")`
+    matches the drawn width to within 0.09% over nineteen strings. The old
+    1.0/1.45-per-character weighting is what failed, not modelling as such. Measure with
+    `fc-match sans-serif` — on this box every family in the CSS stack resolves to
+    **DejaVu Sans**, and `fc-list :lang=ar` returns only DejaVu, so the "Noto Naskh
+    Arabic" in the letterhead stack is a no-op.
+81. ⚠️ **`get_pdf(html)` IS NOT THE USER'S PATH AND WILL HIDE A LAYOUT BUG.** It does not
+    apply the Print Format / Print Settings page geometry, so it renders on a wider page:
+    `frappe.utils.pdf.read_options_from_html` regex-scrapes margins out of the format's
+    own CSS, making the real items table 567.1 pt where A4-minus-defaults predicts 510.2.
+    Verify layout ONLY through `frappe.utils.print_format.download_pdf(...)`, reading
+    `frappe.local.response.filecontent`. Three fixes shipped broken because they were
+    checked through `get_pdf`.
+82. ⚠️ **DETECT OVERFLOW FROM THE COLUMN HEADER, NOT FROM RULE GEOMETRY.** `scripts/
+    katc_ar_overflow.py` is the objective check. Two traps it encodes: the borders are
+    NOT full-height rules (wkhtmltopdf draws `border: 1px` as a separate short segment per
+    cell — 366 vertical edges on one page), so cluster the edges crossing the HEADER ROW's
+    y-band; and the letterhead is Arabic too, so only check glyphs BELOW the header or the
+    company name reads as an overflow. Clustering by total coverage instead picked a rule
+    at 268.5 where the real one is 177.5 and reported ten good documents as broken. **The
+    detector must be two-sided-verified — it FAILS the pre-fix build (17 escaping glyphs,
+    worst +53.27 pt) and passes 39 of 39 after.**
+83. ⚠️ **THE COLUMN HEADER DOES NOT REPEAT ON PAGE 2** (gotcha 44), so any check anchored
+    on it skips every continuation page — exactly where a long document's Arabic is. Carry
+    page 1's column geometry forward.
+84. 🔴 **`frappe.get_print` COMMITS THE OPEN TRANSACTION.** A probe that inserted temporary
+    Print Formats and relied on `frappe.db.rollback()` left them on the site. Anything that
+    renders a print during a read-only investigation must build fixtures in memory and pass
+    `doc=`, never `save()`.
+85. ⚠️ **`is_return` IS READ-ONLY ON DELIVERY NOTE AND PURCHASE RECEIPT** (`read_only = 1`,
+    versus `0` on Sales Invoice and Purchase Invoice), so a "new return" entry point cannot
+    exist for those two — their returns must be raised from the document being reversed. On
+    the branch dashboard they are filtered LISTS, not create tiles.
 
 ## Deploy
 
