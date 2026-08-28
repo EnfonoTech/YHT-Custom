@@ -2384,3 +2384,94 @@ class TestSharedTemplates(FrappeTestCase):
 					[l for l in labels if "Arabic" in l],
 					f"{doctype} already prints Arabic inline — a column duplicates it",
 				)
+
+
+# ============================================ the Arabic column must never overflow
+
+
+class TestArabicColumnFit(FrappeTestCase):
+	"""The three conditions that make a right-aligned RTL line anchor correctly.
+
+	🔴 These are the CI gate. The objective check — reading the drawn column rules and
+	the Arabic glyph boxes out of a PDF rendered through `download_pdf` — lives in
+	`scripts/katc_ar_overflow.py` and needs `pdfplumber`, which is deliberately NOT
+	installed on the bench (it also runs live client sites). Run it at acceptance:
+
+	    python scripts/katc_ar_overflow.py *.pdf
+
+	It is two-sided-verified: it FAILS the pre-fix build (17 escaping glyphs, worst
+	+53.27 pt) and passes 39 of 39 real documents after. The invariants below are what
+	the render proved makes a line safe, so they are a sound regression barrier.
+	"""
+
+	def _lines(self, text):
+		from yht_custom import print_helpers
+
+		row = frappe._dict({"doctype": "Sales Order Item", "custom_item_name_in_arabic": text})
+		return print_helpers.yht_item_ar_lines(row)
+
+	def test_every_line_is_anchored_at_both_ends(self):
+		"""U+200F at ONE end does nothing — measured. Both ends, or it mis-anchors."""
+		from yht_custom.print_helpers import RLM
+
+		for text in ("بولت مجلفن مع صامولة ووردة M16",
+		             "شفة لحام العنق حديد كاربون مزور اساس اوروبا 4\"",
+		             "مواد عامة"):
+			for line in self._lines(text):
+				with self.subTest(text=text[:20], line=line[:20]):
+					self.assertTrue(line.startswith(RLM), "line does not start with U+200F")
+					self.assertTrue(line.endswith(RLM), "line does not end with U+200F")
+
+	def test_no_line_contains_a_plain_space(self):
+		"""A single U+0020 is enough to mis-anchor the whole line."""
+		for text in ("بولت مجلفن مع صامولة ووردة M16", "محبس حديد مصبوب ساق الجدعية - او اس"):
+			for line in self._lines(text):
+				with self.subTest(line=line[:24]):
+					self.assertNotIn(" ", line, "a plain space survived; use U+00A0")
+
+	def test_a_row_with_no_arabic_yields_no_lines(self):
+		self.assertEqual(self._lines(""), [])
+		self.assertEqual(self._lines("   "), [])
+
+	def test_the_inline_formats_get_the_same_anchoring(self):
+		"""Proforma / Tax Invoice / Delivery Note print Arabic inline and carried the
+		same defect — measured worse, 88 of 141 glyphs past the rule."""
+		from yht_custom import print_helpers
+		from yht_custom.print_helpers import RLM
+
+		row = frappe._dict({"doctype": "Sales Order Item",
+		                    "custom_item_name_in_arabic": "بولت مجلفن مع صامولة"})
+		out = print_helpers.yht_item_ar_rtl(row)
+		self.assertTrue(out.startswith(RLM) and out.endswith(RLM))
+		self.assertNotIn(" ", out)
+		self.assertEqual(print_helpers.yht_item_ar_rtl(frappe._dict({"doctype": "Sales Order Item"})), "")
+
+	def test_the_budget_is_derived_from_the_column_width(self):
+		"""The Python constant and the template's `width:34%` must not drift apart."""
+		import os
+		import re
+
+		from yht_custom import print_helpers
+
+		for f in ("quotation.html", "sales_order.html"):
+			path = os.path.join(frappe.get_app_path("yht_custom"), "templates", "includes", "katc", f)
+			body = open(path, encoding="utf-8").read()
+			m = re.search(r'katc-ar-col"\s+style="width:\s*([0-9.]+)%', body)
+			with self.subTest(template=f):
+				self.assertTrue(m, f"no Arabic column width found in {f}")
+				self.assertEqual(
+					float(m.group(1)),
+					print_helpers.KATC_AR_COL_PCT,
+					"the template width and KATC_AR_COL_PCT have drifted apart",
+				)
+		self.assertGreater(print_helpers.ar_budget_em(), 0)
+
+	def test_a_long_name_wraps_rather_than_overflowing(self):
+		long = "محبس حديد مصبوب ساق الجدعية - او اس & واي مع فلنجة أساس امريكي 10\""
+		lines = self._lines(long)
+		self.assertGreater(len(lines), 1, "a 60-character name did not wrap at all")
+
+	def test_a_short_name_is_not_wrapped_needlessly(self):
+		"""The complaint that started this: short names split into three lines."""
+		self.assertEqual(len(self._lines("مواد عامة")), 1)
+		self.assertEqual(len(self._lines("كوع زاوية سنة بيس")), 1)

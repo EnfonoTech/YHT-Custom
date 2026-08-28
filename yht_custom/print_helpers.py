@@ -789,96 +789,167 @@ def yht_row_taxes(doc) -> dict:
 	return out
 
 
-def yht_item_ar_lines(row_or_item_code, width: int = 26) -> list[str]:
-	"""The Arabic item name, pre-broken into lines of at most ``width`` characters.
+#: 🔴 THE BIDI ANCHORING BUG, AND THE WHOLE REASON THIS MODULE SHAPES TEXT.
+#: This bench's wkhtmltopdf mis-computes the alignment offset of a right-aligned RTL
+#: line UNLESS both of these hold: the line contains no U+0020, AND its first and last
+#: characters are strong RTL. Neither condition alone is sufficient — measured, eight
+#: markup variants through the real `download_pdf` path:
+#:
+#:   direction:rtl + text-align:right + U+0020        -> mis-anchored, +46 pt
+#:   ... + white-space:nowrap                          -> no change
+#:   ... + word-break / word-wrap                      -> ignored ("Unknown Property")
+#:   ... each line in <span dir="rtl">                 -> no change
+#:   U+00A0 instead of U+0020, line ending in Arabic   -> CLEAN
+#:   U+00A0, line ending in & - " ABC 250              -> mis-anchored again
+#:   U+200F at one end only                            -> no change
+#:   U+200F at BOTH ends + U+00A0                      -> CLEAN, every case
+#:
+#: The overflow scaled with WORD COUNT, not line width: a single 28-character Arabic
+#: token (99 pt) sat perfectly inside a 193 pt column, while four short words ran 46 pt
+#: past the rule. That is why three attempts at shrinking a character budget all failed.
+RLM = "\u200f"
+NBSP = "\u00a0"
 
-	🔴 WHY THIS EXISTS. This bench's wkhtmltopdf is the unpatched-Qt build (see the
-	app's gotcha 44), and its WebKit will not line-break an RTL run inside a table
-	cell — measured every way: `table-layout: fixed`, explicit percentage widths on
-	every column, `word-wrap`, `word-break: break-all`, and a fixed-width block. In
-	each case a long Arabic name was drawn straight across the Quantity column, and
-	`overflow: hidden` only traded the overlap for a clipped name. Names here run to
-	66 characters and 71% are past 18, so the column cannot simply be widened.
+#: Geometry, MEASURED on a real render — never computed from page size minus margins.
+#: `frappe.utils.pdf.read_options_from_html` regex-scrapes margins out of the format's
+#: own CSS, so the rendered items table is 567.1 pt, not the 510.2 pt that
+#: A4-minus-default-margins predicts. Re-derive with:
+#:   python scripts/katc_ar_overflow.py --print-constants
+KATC_ITEMS_TABLE_EM = 89.6
+#: Must equal the `width:34%` on the Arabic column in BOTH templates. A test ties them.
+KATC_AR_COL_PCT = 34.0
+#: Cell padding + border, both sides, in em.
+KATC_CELL_CHROME_EM = 1.1
 
-	Breaking the string in Python removes the decision from the engine: each line is
-	emitted separately and there is nothing left to wrap. Returns a LIST rather than
-	markup so the template does the joining — no escaping questions, and nothing here
-	has to be marked safe.
+_AR_FONT_SIZE = 1000
 
-	Long single words are hard-split rather than allowed to overflow: an item code
-	like a 30-character part number has no space to break at.
 
-	⚠️ THE DEFAULT WIDTH IS SET EMPIRICALLY, NOT CALCULATED, AND IT IS PAIRED WITH THE
-	COLUMN WIDTH IN THE TEMPLATES (34%). It was chosen by rendering the same worst-case
-	rows at budgets 14/18/22/26/30 against column widths 26/30/34% in ONE pdf and
-	comparing: 26-at-34% is the largest that never overflows into the Quantity column,
-	and smaller budgets wrap short names into three or four needless lines. A modelled
-	budget does not work here — Arabic shaping makes the glyph advance depend on the
-	letters' joining forms rather than on their count. **Re-run that sweep if either
-	number changes; do not reason about it.**
+def _ar_font():
+	"""The face wkhtmltopdf actually uses, cached per process.
+
+	`fc-match` for Arial, "Noto Sans" and sans-serif all resolve to DejaVu Sans on this
+	box, and `fc-list :lang=ar` returns only DejaVu — the "Noto Naskh Arabic" in the
+	letterhead's stack is a no-op. Measuring against any other face would be measuring
+	a font the PDF will not use.
+	"""
+	cached = getattr(frappe.local, "yht_ar_font", None)
+	if cached is not None:
+		return cached or None
+	font = None
+	try:
+		import subprocess
+
+		from PIL import ImageFont, features
+
+		if features.check("raqm"):
+			path = subprocess.run(
+				["fc-match", "-f", "%{file}", "sans-serif"],
+				capture_output=True, text=True, timeout=10,
+			).stdout.strip()
+			if path:
+				font = ImageFont.truetype(path, _AR_FONT_SIZE)
+	except Exception:
+		font = None
+	frappe.local.yht_ar_font = font or False
+	return font
+
+
+def _ar_em(text: str) -> float:
+	"""Rendered width of `text` in em units.
+
+	Shaped through HarfBuzz when Pillow has RAQM, which predicts the drawn width to
+	within 0.09% over nineteen strings. ⚠️ Gotcha 80 claimed modelling was impossible
+	here; it was not — the old model was a 1.0/1.45 per-character weight, which is what
+	failed. A real shaper is exact.
+
+	The fallback is deliberately PESSIMISTIC: without a shaper it is better to wrap a
+	line too early than to let one overflow into the Quantity figures.
+	"""
+	text = cstr(text)
+	if not text:
+		return 0.0
+	font = _ar_font()
+	if font is not None:
+		try:
+			return font.getlength(text, direction="rtl", language="ar") / _AR_FONT_SIZE
+		except Exception:
+			pass
+	return sum(0.85 if ch.isascii() else 0.62 for ch in text)
+
+
+def ar_budget_em() -> float:
+	"""Usable width of the Arabic column, in em. Derived, so it cannot drift."""
+	return (KATC_ITEMS_TABLE_EM * KATC_AR_COL_PCT / 100.0) - KATC_CELL_CHROME_EM
+
+
+def _rtl(line: str) -> str:
+	"""Anchor one line: strong-RTL at both ends, no plain spaces inside."""
+	return RLM + line.replace(" ", NBSP) + RLM
+
+
+def _ar_cut(word: str, budget: float) -> int:
+	"""How much of an unbreakable token fits. Binary search on the shaped width."""
+	lo, hi = 1, len(word)
+	while lo < hi:
+		mid = (lo + hi + 1) // 2
+		if _ar_em(word[:mid]) <= budget:
+			lo = mid
+		else:
+			hi = mid - 1
+	return lo
+
+
+def yht_item_ar_lines(row_or_item_code, em: float | None = None) -> list[str]:
+	"""The Arabic item name, anchored and wrapped to the Arabic column.
+
+	Returns a LIST so the template emits one line per `<br>` — no markup here, so no
+	escaping question. Every returned line is already RLM-wrapped and NBSP-joined; emit
+	them verbatim.
+
+	⚠️ There is NO mixed-script split any more. It was added because a mixed line once
+	rendered as stacked glyphs, but that was the SAME anchoring bug: under RLM+NBSP the
+	exact failing example rendered clean. Keeping it forced a break before every trailing
+	size token, which is the needless wrapping this exists to avoid.
 	"""
 	text = cstr(yht_item_ar(row_or_item_code)).strip()
 	if not text:
 		return []
 
-	width = max(cint(width), 8)
+	budget = flt(em) if em else ar_budget_em()
+	if budget <= 0:
+		return [_rtl(text)]
 
-	lines, current = [], ""
+	lines: list[str] = []
+	current = ""
 	for word in text.split():
-		while _ar_width(word) > width:
+		while _ar_em(word) > budget:
 			if current:
 				lines.append(current)
 				current = ""
-			cut = _ar_cut(word, width)
+			cut = _ar_cut(word, budget)
 			lines.append(word[:cut])
 			word = word[cut:]
 		if not current:
 			current = word
-		elif _mixes_scripts(current, word):
-			# 🔴 NEVER put a Latin/digit token on the same line as Arabic. This
-			# engine draws a mixed-direction line's runs on top of each other —
-			# the app's gotcha 45, seen again here as "اسبستوس 3 ملي" rendering
-			# as stacked glyphs. Width was not the trigger: that line was well
-			# inside the budget. Keeping each line to one script removes the
-			# bidi reordering that the broken build mishandles.
-			lines.append(current)
-			current = word
-		elif _ar_width(f"{current} {word}") <= width:
+		elif _ar_em(f"{current} {word}") <= budget:
 			current = f"{current} {word}"
 		else:
 			lines.append(current)
 			current = word
 	if current:
 		lines.append(current)
-	return lines
+
+	return [_rtl(line) for line in lines]
 
 
-def _is_latin(token: str) -> bool:
-	"""A token frappe's bidi pass will lay out left-to-right."""
-	return any(ch.isascii() and ch.isalnum() for ch in token)
+def yht_item_ar_rtl(row_or_item_code) -> str:
+	"""The Arabic item name as ONE anchored line, for the formats that print it inline.
 
-
-def _mixes_scripts(line: str, word: str) -> bool:
-	return _is_latin(line) != _is_latin(word)
-
-
-#: A Latin letter or digit is materially wider than an Arabic glyph at the same point
-#: size, so a budget counted in characters overflows exactly on the rows that mix them.
-#: Measured: the rows that still collided after a plain 20-character break were the ones
-#: ending in a Latin token — "1 Kg", "3 ملي 6\"". Weighting closes that.
-_LATIN_WEIGHT = 1.45
-
-
-def _ar_width(text: str) -> float:
-	"""Approximate rendered width, in Arabic-glyph units."""
-	return sum(_LATIN_WEIGHT if ch.isascii() and not ch.isspace() else 1.0 for ch in text)
-
-
-def _ar_cut(word: str, width: float) -> int:
-	"""How many characters of an unbreakable word fit inside the budget."""
-	total = 0.0
-	for i, ch in enumerate(word):
-		total += _LATIN_WEIGHT if ch.isascii() and not ch.isspace() else 1.0
-		if total > width:
-			return max(i, 1)
-	return len(word)
+	`KATC Proforma Invoice`, `KATC Tax Invoice` and `KATC Delivery Note` put the Arabic
+	inside the item cell rather than in a column of its own, and they carry the same
+	anchoring bug — measured worse, in fact: 88 of 141 Arabic glyphs past the DESCRIPTION
+	rule on one document, worst +336.52 pt. They do not need wrapping (the cell is wide);
+	they need the line anchored.
+	"""
+	text = cstr(yht_item_ar(row_or_item_code)).strip()
+	return _rtl(text) if text else ""

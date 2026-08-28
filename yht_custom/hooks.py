@@ -249,6 +249,7 @@ jinja = {
 		"yht_custom.print_helpers.yht_date",
 		"yht_custom.print_helpers.yht_item_ar",
 		"yht_custom.print_helpers.yht_item_ar_lines",
+		"yht_custom.print_helpers.yht_item_ar_rtl",
 		"yht_custom.print_helpers.yht_so_title",
 		"yht_custom.print_helpers.yht_line_discount",
 		"yht_custom.print_helpers.yht_discount_total",
