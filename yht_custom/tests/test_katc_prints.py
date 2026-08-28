@@ -2453,18 +2453,31 @@ class TestArabicColumnFit(FrappeTestCase):
 
 		from yht_custom import print_helpers
 
-		for f in ("quotation.html", "sales_order.html"):
+		# The Proforma's table carries eight columns, so its Arabic column is narrower
+		# and it passes its own percentage to yht_item_ar_lines. Whatever the number,
+		# the template's `width:N%` and the number it passes must agree.
+		for f, expected in (("quotation.html", print_helpers.KATC_AR_COL_PCT),
+		                    ("sales_order.html", print_helpers.KATC_AR_COL_PCT),
+		                    ("proforma_invoice.html", None)):
 			path = os.path.join(frappe.get_app_path("yht_custom"), "templates", "includes", "katc", f)
 			body = open(path, encoding="utf-8").read()
 			m = re.search(r'katc-ar-col"\s+style="width:\s*([0-9.]+)%', body)
 			with self.subTest(template=f):
 				self.assertTrue(m, f"no Arabic column width found in {f}")
-				self.assertEqual(
-					float(m.group(1)),
-					print_helpers.KATC_AR_COL_PCT,
-					"the template width and KATC_AR_COL_PCT have drifted apart",
-				)
+				width = float(m.group(1))
+				if expected is not None:
+					self.assertEqual(
+						width, expected, "the template width and KATC_AR_COL_PCT have drifted apart"
+					)
+				passed = re.search(r"yht_item_ar_lines\(row,\s*([0-9.]+)\)", body)
+				if passed:
+					self.assertEqual(
+						float(passed.group(1)),
+						width,
+						f"{f} declares width:{width}% but wraps to {passed.group(1)}%",
+					)
 		self.assertGreater(print_helpers.ar_budget_em(), 0)
+		self.assertLess(print_helpers.ar_budget_em(22), print_helpers.ar_budget_em(34))
 
 	def test_a_long_name_wraps_rather_than_overflowing(self):
 		long = "محبس حديد مصبوب ساق الجدعية - او اس & واي مع فلنجة أساس امريكي 10\""
