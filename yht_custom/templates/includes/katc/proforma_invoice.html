@@ -83,13 +83,18 @@ table.katc-items td.ctr { text-align: center; }
 
 <table class="katc-items">
   <thead><tr>
-    <th style="width:5%">SN #<div class="katc-ar">رقم</div></th>
-    <th>DESCRIPTION<div class="katc-ar">وصف</div></th>
-    <th style="width:9%">QTY<div class="katc-ar">كمية</div></th>
-    <th style="width:12%">Unit Rate<div class="katc-ar">سعر الوحدة</div></th>
-    <th style="width:13%">Ex VAT<div class="katc-ar">غير شامل الضريبة</div></th>
-    <th style="width:12%">VAT{% if ns.vat_rate %} {{ "%g"|format(ns.vat_rate) }}%{% endif %}<div class="katc-ar">الضريبة</div></th>
-    <th style="width:14%">Total<div class="katc-ar">الإجمالي</div></th>
+{#- The Arabic item name has its own column here too, matching the Quotation and
+    Sales Order Arabic prints. Every width is pinned and they sum to 100: auto layout
+    lets a column take as much room as its widest content wants and then draws the text
+    past the boundary, which is the overflow this whole change is about. -#}
+    <th style="width:4%">SN #<div class="katc-ar">رقم</div></th>
+    <th style="width:21%">DESCRIPTION<div class="katc-ar">وصف</div></th>
+    <th class="katc-ar-col" style="width:22%">Item Name in Arabic<div class="katc-ar">اسم الصنف بالعربي</div></th>
+    <th style="width:8%">QTY<div class="katc-ar">كمية</div></th>
+    <th style="width:11%">Unit Rate<div class="katc-ar">سعر الوحدة</div></th>
+    <th style="width:12%">Ex VAT<div class="katc-ar">غير شامل الضريبة</div></th>
+    <th style="width:10%">VAT{% if ns.vat_rate %} {{ "%g"|format(ns.vat_rate) }}%{% endif %}<div class="katc-ar">الضريبة</div></th>
+    <th style="width:12%">Total<div class="katc-ar">الإجمالي</div></th>
   </tr></thead>
   <tbody>
 {%- for row in doc.items %}
@@ -97,8 +102,9 @@ table.katc-items td.ctr { text-align: center; }
 {%- set row_tax = rowtax.get(row.name, row_net * ns.vat_rate / 100) %}
     <tr>
       <td class="ctr">{{ loop.index }}</td>
-      <td>{{ row.item_name or row.item_code or "" }}
-{%- set ar = yht_item_ar_rtl(row) %}{% if ar %}<div class="katc-ar">{{ ar }}</div>{% endif %}</td>
+      <td>{{ row.item_name or row.item_code or "" }}</td>
+      <td class="katc-ar-col katc-ar">
+{%- for line in yht_item_ar_lines(row, 22) %}{{ line }}{%- if not loop.last %}<br>{% endif %}{%- endfor %}</td>
       <td class="ctr">{{ row.qty }} {{ row.uom or row.stock_uom or "" }}</td>
       <td class="num">{{ yht_money(row.rate, cur) }}</td>
       <td class="num">{{ yht_money(row_net, cur) }}</td>

@@ -877,9 +877,15 @@ def _ar_em(text: str) -> float:
 	return sum(0.85 if ch.isascii() else 0.62 for ch in text)
 
 
-def ar_budget_em() -> float:
-	"""Usable width of the Arabic column, in em. Derived, so it cannot drift."""
-	return (KATC_ITEMS_TABLE_EM * KATC_AR_COL_PCT / 100.0) - KATC_CELL_CHROME_EM
+def ar_budget_em(col_pct: float | None = None) -> float:
+	"""Usable width of the Arabic column, in em. Derived, so it cannot drift.
+
+	`col_pct` lets a format with a different Arabic column pass its own width — the
+	Proforma's table carries eight columns, so its Arabic column is narrower than the
+	Quotation's 34%. Templates pass the same number that is in their `width:N%`.
+	"""
+	pct = flt(col_pct) if col_pct else KATC_AR_COL_PCT
+	return (KATC_ITEMS_TABLE_EM * pct / 100.0) - KATC_CELL_CHROME_EM
 
 
 def _rtl(line: str) -> str:
@@ -899,7 +905,7 @@ def _ar_cut(word: str, budget: float) -> int:
 	return lo
 
 
-def yht_item_ar_lines(row_or_item_code, em: float | None = None) -> list[str]:
+def yht_item_ar_lines(row_or_item_code, col_pct: float | None = None) -> list[str]:
 	"""The Arabic item name, anchored and wrapped to the Arabic column.
 
 	Returns a LIST so the template emits one line per `<br>` — no markup here, so no
@@ -915,7 +921,7 @@ def yht_item_ar_lines(row_or_item_code, em: float | None = None) -> list[str]:
 	if not text:
 		return []
 
-	budget = flt(em) if em else ar_budget_em()
+	budget = ar_budget_em(col_pct)
 	if budget <= 0:
 		return [_rtl(text)]
 

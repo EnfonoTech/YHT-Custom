@@ -99,7 +99,26 @@ def arabic_column(page, header_text: str = "Arabic"):
 	right = min((x for x in rules if x > centre), default=None)
 	if left is None or right is None:
 		return None
-	return left, right, head["bottom"], rules
+	return left, right, header_row_bottom(page, head), rules
+
+
+def header_row_bottom(page, head, max_drop: float = 60.0) -> float:
+	"""Bottom of the header ROW, not of the header WORD.
+
+	⚠️ A bilingual header puts the Arabic label on a SECOND line — `DESCRIPTION` over
+	`وصف` — and the other columns' Arabic labels (`كمية`, `سعر الوحدة`, `الضريبة` …) sit
+	to the right of this column. Cutting at the word's bottom leaves all of them in
+	scope, and they are then reported as overflow: exactly 44 phantom glyphs on every
+	document, whatever its item count. Cut at the first horizontal rule BELOW the header
+	instead, which is the row's real bottom edge.
+	"""
+	below = [
+		e["top"]
+		for e in page.edges
+		if e.get("orientation") == "h"
+		and head["bottom"] < e["top"] <= head["bottom"] + max_drop
+	]
+	return min(below) if below else head["bottom"]
 
 
 def check(path: str, nominal, verbose: bool = False):
