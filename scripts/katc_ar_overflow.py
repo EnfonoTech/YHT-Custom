@@ -55,13 +55,35 @@ def column_rules(page, min_coverage: float = 30.0, tol: float = 1.0):
 	return sorted(x for x, cov in buckets.items() if cov >= min_coverage)
 
 
-def arabic_column(page, header_text: str = "Arabic"):
-	"""(left_rule, right_rule, header_bottom) for the Arabic column.
+def header_row_rules(page, head, tol: float = 1.0):
+	"""Column rules taken from the HEADER ROW band only.
 
-	Anchored on the COLUMN HEADER rather than on rule geometry. The page carries other
-	bordered blocks (the header table, the totals) and the letterhead itself contains
-	Arabic, so picking rules by span alone selects the wrong table and then flags the
-	letterhead as an overflow. Finding the header word is unambiguous.
+	⚠️ Clustering every vertical edge on the page by total coverage does NOT work: the
+	page carries other bordered blocks whose edges cluster at their own x, so the rule
+	nearest the Arabic header came back 268.5 when the real one is 177.5, and legitimate
+	text was reported as overflowing. The header row is one row of cells, so every
+	vertical edge crossing its y-band IS a column boundary — unambiguous.
+	"""
+	top, bottom = head["top"] - 2.0, head["bottom"] + 2.0
+	xs = []
+	for e in page.edges:
+		if e.get("orientation") != "v":
+			continue
+		if e["bottom"] < top or e["top"] > bottom:
+			continue
+		xs.append(round((e["x0"] + e["x1"]) / 2.0, 1))
+	out = []
+	for x in sorted(set(xs)):
+		if not out or x - out[-1] > tol:
+			out.append(x)
+	return out
+
+
+def arabic_column(page, header_text: str = "Arabic"):
+	"""(left_rule, right_rule, header_bottom, all_rules) for the Arabic column.
+
+	Anchored on the COLUMN HEADER. The letterhead is Arabic too, so a check that is not
+	anchored below the header flags the company name as an overflow.
 	"""
 	head = None
 	for w in page.extract_words():
@@ -71,13 +93,13 @@ def arabic_column(page, header_text: str = "Arabic"):
 	if head is None:
 		return None
 
+	rules = header_row_rules(page, head)
 	centre = (head["x0"] + head["x1"]) / 2.0
-	rules = column_rules(page)
 	left = max((x for x in rules if x < centre), default=None)
 	right = min((x for x in rules if x > centre), default=None)
 	if left is None or right is None:
 		return None
-	return left, right, head["bottom"]
+	return left, right, head["bottom"], rules
 
 
 def check(path: str, nominal, verbose: bool = False):
@@ -85,17 +107,27 @@ def check(path: str, nominal, verbose: bool = False):
 
 	problems, notes = [], []
 	with pdfplumber.open(path) as pdf:
+		carried = None
 		for pno, page in enumerate(pdf.pages, 1):
 			col = arabic_column(page)
 			if col is None:
-				notes.append(f"p{pno}: no Arabic column header found — skipped")
-				continue
-			left, right, header_bottom = col
+				# ⚠️ The column header does NOT repeat on page 2 — this bench's
+				# wkhtmltopdf ignores <thead> (gotcha 44). Skipping those pages would
+				# leave every continuation page unchecked, which is precisely where a
+				# long document's Arabic lives. Carry page 1's geometry forward: it is
+				# the same table, so the rules are in the same place.
+				if carried is None:
+					notes.append(f"p{pno}: no Arabic column and no earlier page to carry — skipped")
+					continue
+				left, right, rules = carried
+				header_bottom = 0.0
+				notes.append(f"p{pno}: header not repeated — carried the column from an earlier page")
+			else:
+				left, right, header_bottom, rules = col
+				carried = (left, right, rules)
 
-			rules = column_rules(page)
-			table = [x for x in rules if left - 200 <= x <= right + 260]
-			if len(table) >= len(nominal) + 1:
-				window = table[: len(nominal) + 1]
+			if len(rules) == len(nominal) + 1:
+				window = rules
 				span = window[-1] - window[0]
 				pct = [round((window[i + 1] - window[i]) / span * 100, 2) for i in range(len(nominal))]
 				# ⚠️ INFORMATIONAL, not a gate. The page carries other bordered blocks
