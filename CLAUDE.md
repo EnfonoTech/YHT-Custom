@@ -621,6 +621,28 @@ accountant: SI→`CN`, DN→`DRN`, PI→`DBN`, PR→`PRN`.
     exist for those two — their returns must be raised from the document being reversed. On
     the branch dashboard they are filtered LISTS, not create tiles.
 
+86. 🔴 **THE ARABIC *LABELS* CARRY THE SAME ANCHORING BUG AS THE VALUES — fixing one
+    without the other looks fixed and is not.** After the item names were anchored, the
+    column HEADINGS still drew on top of each other: `كمية` (QTY) over
+    `اسم الصنف بالعربي`, `الضريبة` over `غير شامل الضريبة`, and on the Tax Invoice
+    `الرقم الإضافي` over its own value. Same rule as gotcha 79 — only MULTI-WORD runs
+    break, single tokens like `وصف` are fine. 39 literals across six files, 18 in the Tax
+    Invoice alone. Every Arabic literal in every format is now RLM-wrapped and
+    NBSP-joined, and `TestArabicLabelsAreAnchored` fails the build if a bare multi-word
+    run reappears. ⚠️ The generated LETTERHEAD is deliberately NOT anchored: it is
+    `text-align: center`, and the bug only affects right-aligned RTL lines.
+87. 🔴 **NEVER WRITE AN INVISIBLE CHARACTER AS A LITERAL THROUGH A SHELL HEREDOC.** A test
+    helper meant to strip the anchoring was written as `.replace("\u00a0", " ")` and
+    arrived in the file as `.replace(" ", " ")` — two identical ordinary spaces, a silent
+    no-op — because the NBSP was flattened in transit. It stripped the RLM, appeared to
+    work, and left every NBSP in place. Use `\u200f` / `\u00a0` escapes in source, and
+    check with `repr()` rather than by eye: the two versions look identical on screen.
+88. ⚠️ **A GLYPH-OVERLAP CHECK MUST IGNORE LATIN KERNING.** Comparing adjacent character
+    boxes flags ordinary kerned pairs — `T` over `e` in "Total", ~1 pt — on every format.
+    Filter to pairs where at least one glyph is Arabic, or the check drowns in noise and
+    the real defect hides. Two-sided-verified: 6 Arabic overlaps per document before the
+    label fix, 0 across all ten formats after.
+
 ## Deploy
 
 Repo: **`git@github-yht:EnfonoTech/YHT-Custom.git`** (private). The box has a dedicated read-only deploy key at
