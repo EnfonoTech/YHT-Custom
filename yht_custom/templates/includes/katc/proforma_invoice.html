@@ -59,26 +59,26 @@ table.katc-items td.ctr { text-align: center; }
     figure, and "Total after Discount" would print the same number as "Total". -#}
 {%- set net_after_discount = (doc.total - (doc.discount_amount or 0)) if doc.apply_discount_on == "Grand Total" else doc.net_total -%}
 <div class="katc-title">PROFORMA INVOICE</div>
-<div class="katc-title-ar">فاتورة مبدئية</div>
+<div class="katc-title-ar">‏فاتورة مبدئية‏</div>
 
 <table class="katc-meta"><tbody>
   <tr>
-    <td class="lbl">Order Number / رقم الأمر</td><td>{{ doc.name }}</td>
-    <td class="lbl">Order Date / التاريخ</td><td>{{ yht_date(doc.transaction_date) }}</td>
+    <td class="lbl">Order Number / ‏رقم الأمر‏</td><td>{{ doc.name }}</td>
+    <td class="lbl">Order Date / ‏التاريخ‏</td><td>{{ yht_date(doc.transaction_date) }}</td>
     <td class="lbl">Currency</td><td>{{ cur }}</td>
   </tr>
   <tr>
     <td class="lbl">Sales Executive</td><td>{{ yht_sales_person(doc) }}</td>
-    <td class="lbl">Delivery Date / تاريخ التسليم</td><td>{{ yht_date(doc.get("delivery_date")) if doc.get("delivery_date") else "" }}</td>
+    <td class="lbl">Delivery Date / ‏تاريخ التسليم‏</td><td>{{ yht_date(doc.get("delivery_date")) if doc.get("delivery_date") else "" }}</td>
     <td class="lbl">PO#</td><td>{{ doc.get("po_no") or "" }}</td>
   </tr>
 </tbody></table>
 
-<div style="font-weight:bold; font-size:9.5pt; margin-bottom:4px">Buyer - العميل</div>
+<div style="font-weight:bold; font-size:9.5pt; margin-bottom:4px">Buyer - ‏العميل‏</div>
 <table class="katc-meta"><tbody>
-  <tr><td class="lbl">Name / الإسم</td><td>{{ doc.customer_name or doc.customer or "" }}</td></tr>
-  <tr><td class="lbl">Address / العنوان</td><td>{{ doc.address_display or "" }}</td></tr>
-  <tr><td class="lbl">VAT Number / الرقم الضريبي</td><td>{{ yht_party_vat(doc) }}</td></tr>
+  <tr><td class="lbl">Name / ‏الإسم‏</td><td>{{ doc.customer_name or doc.customer or "" }}</td></tr>
+  <tr><td class="lbl">Address / ‏العنوان‏</td><td>{{ doc.address_display or "" }}</td></tr>
+  <tr><td class="lbl">VAT Number / ‏الرقم الضريبي‏</td><td>{{ yht_party_vat(doc) }}</td></tr>
 </tbody></table>
 
 <table class="katc-items">
@@ -87,14 +87,14 @@ table.katc-items td.ctr { text-align: center; }
     Sales Order Arabic prints. Every width is pinned and they sum to 100: auto layout
     lets a column take as much room as its widest content wants and then draws the text
     past the boundary, which is the overflow this whole change is about. -#}
-    <th style="width:4%">SN #<div class="katc-ar">رقم</div></th>
-    <th style="width:21%">DESCRIPTION<div class="katc-ar">وصف</div></th>
-    <th class="katc-ar-col" style="width:22%">Item Name in Arabic<div class="katc-ar">اسم الصنف بالعربي</div></th>
-    <th style="width:8%">QTY<div class="katc-ar">كمية</div></th>
-    <th style="width:11%">Unit Rate<div class="katc-ar">سعر الوحدة</div></th>
-    <th style="width:12%">Ex VAT<div class="katc-ar">غير شامل الضريبة</div></th>
-    <th style="width:10%">VAT{% if ns.vat_rate %} {{ "%g"|format(ns.vat_rate) }}%{% endif %}<div class="katc-ar">الضريبة</div></th>
-    <th style="width:12%">Total<div class="katc-ar">الإجمالي</div></th>
+    <th style="width:4%">SN #<div class="katc-ar">‏رقم‏</div></th>
+    <th style="width:21%">DESCRIPTION<div class="katc-ar">‏وصف‏</div></th>
+    <th class="katc-ar-col" style="width:22%">Item Name in Arabic<div class="katc-ar">‏اسم الصنف بالعربي‏</div></th>
+    <th style="width:8%">QTY<div class="katc-ar">‏كمية‏</div></th>
+    <th style="width:11%">Unit Rate<div class="katc-ar">‏سعر الوحدة‏</div></th>
+    <th style="width:12%">Ex VAT<div class="katc-ar">‏غير شامل الضريبة‏</div></th>
+    <th style="width:10%">VAT{% if ns.vat_rate %} {{ "%g"|format(ns.vat_rate) }}%{% endif %}<div class="katc-ar">‏الضريبة‏</div></th>
+    <th style="width:12%">Total<div class="katc-ar">‏الإجمالي‏</div></th>
   </tr></thead>
   <tbody>
 {%- for row in doc.items %}

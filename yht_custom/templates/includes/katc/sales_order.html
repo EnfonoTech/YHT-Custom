@@ -54,7 +54,7 @@ table.katc-items td.ctr { text-align: center; }
     figure, and "Total after Discount" would print the same number as "Total". -#}
 {%- set net_after_discount = (doc.total - (doc.discount_amount or 0)) if doc.apply_discount_on == "Grand Total" else doc.net_total -%}
 <div class="katc-title">SALES ORDER</div>
-<div class="katc-title-ar">أمر بيع</div>
+<div class="katc-title-ar">‏أمر بيع‏</div>
 
 <table class="katc-meta"><tbody>
   <tr>
