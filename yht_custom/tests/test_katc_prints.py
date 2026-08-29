@@ -2488,3 +2488,60 @@ class TestArabicColumnFit(FrappeTestCase):
 		"""The complaint that started this: short names split into three lines."""
 		self.assertEqual(len(self._lines("مواد عامة")), 1)
 		self.assertEqual(len(self._lines("كوع زاوية سنة بيس")), 1)
+
+
+class TestArabicLabelsAreAnchored(FrappeTestCase):
+	"""Every Arabic LITERAL in every format must be RLM-wrapped and NBSP-joined.
+
+	🔴 The item names were fixed first and the LABELS were missed, so the column
+	headings drew on top of each other — `كمية` (QTY) over `اسم الصنف بالعربي`,
+	`الضريبة` over `غير شامل الضريبة`, `الرقم الإضافي` over its own value. Same bidi
+	anchoring bug, same two conditions: no U+0020, strong RTL at both ends.
+
+	Only MULTI-WORD runs actually mis-anchor — a single token already satisfies both
+	conditions — so that is what this asserts, keeping it honest rather than pedantic.
+	"""
+
+	AR = "؀-ۿݐ-ݿﭐ-﷿ﹰ-﻿"
+
+	def _unanchored(self, body: str):
+		import re
+
+		rlm = "‏"
+		run = re.compile(f"[{self.AR}][{self.AR}]*(?:[ ]+[{self.AR}0-9%]+)+")
+		split = re.compile(r"(\{\{.*?\}\}|\{%.*?%\}|\{#.*?#\}|<[^>]+>)", re.S)
+		out = []
+		for part in split.split(body):
+			if part.startswith(("{{", "{%", "{#", "<")):
+				continue
+			for m in run.finditer(part):
+				s = m.group(0)
+				if not (s.startswith(rlm) and s.endswith(rlm)):
+					out.append(s)
+		return out
+
+	def test_no_template_carries_a_bare_multi_word_arabic_run(self):
+		import glob
+		import os
+
+		base = os.path.join(frappe.get_app_path("yht_custom"), "templates", "includes", "katc")
+		found = False
+		for path in sorted(glob.glob(os.path.join(base, "*.html"))):
+			found = True
+			with self.subTest(template=os.path.basename(path)):
+				bare = self._unanchored(open(path, encoding="utf-8").read())
+				self.assertFalse(bare, f"unanchored Arabic in {os.path.basename(path)}: {bare[:3]}")
+		self.assertTrue(found, "no KATC templates found — the check would pass vacuously")
+
+	def test_no_print_format_record_carries_a_bare_multi_word_arabic_run(self):
+		for print_format, _dt in FORMATS:
+			html = frappe.db.get_value("Print Format", print_format, "html") or ""
+			with self.subTest(print_format=print_format):
+				bare = self._unanchored(html)
+				self.assertFalse(bare, f"unanchored Arabic in {print_format}: {bare[:3]}")
+
+	def test_the_check_would_catch_a_regression(self):
+		"""A guard that cannot fail is not a guard."""
+		self.assertTrue(self._unanchored('<td>غير شامل الضريبة</td>'))
+		self.assertFalse(self._unanchored('<td>‏غير شامل الضريبة‏</td>'))
+		self.assertFalse(self._unanchored("<td>وصف</td>"), "a single token needs no anchoring")
