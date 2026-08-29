@@ -299,6 +299,16 @@ def format_source(print_format: str) -> str:
 	return html
 
 
+def plain_arabic(html: str) -> str:
+	"""Undo the bidi anchoring so a plain-string search still finds a label.
+
+	Every Arabic literal is RLM-wrapped and NBSP-joined (the engine mis-anchors a
+	right-aligned RTL line otherwise), so `assertIn("فاتورة ضريبية", html)` misses
+	text that IS on the page. Normalise the haystack, not the assertion.
+	"""
+	return (html or "").replace("‏", "").replace(" ", " ")
+
+
 def strip_column_widths(html: str) -> str:
 	"""Drop `width:N%` declarations so two column sets can be compared.
 
@@ -1913,7 +1923,7 @@ class TestArtefactFidelity(FrappeTestCase):
 		name = artefact_or_any("Sales Invoice")
 		if not name:
 			self.skipTest("no submitted Sales Invoice")
-		html = render("Sales Invoice", name, "KATC Tax Invoice", no_letterhead=1)
+		html = plain_arabic(render("Sales Invoice", name, "KATC Tax Invoice", no_letterhead=1))
 		for label in (
 			"TAX INVOICE",
 			"فاتورة ضريبية",
@@ -2059,6 +2069,7 @@ class TestArtefactFidelity(FrappeTestCase):
 		html = frappe.get_print(
 			"Delivery Note", name, print_format="KATC Delivery Note", doc=doc, no_letterhead=1
 		)
+		html = plain_arabic(html)
 		self.assertIn("DRAFT DELIVERY NOTE", html)
 		self.assertIn("مسودة مذكرة تسليم", html)
 
