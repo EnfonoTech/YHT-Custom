@@ -306,7 +306,7 @@ def plain_arabic(html: str) -> str:
 	right-aligned RTL line otherwise), so `assertIn("فاتورة ضريبية", html)` misses
 	text that IS on the page. Normalise the haystack, not the assertion.
 	"""
-	return (html or "").replace("‏", "").replace(" ", " ")
+	return (html or "").replace("\u200f", "").replace("\u00a0", " ")
 
 
 def strip_column_widths(html: str) -> str:
