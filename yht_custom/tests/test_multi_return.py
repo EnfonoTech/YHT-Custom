@@ -367,9 +367,17 @@ class TestMultiReturnCreditNotes(FrappeTestCase):
 		"""
 		import inspect
 
-		source = inspect.getsource(multi_return._invoices_billing)
-		# Only the code, not the docstring — which names per_billed precisely to say
-		# it is NOT used, and would otherwise fail this test on its own comment.
-		body = source.split('"""')[-1]
+		import ast
+		import textwrap
+
+		# Drop the DOCSTRING and keep the code. Splitting on triple quotes does not
+		# work here: the function holds a triple-quoted SQL string too, so a naive
+		# split hands back the tail after the query instead of the body.
+		tree = ast.parse(textwrap.dedent(inspect.getsource(multi_return._invoices_billing)))
+		fn = tree.body[0]
+		if ast.get_docstring(fn):
+			fn.body = fn.body[1:]
+		body = ast.unparse(fn)
+
 		self.assertIn("tabSales Invoice Item", body)
 		self.assertNotIn("per_billed", body)
