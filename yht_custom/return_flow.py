@@ -92,6 +92,48 @@ ROUTE_MESSAGE = {
 }
 
 
+#: doctype → how to walk a credit/debit note BACK to the invoice it reverses.
+#:
+#: `Delivery Note.issue_credit_note` builds the credit note with
+#: `make_sales_invoice(<the delivery RETURN>)`, so the mapper's source is a stock
+#: document and there is no invoice to put in `return_against` — that field is a
+#: Sales Invoice link. The note is therefore standalone, and two things follow that
+#: look like bugs to an operator:
+#:
+#: * the original invoice stays **Unpaid**. Both documents carry
+#:   `update_outstanding_for_self = 1`, so each keeps its own outstanding against
+#:   itself (measured: KSIN-26-0610 Dr 3.00 vs KSSR-26-0031 Cr 3.00, each with
+#:   `against_voucher` pointing at itself). The customer's NET balance is right;
+#:   per-invoice both sit open.
+#: * **Connections shows no link**, because the Sales Invoice ↔ Sales Invoice
+#:   "Returns" link keys on `return_against`.
+#:
+#: The two sides are NOT symmetric and neither field survives a guess — both were
+#: read off the live meta: `Delivery Note Item` has `dn_detail` and NO
+#: `delivery_note_item`; `Purchase Receipt Item` has `purchase_receipt_item` and NO
+#: `pr_detail`. :func:`assert_backlink_fields_exist` pins all of them.
+CREDIT_NOTE_BACKLINK = {
+	"Sales Invoice": {
+		"party_field": "customer",
+		"stock_doctype": "Delivery Note",
+		"stock_field": "delivery_note",
+		"stock_row_doctype": "Delivery Note Item",
+		"stock_row_field": "dn_detail",
+		"stock_row_backlink": "dn_detail",
+		"row_link": "sales_invoice_item",
+	},
+	"Purchase Invoice": {
+		"party_field": "supplier",
+		"stock_doctype": "Purchase Receipt",
+		"stock_field": "purchase_receipt",
+		"stock_row_doctype": "Purchase Receipt Item",
+		"stock_row_field": "pr_detail",
+		"stock_row_backlink": "purchase_receipt_item",
+		"row_link": "purchase_invoice_item",
+	},
+}
+
+
 def negate_return_quantities(doc, method=None):
 	"""`before_validate` — flip a positive quantity on a return to negative.
 
@@ -417,3 +459,114 @@ def return_gaps() -> dict:
 			"rows": points_at_outbound[:50],
 		},
 	}
+
+
+def assert_backlink_fields_exist():
+	"""Fail loudly if any field :data:`CREDIT_NOTE_BACKLINK` walks has gone away.
+
+	Every entry here is a fieldname on someone else's doctype. A silent rename
+	upstream would turn :func:`link_credit_note_to_original_invoice` into a no-op
+	that leaves credit notes unlinked WITHOUT any error — the exact failure this
+	function exists to prevent, and one that hid for a week the last time it bit us.
+	"""
+	missing = []
+	for doctype, config in CREDIT_NOTE_BACKLINK.items():
+		checks = (
+			(f"{doctype} Item", config["stock_field"]),
+			(f"{doctype} Item", config["stock_row_field"]),
+			(f"{doctype} Item", config["row_link"]),
+			(config["stock_row_doctype"], config["stock_row_backlink"]),
+			(doctype, config["party_field"]),
+			(doctype, "return_against"),
+		)
+		for target, fieldname in checks:
+			if not frappe.get_meta(target).get_field(fieldname):
+				missing.append(f"{target}.{fieldname}")
+	return missing
+
+
+def _original_invoice_row_for(row, config) -> tuple[str, str] | None:
+	"""Walk one credit-note row back to the invoice row it reverses.
+
+	credit row → the stock RETURN's row → the ORIGINAL stock row → the invoice row
+	that billed it. Returns ``(invoice, invoice_row)`` or ``None`` when any link in
+	that chain is absent, which is the normal shape of a hand-typed credit note.
+	"""
+	stock_doc = row.get(config["stock_field"])
+	stock_row = row.get(config["stock_row_field"])
+	if not stock_doc or not stock_row:
+		return None
+
+	# Only a note mapped from a RETURN needs rescuing. One mapped from a forward
+	# stock document is a first-time bill, not a reversal.
+	if not cint(frappe.db.get_value(config["stock_doctype"], stock_doc, "is_return")):
+		return None
+
+	original_stock_row = frappe.db.get_value(
+		config["stock_row_doctype"], stock_row, config["stock_row_backlink"]
+	)
+	if not original_stock_row:
+		return None
+
+	matches = frappe.db.get_all(
+		f"{config['_doctype']} Item",
+		filters={config["stock_row_field"]: original_stock_row, "docstatus": 1},
+		fields=["name", "parent"],
+	)
+	# An original billed by two invoices cannot be reversed against one of them.
+	invoices = {m.parent for m in matches}
+	if len(invoices) != 1:
+		return None
+	match = matches[0]
+	if cint(frappe.db.get_value(config["_doctype"], match.parent, "is_return")):
+		return None
+	return match.parent, match.name
+
+
+def link_credit_note_to_original_invoice(doc, method=None):
+	"""Set `return_against` on a credit note ERPNext mapped from a stock return.
+
+	Without this the note is standalone: the invoice it reverses stays **Unpaid**
+	and the two never appear in each other's Connections. See
+	:data:`CREDIT_NOTE_BACKLINK` for the measurement.
+
+	Deliberately all-or-nothing. `return_against` alone is worse than nothing —
+	ERPNext's over-return guard (`validate_returned_items`) keys on the ROW link,
+	and with that blank it degrades from an error to a msgprint, so a second full
+	return would save. Either every row resolves to the same original invoice and
+	both links are written, or the note is left standalone exactly as before.
+	"""
+	config = CREDIT_NOTE_BACKLINK.get(doc.doctype)
+	if not config or not cint(doc.get("is_return")) or doc.get("return_against"):
+		return
+	if not doc.get("items"):
+		return
+	config = dict(config, _doctype=doc.doctype)
+
+	resolved = []
+	for row in doc.items:
+		found = _original_invoice_row_for(row, config)
+		if not found:
+			return
+		resolved.append(found)
+
+	invoices = {invoice for invoice, _ in resolved}
+	if len(invoices) != 1:
+		return
+	invoice = invoices.pop()
+
+	# ERPNext throws if the party or company differ, so a mismatch must leave the
+	# note standalone rather than turn a working save into a hard error.
+	original = frappe.db.get_value(
+		doc.doctype, invoice, [config["party_field"], "company"], as_dict=True
+	)
+	if not original:
+		return
+	if cstr(original.get(config["party_field"])) != cstr(doc.get(config["party_field"])):
+		return
+	if cstr(original.company) != cstr(doc.get("company")):
+		return
+
+	doc.return_against = invoice
+	for row, (_, invoice_row) in zip(doc.items, resolved):
+		row.set(config["row_link"], invoice_row)

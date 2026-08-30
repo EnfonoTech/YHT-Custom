@@ -524,3 +524,134 @@ class TestStockReturnEntryPoint(FrappeTestCase):
 		self.assertIn("data-yht-stock-return", src)
 		# and must not send the user at a list whose Add button makes a plain note
 		self.assertNotIn('doctype: "Delivery Note", mode: "list", filters: { is_return: 1 }', src)
+
+
+class TestCreditNoteBacklink(FrappeTestCase):
+	"""A credit note raised from a delivery return must find its original invoice.
+
+	Reported on 2026-08-30 against a real chain the client built:
+	KSDN-26-0534 → KSIN-26-0610 → KSDR-26-0025 → KSSR-26-0031. The credit note
+	came out with `return_against` blank, so KSIN-26-0610 stayed **Unpaid** and
+	neither document appeared in the other's Connections. Measured at the time:
+	9 submitted credit notes on this site with the same gap.
+	"""
+
+	def tearDown(self):
+		frappe.db.rollback()
+
+	def test_every_backlink_field_exists(self):
+		"""⚠️ Two of these are asymmetric and a guess gets them wrong.
+
+		`Delivery Note Item` has `dn_detail` and no `delivery_note_item`;
+		`Purchase Receipt Item` has `purchase_receipt_item` and no `pr_detail`.
+		A rename upstream makes the linker a silent no-op, not an error.
+		"""
+		self.assertEqual(return_flow.assert_backlink_fields_exist(), [])
+
+	def _live_chain(self):
+		"""Find a real (delivery return, original invoice, original row) triple."""
+		rows = frappe.db.sql(
+			"""
+			SELECT ret.name AS ret, ret_item.name AS ret_row, ret_item.dn_detail AS orig_row,
+			       sii.parent AS invoice, sii.name AS invoice_row, si.customer, si.company
+			FROM `tabDelivery Note` ret
+			JOIN `tabDelivery Note Item` ret_item ON ret_item.parent = ret.name
+			JOIN `tabSales Invoice Item` sii ON sii.dn_detail = ret_item.dn_detail
+			JOIN `tabSales Invoice` si ON si.name = sii.parent AND si.docstatus = 1 AND si.is_return = 0
+			WHERE ret.is_return = 1 AND ret.docstatus = 1 AND ret_item.dn_detail IS NOT NULL
+			LIMIT 1
+			""",
+			as_dict=True,
+		)
+		if not rows:
+			self.skipTest("no delivery return on this site is billed by exactly one invoice")
+		return rows[0]
+
+	def _credit_note(self, chain, **overrides):
+		doc = frappe.new_doc("Sales Invoice")
+		doc.customer = overrides.pop("customer", chain.customer)
+		doc.company = overrides.pop("company", chain.company)
+		doc.is_return = 1
+		doc.append(
+			"items",
+			{
+				"item_code": frappe.db.get_value("Sales Invoice Item", chain.invoice_row, "item_code"),
+				"qty": -1,
+				"delivery_note": overrides.pop("delivery_note", chain.ret),
+				"dn_detail": overrides.pop("dn_detail", chain.ret_row),
+			},
+		)
+		return doc
+
+	def test_a_credit_note_from_a_delivery_return_finds_its_invoice(self):
+		chain = self._live_chain()
+		doc = self._credit_note(chain)
+		return_flow.link_credit_note_to_original_invoice(doc)
+		self.assertEqual(doc.return_against, chain.invoice)
+		self.assertEqual(doc.items[0].sales_invoice_item, chain.invoice_row)
+
+	def test_the_row_link_is_never_set_without_return_against(self):
+		"""⚠️ `return_against` alone is WORSE than standalone.
+
+		ERPNext's over-return guard keys on the row link; blank, it degrades from
+		an error to a msgprint and a second full return would save.
+		"""
+		chain = self._live_chain()
+		doc = self._credit_note(chain, dn_detail=None)
+		return_flow.link_credit_note_to_original_invoice(doc)
+		self.assertFalse(doc.return_against)
+		self.assertFalse(doc.items[0].get("sales_invoice_item"))
+
+	def test_a_hand_typed_credit_note_is_left_standalone(self):
+		doc = frappe.new_doc("Sales Invoice")
+		doc.is_return = 1
+		doc.append("items", {"qty": -1})
+		return_flow.link_credit_note_to_original_invoice(doc)
+		self.assertFalse(doc.return_against)
+
+	def test_a_note_mapped_from_a_FORWARD_delivery_note_is_left_alone(self):
+		"""Billing a plain delivery note is a first sale, not a reversal."""
+		chain = self._live_chain()
+		forward = frappe.db.get_value("Delivery Note", chain.ret, "return_against")
+		doc = self._credit_note(chain, delivery_note=forward)
+		return_flow.link_credit_note_to_original_invoice(doc)
+		self.assertFalse(doc.return_against)
+
+	def test_a_party_mismatch_is_left_standalone(self):
+		"""ERPNext throws on a mismatched party — a wrong link is a hard error."""
+		chain = self._live_chain()
+		other = frappe.db.get_value(
+			"Customer", {"name": ["!=", chain.customer]}, "name"
+		)
+		if not other:
+			self.skipTest("only one customer on this site")
+		doc = self._credit_note(chain, customer=other)
+		return_flow.link_credit_note_to_original_invoice(doc)
+		self.assertFalse(doc.return_against)
+
+	def test_an_already_linked_note_is_not_rewritten(self):
+		chain = self._live_chain()
+		doc = self._credit_note(chain)
+		doc.return_against = "SOME-OTHER-INVOICE"
+		return_flow.link_credit_note_to_original_invoice(doc)
+		self.assertEqual(doc.return_against, "SOME-OTHER-INVOICE")
+
+	def test_a_plain_invoice_is_untouched(self):
+		chain = self._live_chain()
+		doc = self._credit_note(chain)
+		doc.is_return = 0
+		return_flow.link_credit_note_to_original_invoice(doc)
+		self.assertFalse(doc.return_against)
+
+	def test_the_linker_runs_before_the_route_and_negate_rules(self):
+		"""Both later rules reason about a note that must already know its original."""
+		from yht_custom import hooks
+
+		for doctype in ("Sales Invoice", "Purchase Invoice"):
+			with self.subTest(doctype=doctype):
+				chain = hooks._FLOW_EVENTS[doctype]["before_validate"]
+				link = chain.index("yht_custom.return_flow.link_credit_note_to_original_invoice")
+				route = chain.index("yht_custom.return_flow.enforce_return_stock_route")
+				negate = chain.index("yht_custom.return_flow.negate_return_quantities")
+				self.assertLess(link, route)
+				self.assertLess(link, negate)

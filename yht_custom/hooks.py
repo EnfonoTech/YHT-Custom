@@ -116,11 +116,16 @@ _DISCOUNT_EVENTS = {
 # a blank row, and a positive 1 on a return is exactly what this exists to fix.
 _RETURN_NEGATE = "yht_custom.return_flow.negate_return_quantities"
 _RETURN_ROUTE = "yht_custom.return_flow.enforce_return_stock_route"
+# FIRST of the three. A credit note that ERPNext mapped from a delivery return
+# arrives with return_against blank, so the route rule and the negate rule would
+# both be reasoning about a note that does not yet know which invoice it reverses.
+_RETURN_LINK = "yht_custom.return_flow.link_credit_note_to_original_invoice"
 
 _FLOW_EVENTS = {
 	"Sales Invoice": {
 		"before_validate": [
 			"yht_custom.sales_flow.enforce_delivery_note_route",
+			_RETURN_LINK,
 			_RETURN_ROUTE,
 			_RETURN_NEGATE,
 		],
@@ -138,6 +143,7 @@ _FLOW_EVENTS = {
 		"before_validate": [
 			"yht_custom.sales_flow.enforce_purchase_receipt_route",
 			"yht_custom.expense_invoice.before_validate",
+			_RETURN_LINK,
 			_RETURN_ROUTE,
 			# LAST — see the note above _RETURN_NEGATE.
 			_RETURN_NEGATE,
