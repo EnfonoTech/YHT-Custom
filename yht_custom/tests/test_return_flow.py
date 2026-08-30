@@ -458,3 +458,65 @@ class TestFieldMoves(FrappeTestCase):
 		first = field_layout.apply_field_moves()
 		self.assertEqual(first["moved"], 0, "field moves were not already applied")
 		self.assertFalse(first["skipped"])
+
+
+class TestStockReturnEntryPoint(FrappeTestCase):
+	"""A Delivery Note / Purchase Receipt return cannot start as a blank document.
+
+	🔴 THE BUG THIS PINS. `is_return` is read_only = 1 AND no_copy = 1 on both stock
+	doctypes, so nothing pre-ticks it — not a route option, not a filtered list's
+	"+ Add", not frappe.new_doc. A branch user opening the returns list and using its
+	own Add button got an ordinary KSDN- note, silently. The dashboard tiles pointed at
+	that list, which made the wrong path the obvious one.
+	"""
+
+	def test_is_return_is_not_editable_on_the_stock_doctypes(self):
+		"""If this ever flips upstream, the source picker becomes unnecessary."""
+		for doctype in ("Delivery Note", "Purchase Receipt"):
+			df = frappe.get_meta(doctype).get_field("is_return")
+			with self.subTest(doctype=doctype):
+				self.assertTrue(df.read_only, f"{doctype}.is_return is no longer read-only")
+				self.assertTrue(df.no_copy, f"{doctype}.is_return is no longer no_copy")
+
+	def test_is_return_IS_editable_on_the_invoices(self):
+		"""Which is why those two get a blank-document entry point instead."""
+		for doctype in ("Sales Invoice", "Purchase Invoice"):
+			df = frappe.get_meta(doctype).get_field("is_return")
+			with self.subTest(doctype=doctype):
+				self.assertFalse(df.read_only, f"{doctype}.is_return became read-only")
+
+	def test_the_js_asks_for_a_source_on_the_stock_doctypes(self):
+		path = frappe.get_app_path("yht_custom", "public", "js", "sales_flow.js")
+		src = open(path, encoding="utf-8").read()
+		self.assertIn("new_stock_return", src)
+		self.assertIn("open_mapped_doc", src, "the return must go through erpnext's mapper")
+		for method in (
+			"erpnext.stock.doctype.delivery_note.delivery_note.make_sales_return",
+			"erpnext.stock.doctype.purchase_receipt.purchase_receipt.make_purchase_return",
+		):
+			with self.subTest(method=method):
+				self.assertIn(method, src)
+		# the picker must exclude documents already fully returned
+		self.assertIn("per_returned", src, "the source picker does not exclude spent documents")
+
+	def test_the_named_mappers_exist_and_are_whitelisted(self):
+		"""A typo in a method path only shows up when a user clicks the button."""
+		for path in (
+			"erpnext.stock.doctype.delivery_note.delivery_note.make_sales_return",
+			"erpnext.stock.doctype.purchase_receipt.purchase_receipt.make_purchase_return",
+		):
+			with self.subTest(path=path):
+				fn = frappe.get_attr(path)
+				self.assertTrue(
+					getattr(fn, "whitelisted", False) or path in frappe.whitelisted,
+					f"{path} is not whitelisted — the desk could not call it",
+				)
+
+	def test_the_dashboard_tiles_do_not_open_a_blank_stock_return(self):
+		path = frappe.get_app_path(
+			"yht_custom", "yht_custom", "page", "yht_dashboard", "yht_dashboard.js"
+		)
+		src = open(path, encoding="utf-8").read()
+		self.assertIn("data-yht-stock-return", src)
+		# and must not send the user at a list whose Add button makes a plain note
+		self.assertNotIn('doctype: "Delivery Note", mode: "list", filters: { is_return: 1 }', src)
