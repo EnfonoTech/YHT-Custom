@@ -157,6 +157,7 @@ const ACTIONS = [
 	// ordinary KSDN- note instead, which is what a branch user hit.
 	{ icon: "truck", label: "Delivery Return", desc: "Goods returned by a customer", stock_ret: "Delivery Note" },
 	{ icon: "box", label: "Receipt Return", desc: "Goods returned to a supplier", stock_ret: "Purchase Receipt" },
+	{ icon: "truck", label: "Multi-Note Return", desc: "Goods from several delivery notes", page: "yht-multi-return" },
 	{ icon: "quote", label: "Quotation", desc: "View quotations", doctype: "Quotation", mode: "list" },
 	{ icon: "order", label: "Sales Order", desc: "View orders", doctype: "Sales Order", mode: "list" },
 	{ icon: "truck", label: "Delivery Note", desc: "View delivery notes", doctype: "Delivery Note", mode: "list" },
@@ -321,6 +322,11 @@ function action_card(a) {
 	}
 	if (a.stock_ret) {
 		return card("#", a.icon, __(a.label), __(a.desc), `data-yht-stock-return="${a.stock_ret}"`);
+	}
+	// A page tile routes straight to a Frappe Page. It carries no doctype, so it must
+	// be handled BEFORE the slug() call below — slug(undefined) throws.
+	if (a.page) {
+		return card(`/app/${a.page}`, a.icon, __(a.label), __(a.desc), "");
 	}
 	const slug = frappe.router.slug(a.doctype);
 	// A filtered list tile carries its filters in the query string, which is how

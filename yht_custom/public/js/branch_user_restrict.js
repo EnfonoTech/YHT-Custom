@@ -37,6 +37,7 @@ const ALLOWED_DOCTYPES = [
 //: to it, or they will be bounced off it.
 const ALLOWED_ROUTES = [
 	"yht-dashboard",
+	"yht-multi-return",
 	"query-report",
 	"report",
 	"print",
