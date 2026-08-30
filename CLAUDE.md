@@ -643,6 +643,23 @@ accountant: SI→`CN`, DN→`DRN`, PI→`DBN`, PR→`PRN`.
     the real defect hides. Two-sided-verified: 6 Arabic overlaps per document before the
     label fix, 0 across all ten formats after.
 
+89. 🔴 **A DELIVERY NOTE / PURCHASE RECEIPT RETURN CANNOT START AS A BLANK DOCUMENT, AND
+    THE LIST'S OWN "+ ADD" SILENTLY GIVES YOU THE WRONG ONE.** `is_return` is
+    `read_only = 1` AND `no_copy = 1` on both stock doctypes, so nothing pre-ticks it —
+    not `frappe.route_options`, not a filtered list's Add button, not `frappe.new_doc`.
+    A branch user opening the returns list and pressing Add got an ordinary `KSDN-` note
+    with no warning. Pointing a dashboard tile at a filtered list therefore makes the
+    WRONG path the obvious one. The supported route is the mapper, which needs the source:
+    `delivery_note.make_sales_return(source_name)` /
+    `purchase_receipt.make_purchase_return(source_name)`, both whitelisted, driven from
+    `frappe.model.open_mapped_doc`. Ask for the source document instead of opening a form.
+    Contrast Sales Invoice and Purchase Invoice, where `is_return` IS editable and a blank
+    return is legitimate — the two families need different entry points.
+90. ⚠️ **`frappe.whitelisted` IS KEYED BY THE FUNCTION OBJECT, NOT ITS DOTTED PATH.**
+    `frappe.is_whitelisted` tests `method not in whitelisted` with the function itself, so
+    a membership test on the string is always False — a test written that way fails
+    everything and proves nothing. Resolve with `frappe.get_attr(path)` first.
+
 ## Deploy
 
 Repo: **`git@github-yht:EnfonoTech/YHT-Custom.git`** (private). The box has a dedicated read-only deploy key at
