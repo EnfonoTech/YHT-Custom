@@ -151,11 +151,12 @@ const ACTIONS = [
 	// is intercepted and ticks the box after the form exists. See sales_flow.js.
 	{ icon: "invoice", label: "Sales Return", desc: "Credit note to a customer", ret: "Sales Invoice" },
 	{ icon: "expense", label: "Purchase Return", desc: "Debit note to a supplier", ret: "Purchase Invoice" },
-	// ⚠️ LISTS, not create buttons. `is_return` is read-only on Delivery Note and
-	// Purchase Receipt, so a blank return of either cannot be created — it has to be
-	// raised from the document it reverses. These open what already exists.
-	{ icon: "truck", label: "Delivery Returns", desc: "Goods returned by a customer", doctype: "Delivery Note", mode: "list", filters: { is_return: 1 } },
-	{ icon: "box", label: "Receipt Returns", desc: "Goods returned to a supplier", doctype: "Purchase Receipt", mode: "list", filters: { is_return: 1 } },
+	// ⚠️ These ASK FOR THE SOURCE DOCUMENT rather than opening a blank form.
+	// `is_return` is read-only and no_copy on Delivery Note and Purchase Receipt, so a
+	// blank one can never be a return — the list's own "+ Add" quietly produces an
+	// ordinary KSDN- note instead, which is what a branch user hit.
+	{ icon: "truck", label: "Delivery Return", desc: "Goods returned by a customer", stock_ret: "Delivery Note" },
+	{ icon: "box", label: "Receipt Return", desc: "Goods returned to a supplier", stock_ret: "Purchase Receipt" },
 	{ icon: "quote", label: "Quotation", desc: "View quotations", doctype: "Quotation", mode: "list" },
 	{ icon: "order", label: "Sales Order", desc: "View orders", doctype: "Sales Order", mode: "list" },
 	{ icon: "truck", label: "Delivery Note", desc: "View delivery notes", doctype: "Delivery Note", mode: "list" },
@@ -258,6 +259,13 @@ function render(page, d) {
 		if (window.yht && yht.simple_party) yht.simple_party.open(doctype);
 	});
 
+	page.body.off("click.yht-stock-return").on("click.yht-stock-return", "[data-yht-stock-return]", function (e) {
+		e.preventDefault();
+		if (window.yht_custom && yht_custom.sales && yht_custom.sales.new_stock_return) {
+			yht_custom.sales.new_stock_return($(this).attr("data-yht-stock-return"));
+		}
+	});
+
 	page.body.off("click.yht-return").on("click.yht-return", "[data-yht-return]", function (e) {
 		e.preventDefault();
 		if (window.yht_custom && yht_custom.sales && yht_custom.sales.new_return) {
@@ -310,6 +318,9 @@ function action_card(a) {
 	// Same shape as a dialog tile: no route, click intercepted below.
 	if (a.ret) {
 		return card("#", a.icon, __(a.label), __(a.desc), `data-yht-return="${a.ret}"`);
+	}
+	if (a.stock_ret) {
+		return card("#", a.icon, __(a.label), __(a.desc), `data-yht-stock-return="${a.stock_ret}"`);
 	}
 	const slug = frappe.router.slug(a.doctype);
 	// A filtered list tile carries its filters in the query string, which is how

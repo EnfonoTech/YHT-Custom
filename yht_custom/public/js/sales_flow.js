@@ -118,6 +118,60 @@ function wait_for_new_form(doctype, tries = 40) {
 // being reversed, which is also what the return policy requires.
 yht_custom.sales.RETURNABLE = ["Sales Invoice", "Purchase Invoice"];
 
+// 🔴 A DELIVERY NOTE / PURCHASE RECEIPT RETURN CANNOT START AS A BLANK DOCUMENT.
+// `is_return` is read_only = 1 AND no_copy = 1 on both, so nothing — not a route option,
+// not a filtered list's "+ Add", not frappe.new_doc — can pre-tick it. Using the list's
+// own Add button gives you an ordinary KSDN- note, silently, which is exactly what a
+// branch user hit. The supported route is the mapper, which needs the source document,
+// so ask for it.
+//
+// erpnext.stock.doctype.delivery_note.delivery_note.make_sales_return(source_name)
+// erpnext.stock.doctype.purchase_receipt.purchase_receipt.make_purchase_return(source_name)
+yht_custom.sales.STOCK_RETURN = {
+	"Delivery Note": {
+		method: "erpnext.stock.doctype.delivery_note.delivery_note.make_sales_return",
+		title: __("Which delivery note are the goods coming back from?"),
+		label: __("Delivery Note"),
+	},
+	"Purchase Receipt": {
+		method: "erpnext.stock.doctype.purchase_receipt.purchase_receipt.make_purchase_return",
+		title: __("Which receipt are the goods going back on?"),
+		label: __("Purchase Receipt"),
+	},
+};
+
+yht_custom.sales.new_stock_return = function (doctype) {
+	const spec = yht_custom.sales.STOCK_RETURN[doctype];
+	if (!spec) return;
+
+	const d = new frappe.ui.Dialog({
+		title: spec.title,
+		fields: [
+			{
+				fieldname: "source",
+				fieldtype: "Link",
+				options: doctype,
+				label: spec.label,
+				reqd: 1,
+				// Submitted, not itself a return, and not already fully returned — the
+				// last one is what stops a second return against the same goods.
+				get_query: () => ({
+					filters: { docstatus: 1, is_return: 0, per_returned: ["<", 100] },
+				}),
+			},
+		],
+		primary_action_label: __("Create Return"),
+		primary_action(values) {
+			d.hide();
+			// open_mapped_doc calls the whitelisted mapper and routes to the result, so
+			// the return arrives with is_return, return_against and the negative
+			// quantities already set by erpnext itself.
+			frappe.model.open_mapped_doc({ method: spec.method, source_name: values.source });
+		},
+	});
+	d.show();
+};
+
 yht_custom.sales.new_return = async function (doctype) {
 	doctype = doctype || "Sales Invoice";
 	if (!yht_custom.sales.RETURNABLE.includes(doctype)) {
@@ -173,26 +227,44 @@ yht_custom.sales.new_return = async function (doctype) {
 // Whatever we merge in at boot is discarded, silently: the button simply never appears,
 // with no error. Attach from the router instead, which runs after the view is built no
 // matter which file loaded first.
+// The "New Return" button, on every list where a return can start.
+//
+// 🔴 DO NOT MERGE INTO `frappe.listview_settings[...]`. erpnext's own list JS assigns
+// that key wholesale and a doctype's list bundle loads AFTER app_include_js, so anything
+// merged in at boot is discarded silently. Attach from the router instead.
+//
+// 🔴 AND DO NOT ADD IT ONCE BEHIND A "done" FLAG. On a COLD load the list view clears its
+// own inner toolbar AFTER the first render, so a button added before that is wiped —
+// measured: the add ran, the flag was set, and the toolbar came back empty, while an
+// in-app route to the same list worked. Key on the button's presence in the DOM and keep
+// re-checking for a few seconds, which also covers the bundle still being in flight.
+const RETURN_LISTS = {
+	// A blank one CAN be a return: is_return is editable on the invoices.
+	"Sales Invoice": () => yht_custom.sales.new_return("Sales Invoice"),
+	"Purchase Invoice": () => yht_custom.sales.new_return("Purchase Invoice"),
+	// A blank one CANNOT: is_return is read_only + no_copy on the stock documents, so
+	// these ask for the source note and run erpnext's mapper.
+	"Delivery Note": () => yht_custom.sales.new_stock_return("Delivery Note"),
+	"Purchase Receipt": () => yht_custom.sales.new_stock_return("Purchase Receipt"),
+};
+
 frappe.router.on("change", () => {
 	const route = frappe.get_route() || [];
-	if (route[0] !== "List" || route[1] !== "Sales Invoice") return;
+	if (route[0] !== "List") return;
+	const doctype = route[1];
+	const action = RETURN_LISTS[doctype];
+	if (!action) return;
 
-	// 🔴 AND DO NOT ADD IT ONCE BEHIND A "done" FLAG. On a COLD load the list view clears
-	// its own inner toolbar AFTER the first render, so a button added before that is wiped
-	// — measured: the add ran, the flag was set, and the toolbar came back empty, while an
-	// in-app route to the same list worked. Key on the button's presence in the DOM and
-	// keep re-checking for a few seconds, which also covers the bundle still being in
-	// flight on a first visit.
 	const label = __("New Return");
 	let tries = 0;
 	const attach = () => {
 		const lv = window.cur_list;
-		if (lv && lv.doctype === "Sales Invoice" && lv.page && lv.page.inner_toolbar) {
+		if (lv && lv.doctype === doctype && lv.page && lv.page.inner_toolbar) {
 			const present = lv.page.inner_toolbar
 				.find("button")
 				.filter((i, b) => b.innerText.trim() === label).length;
 			if (!present) {
-				lv.page.add_inner_button(label, () => yht_custom.sales.new_return());
+				lv.page.add_inner_button(label, action);
 			}
 		}
 		if (++tries < 20) setTimeout(attach, 300);
