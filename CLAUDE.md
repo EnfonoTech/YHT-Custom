@@ -685,6 +685,15 @@ accountant: SI→`CN`, DN→`DRN`, PI→`DBN`, PR→`PRN`.
     `test_no_two_document_kinds_share_an_abbreviation` misses it because it checks the
     CONFIG, not the runtime path. Needs a client decision — a non-branch user has no branch
     prefix, so "which series" has no single right answer.
+94. 🔴 **`WHERE name > 'KSDN-26-0535'` IS A STRING COMPARE, NOT "CREATED AFTER".** Used to
+    clean up two test documents on 2026-08-30, it matched **every delivery return on the
+    site** — `'KSDR-…' > 'KSDN-…'` because `R` sorts after `N` — then cancelled, deleted and
+    committed 18 `KSDR-*` and 3 `KSRDN-*`. Naming series share a prefix stem, so a range over
+    `name` silently spans sibling series (`KSSR`/`KSIN`, `KSPRR`/`KSPRN` too). Delete by an
+    explicit `name IN %s` list captured as the script creates them, and print the match set
+    before deleting. Better: don't commit at all — `frappe.db.rollback()` had been doing this
+    job correctly all session. Recoverable from `Deleted Document`, but cancelling before
+    deleting stores `docstatus: 2`, so a restore returns them **cancelled, not submitted**.
 
 ## Deploy
 
