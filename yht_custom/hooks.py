@@ -13,7 +13,7 @@ required_apps = ["frappe/erpnext"]
 # can keep a stale copy for hours after a deploy. BUMP the ?v= counter whenever
 # one of these changes, or the deploy is invisible to anyone already loaded.
 app_include_js = [
-	"/assets/yht_custom/js/branch_user_restrict.js?v=7",
+	"/assets/yht_custom/js/branch_user_restrict.js?v=8",
 	"/assets/yht_custom/js/branch_user_forms.js?v=1",
 	"/assets/yht_custom/js/sales_flow.js?v=9",
 	"/assets/yht_custom/js/expense_invoice.js?v=5",
