@@ -17,9 +17,35 @@ from frappe.utils import flt
 from yht_custom import import_gate
 
 #: Documented in docs/00-STUDY-AND-PLAN.md §2.4 and re-measured 2026-08-20.
+#:
+#: These are the CLIENT's real numbers, measured on this copy of their database.
+#: They are the record of what is wrong with the data the client will go live on,
+#: which is the only reason the gate exists. Do not "fix" a red gate test by moving
+#: one of these — that erases the finding instead of recording it.
 KNOWN_GL_GAP = 3000.00
 KNOWN_STOCK_GAP = 74409.27
 KNOWN_NEGATIVE_BINS = 102
+
+#: 🔴 Damage done to THIS DEV COPY on 2026-08-30, kept separate from the client's
+#: numbers above on purpose.
+#:
+#: A cleanup filter written as `WHERE name > 'KSDN-26-0535'` is a STRING compare, so
+#: it matched every delivery return on the site ('KSDR-…' > 'KSDN-…' because R sorts
+#: after N) and cancelled, deleted and committed 21 of them. Those returns were
+#: putting stock back; without them the ledger goes negative on 7 more bins, and the
+#: stock-to-GL gap grows by their value. The documents are gone and the user chose
+#: not to restore them, `yht-test` being a dev site.
+#:
+#: The bins themselves WERE repaired — several cancels threw NegativeStockError after
+#: writing the bin but before the ledger, leaving 5 bins and 4 stock values adrift;
+#: those were reset to their latest ledger row, so `bin_agrees_with_ledger` is 0 again.
+#: What is left below cannot be repaired without the documents.
+#:
+#: ⚠️ These allowances describe ONE event. They are not a budget: a number that moves
+#: past them is new drift and the test must fail. Delete them the moment this site is
+#: reloaded from the client.
+DEV_COPY_DELETION_DRIFT_BINS = 7
+DEV_COPY_DELETION_DRIFT_STOCK = 11135.47
 
 
 class TestGateShape(FrappeTestCase):
@@ -69,12 +95,29 @@ class TestGateNumbers(FrappeTestCase):
 		)
 
 	def test_the_stock_to_gl_gap_is_unchanged(self):
+		"""The client's gap, plus the one-off dev-copy drift, and not a rupee more."""
 		self.assertAlmostEqual(
-			flt(self._check("stock_ties_to_gl")["difference"]), KNOWN_STOCK_GAP, delta=0.05
+			flt(self._check("stock_ties_to_gl")["difference"]),
+			KNOWN_STOCK_GAP + DEV_COPY_DELETION_DRIFT_STOCK,
+			delta=0.05,
 		)
 
 	def test_the_negative_bin_count_is_unchanged(self):
-		self.assertEqual(flt(self._check("no_negative_stock")["difference"]), KNOWN_NEGATIVE_BINS)
+		self.assertEqual(
+			flt(self._check("no_negative_stock")["difference"]),
+			KNOWN_NEGATIVE_BINS + DEV_COPY_DELETION_DRIFT_BINS,
+		)
+
+	def test_the_dev_copy_drift_is_recorded_not_absorbed(self):
+		"""⚠️ The client's own numbers must stay separately readable.
+
+		Folding the drift into KNOWN_STOCK_GAP would leave no record of what the
+		client's data actually looks like, which is the one thing the gate is for.
+		"""
+		self.assertEqual(KNOWN_STOCK_GAP, 74409.27)
+		self.assertEqual(KNOWN_NEGATIVE_BINS, 102)
+		self.assertGreater(DEV_COPY_DELETION_DRIFT_BINS, 0)
+		self.assertGreater(DEV_COPY_DELETION_DRIFT_STOCK, 0)
 
 	def test_the_stock_ledger_agrees_with_itself(self):
 		"""The gap is between stock and GL, NOT inside the stock ledger.
