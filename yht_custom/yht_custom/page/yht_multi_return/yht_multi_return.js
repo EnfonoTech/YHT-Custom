@@ -24,7 +24,9 @@
 frappe.pages["yht-multi-return"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({
 		parent: wrapper,
-		title: __("Return From Several Delivery Notes"),
+		// Kept short deliberately: the desk truncates a long page heading, and this must
+		// match the dashboard tile — trainees are told to look for "Multi-Note Return".
+		title: __("Multi-Note Return"),
 		single_column: true,
 	});
 
