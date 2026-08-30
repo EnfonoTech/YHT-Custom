@@ -161,12 +161,32 @@ yht_custom.sales.new_stock_return = function (doctype) {
 			},
 		],
 		primary_action_label: __("Create Return"),
-		primary_action(values) {
+		async primary_action(values) {
 			d.hide();
 			// open_mapped_doc calls the whitelisted mapper and routes to the result, so
 			// the return arrives with is_return, return_against and the negative
 			// quantities already set by erpnext itself.
 			frappe.model.open_mapped_doc({ method: spec.method, source_name: values.source });
+
+			// The picker still shows the FORWARD series until the document is saved —
+			// the branch series is chosen server-side at before_insert, and it does
+			// pick the right one (verified: KSDR-26-0025). But an operator seeing
+			// KSDN- and getting KSDR- reads that as a bug, so show the answer now.
+			const frm = await wait_for_new_form(doctype);
+			if (!frm) return;
+			try {
+				const r = await frappe.call({
+					method: "yht_custom.sales_flow.return_naming_series",
+					args: { doctype: doctype },
+				});
+				const series = r && r.message;
+				if (!series) return;
+				const df = frm.get_field("naming_series");
+				const options = (df && df.df.options ? df.df.options.split("\n") : []).map((o) => o.trim());
+				if (options.includes(series)) await frm.set_value("naming_series", series);
+			} catch (e) {
+				// A bypass role or an unconfigured branch is not an error.
+			}
 		},
 	});
 	d.show();
