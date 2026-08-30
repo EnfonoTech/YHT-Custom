@@ -368,5 +368,8 @@ class TestMultiReturnCreditNotes(FrappeTestCase):
 		import inspect
 
 		source = inspect.getsource(multi_return._invoices_billing)
-		self.assertIn("tabSales Invoice Item", source)
-		self.assertNotIn("per_billed", source)
+		# Only the code, not the docstring — which names per_billed precisely to say
+		# it is NOT used, and would otherwise fail this test on its own comment.
+		body = source.split('"""')[-1]
+		self.assertIn("tabSales Invoice Item", body)
+		self.assertNotIn("per_billed", body)
