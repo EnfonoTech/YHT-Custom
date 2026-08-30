@@ -359,7 +359,10 @@ frappe.pages["yht-multi-return"].on_page_load = function (wrapper) {
 			.yht-mr-empty { padding: 42px 12px; text-align: center; }
 			.yht-mr-card { border: 1px solid var(--border-color); border-radius: 8px;
 				margin-bottom: 12px; background: var(--card-bg); overflow: hidden; }
-			.yht-mr-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+			/* nowrap, NOT wrap: with wrap the meta is squeezed to ~74px and the date,
+			   total and status stack into three lines, making the header taller than
+			   the rows it labels. The meta takes the slack and ellipsises instead. */
+			.yht-mr-head { display: flex; align-items: center; gap: 12px; flex-wrap: nowrap;
 				padding: 10px 14px; background: var(--subtle-fg); border-bottom: 1px solid var(--border-color); }
 			.yht-mr-check { display: flex; align-items: center; gap: 8px; margin: 0; cursor: pointer;
 				flex: 0 0 auto; }
@@ -367,8 +370,8 @@ frappe.pages["yht-multi-return"].on_page_load = function (wrapper) {
 			/* nowrap, or the date/total/status stack into three lines and the header
 			   grows taller than the rows it labels. */
 			.yht-mr-meta { color: var(--text-muted); font-size: 12px; white-space: nowrap;
-				overflow: hidden; text-overflow: ellipsis; }
-			.yht-mr-open { margin-left: auto; font-size: 12px; }
+				overflow: hidden; text-overflow: ellipsis; flex: 1 1 auto; min-width: 0; }
+			.yht-mr-open { margin-left: auto; font-size: 12px; flex: 0 0 auto; }
 			.yht-mr-table { margin: 0; }
 			.yht-mr-table th { font-size: 11px; text-transform: uppercase; letter-spacing: .3px;
 				color: var(--text-muted); font-weight: 600; border-top: 0; }
