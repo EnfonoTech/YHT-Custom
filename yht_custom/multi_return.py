@@ -129,6 +129,24 @@ def returnable_delivery_notes(customer: str) -> list:
 	return out
 
 
+
+def _invoices_billing(delivery_note: str) -> list:
+	"""Submitted, non-return invoices that actually bill this delivery note.
+
+	🔴 Direct evidence, NOT `per_billed`. That column is maintained by the status
+	updater, and its sibling `per_returned` was observed sitting at 0 after three
+	submitted partial returns — a percentage that can lag is not something to gate
+	an accounting entry on.
+	"""
+	return frappe.db.sql_list(
+		"""SELECT DISTINCT si.name
+		   FROM `tabSales Invoice Item` sii
+		   JOIN `tabSales Invoice` si ON si.name = sii.parent
+		   WHERE sii.delivery_note = %s AND si.docstatus = 1 AND si.is_return = 0""",
+		delivery_note,
+	)
+
+
 def _apply_selection(target, wanted):
 	"""Keep only the selected rows on a mapped return, at the selected quantity.
 
@@ -202,11 +220,32 @@ def create_returns(customer, selections, submit=0, raise_credit_notes=0) -> dict
 			if submit:
 				target.submit()
 				if raise_credit_notes:
-					credit = make_sales_invoice(target.name)
-					credit.save()
-					credit.submit()
-					row["credit_note"] = credit.name
-					row["settles"] = credit.return_against
+					# 🔴 NEVER credit a delivery note that was never invoiced.
+					# Reproduced before this guard: KSDN-26-0541 had per_billed 0, the
+					# screen still raised credit note KSIN-26-0614 for -13.80, and its
+					# receivable GL posted Cr 14.00 — free credit to a customer who had
+					# never been charged. The goods still come back; there is simply
+					# nothing to credit.
+					billed = _invoices_billing(source)
+					if not billed:
+						row["credit_note"] = None
+						row["credit_skipped"] = _(
+							"{0} was never invoiced, so there is nothing to credit."
+						).format(source)
+					else:
+						credit = make_sales_invoice(target.name)
+						credit.save()
+						credit.submit()
+						row["credit_note"] = credit.name
+						row["settles"] = credit.return_against
+						if not credit.return_against:
+							# Billed by more than one invoice, so the link is ambiguous and
+							# `link_credit_note_to_original_invoice` declined. The credit is
+							# real, it just has to be matched by hand.
+							row["credit_unlinked"] = _(
+								"{0} is billed by {1} invoices, so the credit note could not be "
+								"matched automatically. Reconcile it against the right invoice."
+							).format(source, len(billed))
 			results.append(row)
 		except Exception as e:
 			frappe.db.rollback(save_point=save_point)

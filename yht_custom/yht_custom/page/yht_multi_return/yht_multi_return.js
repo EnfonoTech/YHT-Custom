@@ -304,6 +304,19 @@ frappe.pages["yht-multi-return"].on_page_load = function (wrapper) {
 										  ])
 										: "")
 								: "") +
+							// A skipped credit note is NOT a failure, and must not be silent
+							// either: the goods came back, there was simply no invoice to
+							// credit. Saying nothing here is how a clerk assumes it happened.
+							(m.credit_skipped
+								? '<br><span class="text-muted small">' +
+								  frappe.utils.escape_html(m.credit_skipped) +
+								  "</span>"
+								: "") +
+							(m.credit_unlinked
+								? '<br><span class="text-warning small">' +
+								  frappe.utils.escape_html(m.credit_unlinked) +
+								  "</span>"
+								: "") +
 							"</li>"
 					)
 					.join("") +

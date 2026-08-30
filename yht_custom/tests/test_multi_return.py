@@ -279,3 +279,94 @@ class TestMultiReturnWiring(FrappeTestCase):
 			with self.subTest(path=path):
 				# ⚠️ keyed by the FUNCTION OBJECT, not the dotted path
 				self.assertIn(frappe.get_attr(path), frappe.whitelisted)
+
+
+class TestMultiReturnCreditNotes(FrappeTestCase):
+	"""🔴 Crediting an UNINVOICED delivery note hands out free money.
+
+	Reproduced before the guard existed: KSDN-26-0541 had per_billed 0, the screen
+	still raised credit note KSIN-26-0614 for -13.80, and its receivable GL posted
+	Cr 14.00 against a customer who had never been charged for those goods.
+	"""
+
+	def setUp(self):
+		rows = _template()
+		if not rows:
+			self.skipTest("no submitted delivery note on this site to model")
+		self.tmpl = rows[0]
+
+	def tearDown(self):
+		frappe.db.rollback()
+
+	def _note(self, qty=4):
+		doc = frappe.new_doc("Delivery Note")
+		doc.customer, doc.company = self.tmpl.customer, self.tmpl.company
+		doc.append(
+			"items",
+			{
+				"item_code": self.tmpl.item_code,
+				"qty": qty,
+				"rate": self.tmpl.rate,
+				"warehouse": self.tmpl.warehouse,
+				"cost_center": self.tmpl.cost_center,
+			},
+		)
+		doc.save()
+		doc.submit()
+		return doc
+
+	def _return_all(self, dn, **kw):
+		return multi_return.create_returns(
+			self.tmpl.customer,
+			json.dumps([{"delivery_note": dn.name, "rows": [{"row_name": dn.items[0].name, "qty": dn.items[0].qty}]}]),
+			**kw,
+		)
+
+	def test_an_uninvoiced_note_gets_a_return_but_NO_credit_note(self):
+		dn = self._note()
+		self.assertEqual(multi_return._invoices_billing(dn.name), [])
+
+		result = self._return_all(dn, submit=1, raise_credit_notes=1)
+		self.assertEqual(result["failed"], [])
+		made = result["created"][0]
+
+		self.assertTrue(made["return"], "the goods must still come back")
+		self.assertIsNone(made["credit_note"], "nothing was invoiced, so nothing to credit")
+		self.assertIn("never invoiced", made["credit_skipped"])
+
+	def test_the_skip_is_reported_not_silent(self):
+		"""Saying nothing is how a clerk assumes the credit note happened."""
+		dn = self._note()
+		made = self._return_all(dn, submit=1, raise_credit_notes=1)["created"][0]
+		self.assertTrue(made.get("credit_skipped"))
+		self.assertIn(dn.name, made["credit_skipped"])
+
+	def test_an_invoiced_note_still_gets_a_credit_note_that_settles(self):
+		from erpnext.stock.doctype.delivery_note.delivery_note import make_sales_invoice
+
+		dn = self._note()
+		si = make_sales_invoice(dn.name)
+		si.save()
+		si.submit()
+		self.assertEqual(multi_return._invoices_billing(dn.name), [si.name])
+
+		made = self._return_all(dn, submit=1, raise_credit_notes=1)["created"][0]
+		self.assertTrue(made["credit_note"])
+		self.assertEqual(made["settles"], si.name)
+		self.assertIsNone(made.get("credit_skipped"))
+
+		after = frappe.db.get_value("Sales Invoice", si.name, ["status", "outstanding_amount"], as_dict=True)
+		self.assertEqual(flt(after.outstanding_amount), 0.0)
+		self.assertEqual(after.status, "Credit Note Issued")
+
+	def test_billing_evidence_is_direct_not_per_billed(self):
+		"""⚠️ `per_billed` is status-updater maintained and can lag.
+
+		Its sibling `per_returned` was observed at 0 after three submitted partial
+		returns. A percentage that can lag must not gate an accounting entry.
+		"""
+		import inspect
+
+		source = inspect.getsource(multi_return._invoices_billing)
+		self.assertIn("tabSales Invoice Item", source)
+		self.assertNotIn("per_billed", source)
