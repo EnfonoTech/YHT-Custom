@@ -102,11 +102,14 @@ frappe.pages["yht-multi-return"].on_page_load = function (wrapper) {
 					<input type="checkbox" class="yht-mr-all">
 					<span class="yht-mr-name">${frappe.utils.escape_html(note.name)}</span>
 				</label>
-				<span class="yht-mr-meta">
-					${frappe.datetime.str_to_user(note.posting_date)} ·
-					${frappe.format(note.grand_total, { fieldtype: "Currency", options: "currency" })} ·
-					${frappe.utils.escape_html(note.status)}
-				</span>
+				<span class="yht-mr-meta">${[
+					frappe.datetime.str_to_user(note.posting_date),
+					// format_currency, NOT frappe.format: the latter returns BLOCK-level
+					// markup for a Currency field, which breaks the line no matter what
+					// white-space says. That is what stacked this header into three lines.
+					format_currency(note.grand_total, note.currency),
+					frappe.utils.escape_html(note.status),
+				].join(" · ")}</span>
 				<a class="yht-mr-open" href="/app/delivery-note/${encodeURIComponent(note.name)}"
 				   target="_blank">${__("Open")}</a>
 			</div>`).appendTo(card);
