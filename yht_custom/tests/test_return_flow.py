@@ -7,6 +7,7 @@ import json
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
+from frappe.utils import cint
 
 from yht_custom import field_layout, return_flow, setup_branch_series
 
@@ -705,3 +706,59 @@ class TestCreditNoteBacklink(FrappeTestCase):
 			return_flow._original_invoice_row_for(row, config),
 			(forward[0].parent, forward[0].name),
 		)
+
+
+class TestCreditNoteSettlesOriginal(FrappeTestCase):
+	"""🔴 `return_against` alone leaves the original invoice Unpaid.
+
+	ERPNext ships `update_outstanding_for_self` with default "1", so a perfectly
+	linked credit note still keeps its own outstanding. Measured end to end before
+	this step existed: credit note linked to KSIN-26-0596, and KSIN-26-0596 stayed
+	`Unpaid` with outstanding 6.00.
+	"""
+
+	def tearDown(self):
+		frappe.db.rollback()
+
+	def test_the_default_is_zero_on_both_invoice_doctypes(self):
+		for doctype in return_flow.SETTLE_AGAINST_ORIGINAL_DOCTYPES:
+			with self.subTest(doctype=doctype):
+				self.assertEqual(
+					frappe.get_meta(doctype).get_field("update_outstanding_for_self").default,
+					"0",
+				)
+
+	def test_a_new_return_picks_the_default_up(self):
+		"""`_set_defaults` runs at insert, so a fresh doc must already carry it."""
+		for doctype in return_flow.SETTLE_AGAINST_ORIGINAL_DOCTYPES:
+			with self.subTest(doctype=doctype):
+				doc = frappe.new_doc(doctype)
+				self.assertFalse(cint(doc.update_outstanding_for_self))
+
+	def test_the_step_is_idempotent(self):
+		first = return_flow.setup_credit_note_settles_original()
+		second = return_flow.setup_credit_note_settles_original()
+		self.assertEqual(first["failed"], [])
+		self.assertEqual(second["failed"], [])
+		self.assertEqual(second["applied"], 0)
+
+	def test_the_step_is_provisioned(self):
+		"""A step missing from the tuple silently never runs on migrate."""
+		from yht_custom import setup
+
+		self.assertIn("setup_credit_note_settles_original", setup.PROVISIONING_STEPS)
+		self.assertTrue(callable(getattr(setup, "setup_credit_note_settles_original", None)))
+
+	def test_erpnexts_over_credit_valve_is_still_reachable(self):
+		"""We must not defeat ERPNext's own guard.
+
+		`accounts_controller.py:222` re-sets the flag to 1 when the credit exceeds
+		the original's outstanding. Flipping the DEFAULT leaves that intact; forcing
+		the value in a hook would not have.
+		"""
+		import inspect
+
+		from erpnext.controllers import accounts_controller
+
+		source = inspect.getsource(accounts_controller.AccountsController)
+		self.assertIn("self.update_outstanding_for_self = 1", source)

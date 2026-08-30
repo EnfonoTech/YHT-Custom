@@ -576,3 +576,71 @@ def link_credit_note_to_original_invoice(doc, method=None):
 	doc.return_against = invoice
 	for row, (_, invoice_row) in zip(doc.items, resolved):
 		row.set(config["row_link"], invoice_row)
+
+
+#: The two doctypes carrying `update_outstanding_for_self`.
+SETTLE_AGAINST_ORIGINAL_DOCTYPES = ("Sales Invoice", "Purchase Invoice")
+
+
+def setup_credit_note_settles_original():
+	"""Make a linked credit note reduce the ORIGINAL invoice, not just itself.
+
+	🔴 `return_against` alone does NOT settle anything. ERPNext ships
+	`update_outstanding_for_self` with **default "1"**, and at
+	`accounts_controller.py:213` a return that has it set keeps its own outstanding
+	and merely msgprints *"…uncheck the 'Update Outstanding for Self' checkbox"*.
+	So the original invoice stays **Unpaid** even when the link is perfect — which
+	is exactly what the client reported on KSIN-26-0610 / KSSR-26-0031, and why
+	linking them was only half the fix.
+
+	Flipping the DEFAULT (rather than forcing the value in a hook) is deliberate:
+	the checkbox stays visible and a user can still tick it back per document, and
+	ERPNext keeps its own safety valve — `accounts_controller.py:222` re-sets the
+	flag to 1 by itself when the credit exceeds the original's outstanding, so an
+	over-credit can never be forced onto an invoice that cannot absorb it.
+
+	POLICY: this makes a credit note settle the invoice it reverses. The alternative
+	is ERPNext's default — both documents stay open and are matched later with the
+	Payment Reconciliation tool. Flip the value here to go back to that.
+	"""
+	applied, already, failed = 0, 0, []
+
+	for doctype in SETTLE_AGAINST_ORIGINAL_DOCTYPES:
+		if not frappe.get_meta(doctype).get_field("update_outstanding_for_self"):
+			failed.append(f"{doctype}: no update_outstanding_for_self field")
+			continue
+
+		existing = frappe.db.get_value(
+			"Property Setter",
+			{
+				"doc_type": doctype,
+				"field_name": "update_outstanding_for_self",
+				"property": "default",
+			},
+			["name", "value"],
+			as_dict=True,
+		)
+		if existing:
+			if cstr(existing.value) != "0":
+				frappe.db.set_value("Property Setter", existing.name, "value", "0")
+				applied += 1
+			else:
+				already += 1
+			continue
+
+		try:
+			frappe.make_property_setter(
+				{
+					"doctype": doctype,
+					"fieldname": "update_outstanding_for_self",
+					"property": "default",
+					"value": "0",
+					"property_type": "Text",
+				},
+				is_system_generated=True,
+			)
+			applied += 1
+		except Exception as e:
+			failed.append(f"{doctype}: {type(e).__name__}: {e}")
+
+	return {"applied": applied, "already": already, "failed": failed}

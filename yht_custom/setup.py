@@ -23,6 +23,7 @@ from yht_custom.hr_setup import setup_hr
 from yht_custom.sales_assist import setup_sales_assist_columns
 from yht_custom.field_layout import apply_field_moves
 from yht_custom.workspace_shortcuts import setup_new_shortcuts
+from yht_custom.return_flow import setup_credit_note_settles_original
 
 #: What a Branch User may touch. Per the MoM document set — Quotation, Sales
 #: Order, Delivery Note, Sales Invoice, Purchase Receipt, Purchase Invoice,
@@ -197,6 +198,7 @@ PROVISIONING_STEPS = (
 	"setup_katc_letterhead",
 	"setup_default_print_formats",
 	"setup_form_layout",
+	"setup_credit_note_settles_original",
 	"apply_field_moves",
 	"setup_discount_grid_columns",
 	"setup_sales_assist_columns",
