@@ -659,6 +659,32 @@ accountant: SI→`CN`, DN→`DRN`, PI→`DBN`, PR→`PRN`.
     `frappe.is_whitelisted` tests `method not in whitelisted` with the function itself, so
     a membership test on the string is always False — a test written that way fails
     everything and proves nothing. Resolve with `frappe.get_attr(path)` first.
+91. 🔴 **A CREDIT NOTE NEEDS TWO FIELDS TO SETTLE AN INVOICE, AND `return_against` IS THE
+    LESSER ONE.** `update_outstanding_for_self` ships with **default `"1"`**, and
+    `accounts_controller.py:213` makes a return that has it set keep its OWN outstanding —
+    so a perfectly linked credit note still leaves the original **Unpaid**. Verified:
+    linked to KSIN-26-0596, still `Unpaid` at 6.00. Flip the DEFAULT with a Property
+    Setter, never force the value in a hook: ERPNext's over-credit valve at
+    `accounts_controller.py:222` re-sets the flag to 1 when the credit exceeds the
+    original's outstanding, and forcing it would defeat that. Reproduced: a 7.00 credit
+    against a 6.00 outstanding flipped itself back, correctly.
+92. ⚠️ **`Delivery Note.issue_credit_note` PRODUCES AN UNLINKED CREDIT NOTE.** It maps from
+    the delivery RETURN via `make_sales_invoice(<dn_return>)`, and `return_against` is a
+    Sales Invoice link, so there is nothing to put in it. 9 submitted credit notes on
+    `yht-test` had this gap. Walking back: credit row -> stock RETURN row -> ORIGINAL stock
+    row -> the invoice row that billed it. **The sides are NOT symmetric** — `Delivery Note
+    Item` has `dn_detail` and no `delivery_note_item`; `Purchase Receipt Item` has
+    `purchase_receipt_item` and no `pr_detail`. And a credit note ALREADY raised against the
+    same original row carries the same stock-row link, so filter `is_return` out BEFORE
+    counting candidates or the ambiguity makes the lookup bail (row 177m1l8c9h matches both
+    KSIN-24-6950 and the credit note KSSR-24-1027).
+93. ⚠️ **THE RETURN SERIES ONLY APPLIES TO BRANCH USERS — STILL OPEN.**
+    `_branch_series_rows()` returns `("", [])` for a bypass role or a user with no Branch
+    Configuration, so an Administrator/manager/`uat@` return numbers into the FORWARD
+    series. `KSIN-26-0609` was created that way on 2026-08-29, after the series work.
+    `test_no_two_document_kinds_share_an_abbreviation` misses it because it checks the
+    CONFIG, not the runtime path. Needs a client decision — a non-branch user has no branch
+    prefix, so "which series" has no single right answer.
 
 ## Deploy
 
