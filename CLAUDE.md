@@ -694,6 +694,19 @@ accountant: SI→`CN`, DN→`DRN`, PI→`DBN`, PR→`PRN`.
     before deleting. Better: don't commit at all — `frappe.db.rollback()` had been doing this
     job correctly all session. Recoverable from `Deleted Document`, but cancelling before
     deleting stores `docstatus: 2`, so a restore returns them **cancelled, not submitted**.
+95. ⚠️ **`app_include_js` CACHE-BUSTS BY A MANUAL `?v=` STRING — BUMP IT.** Changing
+    `public/js/branch_user_restrict.js` without bumping `?v=7` leaves every browser that
+    already holds that URL on the OLD file, forever. The new `yht-multi-return` route was
+    absent from their cached ALLOWED_ROUTES, so branch users were bounced to the dashboard.
+    A headless check caught it by landing on `/app/yht-dashboard`; server-side everything
+    looked correct, and `clear-cache` / `bench build` / `touch assets.json` all fail to fix
+    it. `sites/assets/yht_custom` is a SYMLINK to `public/`, so there is no build step to
+    blame — the stale copy is in the browser.
+96. ⚠️ **`frappe.format(v, {fieldtype: "Currency"})` RETURNS BLOCK-LEVEL MARKUP.** Dropped
+    into an inline header it breaks the line regardless of `white-space: nowrap`, which is
+    why a one-line meta rendered as three. `getComputedStyle` reported `nowrap` the whole
+    time — the wrap came from the injected element, not the CSS, so three CSS fixes in a row
+    changed nothing. Use `format_currency(value, currency)` for a plain string.
 
 ## Deploy
 
