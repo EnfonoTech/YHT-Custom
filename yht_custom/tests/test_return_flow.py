@@ -655,3 +655,53 @@ class TestCreditNoteBacklink(FrappeTestCase):
 				negate = chain.index("yht_custom.return_flow.negate_return_quantities")
 				self.assertLess(link, route)
 				self.assertLess(link, negate)
+
+	def test_an_existing_credit_note_is_not_mistaken_for_the_original(self):
+		"""🔴 Reproduced: this made the linker bail on a real chain.
+
+		A credit note already raised against the same original row carries the SAME
+		stock-row link, so it lands in the candidate set beside the invoice. Original
+		row 177m1l8c9h matches both KSIN-24-6950 and the credit note KSSR-24-1027;
+		counting before filtering returns saw two invoices and gave up.
+		"""
+		twice = frappe.db.sql(
+			"""
+			SELECT ret_item.dn_detail AS orig_row
+			FROM `tabDelivery Note Item` ret_item
+			JOIN `tabDelivery Note` ret ON ret.name = ret_item.parent
+			     AND ret.is_return = 1 AND ret.docstatus = 1
+			JOIN `tabSales Invoice Item` sii ON sii.dn_detail = ret_item.dn_detail
+			JOIN `tabSales Invoice` si ON si.name = sii.parent AND si.docstatus = 1
+			WHERE ret_item.dn_detail IS NOT NULL
+			GROUP BY ret_item.dn_detail
+			HAVING SUM(si.is_return = 1) > 0 AND SUM(si.is_return = 0) = 1
+			LIMIT 1
+			""",
+			as_dict=True,
+		)
+		if not twice:
+			self.skipTest("no original row on this site is billed and credited")
+		rows = frappe.db.get_all(
+			"Sales Invoice Item",
+			filters={"dn_detail": twice[0].orig_row, "docstatus": 1},
+			fields=["name", "parent"],
+		)
+		self.assertGreater(len(rows), 1, "fixture must be ambiguous to be worth testing")
+
+		config = dict(return_flow.CREDIT_NOTE_BACKLINK["Sales Invoice"], _doctype="Sales Invoice")
+		forward = [
+			r for r in rows
+			if not frappe.db.get_value("Sales Invoice", r.parent, "is_return")
+		]
+		self.assertEqual(len(forward), 1)
+
+		ret_row = frappe.db.get_value(
+			"Delivery Note Item", {"dn_detail": twice[0].orig_row}, "name"
+		)
+		row = frappe.new_doc("Sales Invoice").append("items", {})
+		row.delivery_note = frappe.db.get_value("Delivery Note Item", ret_row, "parent")
+		row.dn_detail = ret_row
+		self.assertEqual(
+			return_flow._original_invoice_row_for(row, config),
+			(forward[0].parent, forward[0].name),
+		)

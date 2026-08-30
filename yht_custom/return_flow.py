@@ -508,19 +508,25 @@ def _original_invoice_row_for(row, config) -> tuple[str, str] | None:
 	if not original_stock_row:
 		return None
 
-	matches = frappe.db.get_all(
+	candidates = frappe.db.get_all(
 		f"{config['_doctype']} Item",
 		filters={config["stock_row_field"]: original_stock_row, "docstatus": 1},
 		fields=["name", "parent"],
 	)
-	# An original billed by two invoices cannot be reversed against one of them.
-	invoices = {m.parent for m in matches}
-	if len(invoices) != 1:
+	# ⚠️ A credit note ALREADY raised against the same original row carries the very
+	# same stock-row link, so it comes back here too and must not be mistaken for the
+	# invoice being reversed. Measured on this site: original row 177m1l8c9h matches
+	# BOTH KSIN-24-6950 and the credit note KSSR-24-1027. Filtering returns out after
+	# picking a candidate is too late — the ambiguity has to go before the count.
+	forward = [
+		row
+		for row in candidates
+		if not cint(frappe.db.get_value(config["_doctype"], row.parent, "is_return"))
+	]
+	# An original billed by two invoices cannot be reversed against just one.
+	if len(forward) != 1:
 		return None
-	match = matches[0]
-	if cint(frappe.db.get_value(config["_doctype"], match.parent, "is_return")):
-		return None
-	return match.parent, match.name
+	return forward[0].parent, forward[0].name
 
 
 def link_credit_note_to_original_invoice(doc, method=None):
