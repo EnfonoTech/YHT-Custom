@@ -361,9 +361,13 @@ frappe.pages["yht-multi-return"].on_page_load = function (wrapper) {
 				margin-bottom: 12px; background: var(--card-bg); overflow: hidden; }
 			.yht-mr-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
 				padding: 10px 14px; background: var(--subtle-fg); border-bottom: 1px solid var(--border-color); }
-			.yht-mr-check { display: flex; align-items: center; gap: 8px; margin: 0; cursor: pointer; }
-			.yht-mr-name { font-weight: 600; }
-			.yht-mr-meta { color: var(--text-muted); font-size: 12px; }
+			.yht-mr-check { display: flex; align-items: center; gap: 8px; margin: 0; cursor: pointer;
+				flex: 0 0 auto; }
+			.yht-mr-name { font-weight: 600; white-space: nowrap; }
+			/* nowrap, or the date/total/status stack into three lines and the header
+			   grows taller than the rows it labels. */
+			.yht-mr-meta { color: var(--text-muted); font-size: 12px; white-space: nowrap;
+				overflow: hidden; text-overflow: ellipsis; }
 			.yht-mr-open { margin-left: auto; font-size: 12px; }
 			.yht-mr-table { margin: 0; }
 			.yht-mr-table th { font-size: 11px; text-transform: uppercase; letter-spacing: .3px;
