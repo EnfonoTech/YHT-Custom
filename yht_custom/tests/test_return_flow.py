@@ -507,8 +507,12 @@ class TestStockReturnEntryPoint(FrappeTestCase):
 		):
 			with self.subTest(path=path):
 				fn = frappe.get_attr(path)
-				self.assertTrue(
-					getattr(fn, "whitelisted", False) or path in frappe.whitelisted,
+				# `frappe.whitelisted` is keyed by the FUNCTION OBJECT, not by its
+				# dotted path — see frappe.is_whitelisted, which tests `method not in
+				# whitelisted`. Checking the string silently never matches.
+				self.assertIn(
+					fn,
+					frappe.whitelisted,
 					f"{path} is not whitelisted — the desk could not call it",
 				)
 
