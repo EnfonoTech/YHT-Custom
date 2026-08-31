@@ -707,6 +707,16 @@ accountant: SI→`CN`, DN→`DRN`, PI→`DBN`, PR→`PRN`.
     why a one-line meta rendered as three. `getComputedStyle` reported `nowrap` the whole
     time — the wrap came from the injected element, not the CSS, so three CSS fixes in a row
     changed nothing. Use `format_currency(value, currency)` for a plain string.
+97. 🔴 **A CREDIT NOTE FOR AN UNINVOICED DELIVERY NOTE IS FREE MONEY.**
+    `make_sales_invoice(<a delivery return>)` happily builds a credit note whether or not the
+    original delivery was ever billed, and nothing in ERPNext stops it. Reproduced:
+    `KSDN-26-0541` had `per_billed` 0, the Multi-Note Return screen raised credit note
+    `KSIN-26-0614` for −13.80, and its receivable GL posted **Cr 14.00** against a customer
+    who had never been charged. Gate on a DIRECT query for submitted non-return
+    `Sales Invoice Item` rows, **not `per_billed`** — that column is status-updater
+    maintained and its sibling `per_returned` was measured at 0 after three submitted
+    partial returns (gotcha 93's neighbour). The goods still come back; there is just
+    nothing to credit, and the UI has to SAY so or the clerk assumes it happened.
 
 ## Deploy
 
