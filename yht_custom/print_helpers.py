@@ -556,44 +556,94 @@ def _stored_zatca_qr_b64(url) -> str:
 		return ""
 
 
+def _invoice_for_zatca_qr(doc):
+	"""`(doctype, name)` of the invoice whose ZATCA QR belongs on `doc`, else `None`.
+
+	A ZATCA QR asserts a taxable supply — seller VAT number, timestamp, total and
+	VAT amount. It belongs to an INVOICE and to nothing else, and on this site only
+	two doctypes carry one: `ksa_einv_qr` exists on `Sales Invoice` (1,744 filled)
+	and `POS Invoice`, and on no other table. So:
+
+	* an invoice answers for itself;
+	* a Delivery Note answers with the invoice that billed it, in EITHER direction
+	  the two can be linked — `Delivery Note Item.against_sales_invoice` when the
+	  note was made from the invoice, `Sales Invoice Item.delivery_note` when the
+	  invoice was made from the note;
+	* everything else answers `None`.
+
+	🔴 QUOTATION AND SALES ORDER DELIBERATELY GET NOTHING. They are pre-sale
+	documents: no supply has happened, so there is no total and no VAT amount that
+	a QR could truthfully encode. Printing one there would put a tax assertion on a
+	document that is not a tax invoice. If the client ever asks for it, the answer
+	is a linked-invoice lookup like the Delivery Note's — never a recomputation
+	from the order's own figures.
+	"""
+	dt = doc.get("doctype") if hasattr(doc, "get") else None
+	name = doc.get("name") if hasattr(doc, "get") else None
+	if not dt or not name:
+		return None
+
+	if dt in ("Sales Invoice", "POS Invoice"):
+		return dt, name
+
+	if dt == "Delivery Note":
+		for row in doc.get("items") or []:
+			against = row.get("against_sales_invoice") if hasattr(row, "get") else None
+			if against:
+				return "Sales Invoice", against
+		billed = frappe.db.get_value(
+			"Sales Invoice Item", {"delivery_note": name, "docstatus": 1}, "parent"
+		)
+		if billed:
+			return "Sales Invoice", billed
+
+	return None
+
+
 def yht_zatca_qr(doc) -> str:
-	"""Base-64 PNG for the invoice's ZATCA QR, or `""`.
+	"""Base-64 PNG of the ZATCA QR that belongs on `doc`, or `""`.
 
 	TWO SOURCES, TRIED IN THIS ORDER. They are NOT interchangeable.
 
-	1. **The QR the invoice was actually issued with.** Every invoice carried
-	   over from the client's previous system holds its cleared ZATCA QR as an
-	   image in `ksa_einv_qr` (`/private/files/QR_Phase2_<invoice>.png`), written
-	   there by the **ERPgulf** zatca app that system ran — NOT by
-	   `ksa_compliance`, which is what this bench runs and which holds no record
-	   of any of them (`Sales Invoice Additional Fields` is empty here). That
-	   image is the document of record: it carries the Phase-2 cryptographic
-	   stamp, and nothing on this site can recompute it.
+	1. **The QR the invoice was actually issued with.** Every invoice carried over
+	   from the client's previous system holds its cleared ZATCA QR as an image in
+	   `ksa_einv_qr` (`/private/files/QR_Phase2_<invoice>.png`), written there by
+	   the **ERPgulf** zatca app that system ran — NOT by `ksa_compliance`, which is
+	   what this bench runs and which holds no record of any of them
+	   (`Sales Invoice Additional Fields` is empty here).
 
 	2. **Only when there is no stored image**, ask `ksa_compliance` to compute the
-	   Phase-1 QR live from the invoice's own fields. That returns `None` when
-	   there is no `ZATCA Phase 1 Business Settings` row for the company, or it is
-	   Disabled — the state this site is in until onboarding.
+	   Phase-1 QR live. That returns `None` when there is no `ZATCA Phase 1 Business
+	   Settings` row for the company, or it is Disabled.
 
-	🔴 NEVER REORDER THESE. Recomputing a Phase-1 QR for an invoice that was
-	cleared under Phase 2 would print a DIFFERENT, weaker QR than the one the
-	buyer was originally handed and than the one ZATCA holds against that invoice.
+	🔴 NEVER REORDER THESE. Recomputing a Phase-1 QR for an invoice cleared
+	under Phase 2 prints a DIFFERENT, weaker code than the buyer was handed and than
+	ZATCA holds against that invoice.
 
-	The invoice must still print when both sources come up empty, so this degrades
-	to `""` and the format omits the `<img>` rather than emitting a broken one.
-	The ImportError is caught too, because a print format is not the place to
-	discover that an app is missing.
+	Which document the QR is taken FROM is `_invoice_for_zatca_qr`'s decision, so a
+	Delivery Note prints the QR of the invoice that billed it rather than nothing.
+
+	The document must still print when both sources come up empty, so this degrades
+	to `""` and the format omits the `<img>` rather than emitting a broken one. The
+	ImportError is caught too, because a print format is not the place to discover
+	that an app is missing.
 
 	🔴 THE PATHS ARE NOT THE SAME. "Nothing stored and not onboarded" is
-	expected and stays silent. Anything that RAISES is not expected, and a Saudi
-	tax invoice that quietly starts printing without its QR must leave a trace
-	somewhere — so everything else is logged and only then degraded.
+	expected and stays silent. Anything that RAISES is not expected, and a Saudi tax
+	invoice that quietly starts printing without its QR must leave a trace — so
+	everything else is logged and only then degraded.
 	"""
-	name = doc.get("name") if hasattr(doc, "get") else None
-	if not name:
+	target = _invoice_for_zatca_qr(doc)
+	if not target:
 		return ""
+	invoice_doctype, invoice_name = target
 
-	stored = _stored_zatca_qr_b64(doc.get("ksa_einv_qr") if hasattr(doc, "get") else None)
+	if invoice_name == cstr(doc.get("name")):
+		stored_url = doc.get("ksa_einv_qr")
+	else:
+		stored_url = frappe.db.get_value(invoice_doctype, invoice_name, "ksa_einv_qr")
+
+	stored = _stored_zatca_qr_b64(stored_url)
 	if stored:
 		return stored
 
@@ -604,11 +654,11 @@ def yht_zatca_qr(doc) -> str:
 		return ""
 
 	try:
-		return cstr(get_zatca_phase_1_qr_for_invoice(name))
+		return cstr(get_zatca_phase_1_qr_for_invoice(invoice_name))
 	except Exception:
 		frappe.log_error(
 			title="yht_zatca_qr failed",
-			message=f"Sales Invoice: {{name}}\n\n{{frappe.get_traceback()}}",
+			message=f"{invoice_doctype}: {invoice_name}\n\n{frappe.get_traceback()}",
 		)
 		return ""
 

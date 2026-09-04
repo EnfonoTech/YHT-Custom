@@ -1206,6 +1206,53 @@ class TestZatcaQr(FrappeTestCase):
 		self.assertNotIn('src="data:image/png;base64,"', html)
 
 
+	def test_a_delivery_note_prints_the_qr_of_the_invoice_that_billed_it(self):
+		"""check 34d — a Delivery Note has no `ksa_einv_qr` of its own; the field exists
+		only on Sales Invoice and POS Invoice. It must resolve to the invoice."""
+		row = frappe.db.sql(
+			"""select sii.delivery_note, sii.parent
+			   from `tabSales Invoice Item` sii
+			   join `tabSales Invoice` si on si.name = sii.parent
+			   where sii.docstatus = 1 and ifnull(sii.delivery_note, '') <> ''
+			     and ifnull(si.ksa_einv_qr, '') <> '' limit 1""",
+			as_dict=True,
+		)
+		if not row:
+			self.skipTest("no billed Delivery Note whose invoice carries a QR")
+		doc = frappe.get_doc("Delivery Note", row[0]["delivery_note"])
+		self.assertEqual(
+			print_helpers._invoice_for_zatca_qr(doc), ("Sales Invoice", row[0]["parent"])
+		)
+		self.assertTrue(helper("yht_zatca_qr")(doc))
+
+	def test_an_unbilled_delivery_note_prints_without_a_qr(self):
+		"""check 34e — nothing has been supplied for tax purposes yet, so there is no
+		QR, and the note must still print with no broken <img>."""
+		row = frappe.db.sql(
+			"""select dn.name from `tabDelivery Note` dn where dn.docstatus = 1
+			   and not exists (select 1 from `tabSales Invoice Item` s
+			                   where s.delivery_note = dn.name and s.docstatus = 1)
+			   limit 1"""
+		)
+		if not row:
+			self.skipTest("every Delivery Note on this site is billed")
+		html = render("Delivery Note", row[0][0], "KATC Delivery Note", no_letterhead=1)
+		self.assertGreater(len(html), 2000)
+		self.assertNotIn("data:image/png;base64,", html)
+
+	def test_pre_sale_documents_never_get_a_zatca_qr(self):
+		"""check 34f — a Quotation and a Sales Order describe a supply that has NOT
+		happened. A ZATCA QR encodes a total and a VAT amount, so printing one there
+		would put a tax assertion on a document that is not a tax invoice."""
+		for doctype in ("Quotation", "Sales Order"):
+			name = frappe.db.get_value(doctype, {"docstatus": 1}, "name")
+			if not name:
+				continue
+			doc = frappe.get_doc(doctype, name)
+			self.assertIsNone(print_helpers._invoice_for_zatca_qr(doc), doctype)
+			self.assertEqual(helper("yht_zatca_qr")(doc), "", doctype)
+
+
 # ====================================== bank block and Bank Account permission
 
 
