@@ -1206,51 +1206,58 @@ class TestZatcaQr(FrappeTestCase):
 		self.assertNotIn('src="data:image/png;base64,"', html)
 
 
-	def test_a_delivery_note_prints_the_qr_of_the_invoice_that_billed_it(self):
-		"""check 34d — a Delivery Note has no `ksa_einv_qr` of its own; the field exists
-		only on Sales Invoice and POS Invoice. It must resolve to the invoice."""
-		row = frappe.db.sql(
-			"""select sii.delivery_note, sii.parent
-			   from `tabSales Invoice Item` sii
-			   join `tabSales Invoice` si on si.name = sii.parent
-			   where sii.docstatus = 1 and ifnull(sii.delivery_note, '') <> ''
-			     and ifnull(si.ksa_einv_qr, '') <> '' limit 1""",
-			as_dict=True,
-		)
-		if not row:
-			self.skipTest("no billed Delivery Note whose invoice carries a QR")
-		doc = frappe.get_doc("Delivery Note", row[0]["delivery_note"])
-		self.assertEqual(
-			print_helpers._invoice_for_zatca_qr(doc), ("Sales Invoice", row[0]["parent"])
-		)
-		self.assertTrue(helper("yht_zatca_qr")(doc))
-
-	def test_an_unbilled_delivery_note_prints_without_a_qr(self):
-		"""check 34e — nothing has been supplied for tax purposes yet, so there is no
-		QR, and the note must still print with no broken <img>."""
-		row = frappe.db.sql(
-			"""select dn.name from `tabDelivery Note` dn where dn.docstatus = 1
-			   and not exists (select 1 from `tabSales Invoice Item` s
-			                   where s.delivery_note = dn.name and s.docstatus = 1)
-			   limit 1"""
-		)
-		if not row:
-			self.skipTest("every Delivery Note on this site is billed")
-		html = render("Delivery Note", row[0][0], "KATC Delivery Note", no_letterhead=1)
-		self.assertGreater(len(html), 2000)
-		self.assertNotIn("data:image/png;base64,", html)
-
-	def test_pre_sale_documents_never_get_a_zatca_qr(self):
-		"""check 34f — a Quotation and a Sales Order describe a supply that has NOT
-		happened. A ZATCA QR encodes a total and a VAT amount, so printing one there
-		would put a tax assertion on a document that is not a tax invoice."""
-		for doctype in ("Quotation", "Sales Order"):
+	def test_non_invoice_documents_never_get_a_zatca_qr(self):
+		"""check 34d — a Delivery Note, Quotation and Sales Order must all print with no
+		QR. The Delivery Note briefly showed the QR of the invoice that billed it and the
+		client asked for it removed: it is not a tax document, and a QR invites it to be
+		read as one. Quotations and Sales Orders describe a supply that has not happened,
+		so there is no total and no VAT amount a QR could truthfully encode."""
+		for doctype in ("Delivery Note", "Quotation", "Sales Order"):
 			name = frappe.db.get_value(doctype, {"docstatus": 1}, "name")
 			if not name:
 				continue
 			doc = frappe.get_doc(doctype, name)
 			self.assertIsNone(print_helpers._invoice_for_zatca_qr(doc), doctype)
 			self.assertEqual(helper("yht_zatca_qr")(doc), "", doctype)
+
+	def test_the_katc_delivery_note_format_carries_no_qr(self):
+		# check 34e (rendered half of 34d)
+		name = frappe.db.get_value("Delivery Note", {"docstatus": 1}, "name")
+		if not name:
+			self.skipTest("no submitted Delivery Note")
+		html = render("Delivery Note", name, "KATC Delivery Note", no_letterhead=1)
+		self.assertGreater(len(html), 2000)
+		self.assertNotIn("data:image/png;base64,", html)
+
+	def test_a_ksa_compliance_phase_2_qr_is_used_when_there_is_no_stored_one(self):
+		"""check 34f — invoices THIS bench clears keep their QR in `Sales Invoice
+		Additional Fields.qr_code`, not in `ksa_einv_qr`. Those must print too."""
+		if not frappe.db.table_exists("Sales Invoice Additional Fields"):
+			self.skipTest("ksa_compliance is not installed on this bench")
+		row = frappe.db.sql(
+			"""select siaf.sales_invoice from `tabSales Invoice Additional Fields` siaf
+			   join `tabSales Invoice` si on si.name = siaf.sales_invoice
+			   where ifnull(siaf.qr_code, '') <> '' and ifnull(si.ksa_einv_qr, '') = ''
+			   limit 1"""
+		)
+		if not row:
+			self.skipTest("no ksa_compliance-cleared invoice on this site yet")
+		doc = frappe.get_doc("Sales Invoice", row[0][0])
+		self.assertTrue(helper("yht_zatca_qr")(doc))
+
+	def test_a_recorded_qr_always_beats_a_computed_one(self):
+		"""check 34g — recomputing a Phase-1 QR for an invoice cleared under Phase 2
+		would print a different, weaker code than the buyer holds. The stored image must
+		win even when ksa_compliance could compute something."""
+		name = frappe.db.get_value(
+			"Sales Invoice", {"docstatus": 1, "ksa_einv_qr": ("!=", "")}, "name"
+		)
+		if not name:
+			self.skipTest("no invoice carries a stored ZATCA QR on this site")
+		doc = frappe.get_doc("Sales Invoice", name)
+		expected = print_helpers._stored_zatca_qr_b64(doc.get("ksa_einv_qr"))
+		self.assertTrue(expected, "the stored QR file should be readable")
+		self.assertEqual(helper("yht_zatca_qr")(doc), expected)
 
 
 # ====================================== bank block and Bank Account permission

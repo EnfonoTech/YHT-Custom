@@ -560,75 +560,93 @@ def _invoice_for_zatca_qr(doc):
 	"""`(doctype, name)` of the invoice whose ZATCA QR belongs on `doc`, else `None`.
 
 	A ZATCA QR asserts a taxable supply — seller VAT number, timestamp, total and
-	VAT amount. It belongs to an INVOICE and to nothing else, and on this site only
-	two doctypes carry one: `ksa_einv_qr` exists on `Sales Invoice` (1,744 filled)
-	and `POS Invoice`, and on no other table. So:
+	VAT amount — so it belongs to an invoice and to nothing else. On this site only
+	two doctypes are invoices for this purpose, and only they carry `ksa_einv_qr`.
 
-	* an invoice answers for itself;
-	* a Delivery Note answers with the invoice that billed it, in EITHER direction
-	  the two can be linked — `Delivery Note Item.against_sales_invoice` when the
-	  note was made from the invoice, `Sales Invoice Item.delivery_note` when the
-	  invoice was made from the note;
-	* everything else answers `None`.
-
-	🔴 QUOTATION AND SALES ORDER DELIBERATELY GET NOTHING. They are pre-sale
-	documents: no supply has happened, so there is no total and no VAT amount that
-	a QR could truthfully encode. Printing one there would put a tax assertion on a
-	document that is not a tax invoice. If the client ever asks for it, the answer
-	is a linked-invoice lookup like the Delivery Note's — never a recomputation
-	from the order's own figures.
+	🔴 DELIVERY NOTE, QUOTATION AND SALES ORDER GET NOTHING, BY DECISION.
+	A Delivery Note briefly printed the QR of the invoice that billed it; the client
+	asked for it removed — a delivery note is not a tax document and the QR invited
+	it to be read as one. Quotations and Sales Orders never had one: no supply has
+	happened, so there is no total and no VAT amount a QR could truthfully encode.
+	If any of them is ever wanted again, it must be a linked-invoice lookup — never
+	a recomputation from that document's own figures.
 	"""
 	dt = doc.get("doctype") if hasattr(doc, "get") else None
 	name = doc.get("name") if hasattr(doc, "get") else None
-	if not dt or not name:
-		return None
-
-	if dt in ("Sales Invoice", "POS Invoice"):
+	if dt in ("Sales Invoice", "POS Invoice") and name:
 		return dt, name
-
-	if dt == "Delivery Note":
-		for row in doc.get("items") or []:
-			against = row.get("against_sales_invoice") if hasattr(row, "get") else None
-			if against:
-				return "Sales Invoice", against
-		billed = frappe.db.get_value(
-			"Sales Invoice Item", {"delivery_note": name, "docstatus": 1}, "parent"
-		)
-		if billed:
-			return "Sales Invoice", billed
-
 	return None
+
+
+def _phase_2_zatca_qr_b64(invoice_name: str) -> str:
+	"""Base-64 of the Phase-2 QR `ksa_compliance` recorded for `invoice_name`, or `""`.
+
+	This is the source for invoices THIS bench clears itself, once ZATCA onboarding
+	is done. `ksa_compliance` keeps their QR in `Sales Invoice Additional Fields.
+	qr_code` — NOT in `ksa_einv_qr`, which belonged to the previous system's ERPgulf
+	app and is only ever populated on the migrated invoices.
+
+	The row is read directly rather than through
+	`ksa_compliance.jinja.get_phase_2_print_format_details`, which returns `None`
+	unless `ZATCA Business Settings.enable_zatca_integration` is on. The QR should
+	print whenever one was actually recorded, not only while integration happens to
+	be enabled.
+
+	Newest row wins: an invoice can accumulate more than one, and the latest is the
+	one that was cleared. `qr_image_src` builds the PNG as a `data:` URI; only the
+	base-64 payload is returned so every source in `yht_zatca_qr` has one shape.
+	"""
+	name = frappe.db.get_value(
+		"Sales Invoice Additional Fields",
+		{"sales_invoice": invoice_name, "docstatus": ("<", 2)},
+		"name",
+		order_by="creation desc",
+	)
+	if not name:
+		return ""
+
+	try:
+		src = frappe.get_doc("Sales Invoice Additional Fields", name).qr_image_src
+	except Exception:
+		frappe.log_error(
+			title="yht_zatca_qr could not read a Phase-2 QR",
+			message=f"Sales Invoice Additional Fields: {name}\n\n{frappe.get_traceback()}",
+		)
+		return ""
+
+	if not src or "base64," not in src:
+		return ""
+	return src.split("base64,", 1)[1]
 
 
 def yht_zatca_qr(doc) -> str:
 	"""Base-64 PNG of the ZATCA QR that belongs on `doc`, or `""`.
 
-	TWO SOURCES, TRIED IN THIS ORDER. They are NOT interchangeable.
+	THREE SOURCES, TRIED IN THIS ORDER. They are NOT interchangeable, and the order
+	is the whole point: each invoice gets the QR it was actually issued with.
 
-	1. **The QR the invoice was actually issued with.** Every invoice carried over
-	   from the client's previous system holds its cleared ZATCA QR as an image in
-	   `ksa_einv_qr` (`/private/files/QR_Phase2_<invoice>.png`), written there by
-	   the **ERPgulf** zatca app that system ran — NOT by `ksa_compliance`, which is
-	   what this bench runs and which holds no record of any of them
-	   (`Sales Invoice Additional Fields` is empty here).
+	1. **`ksa_einv_qr` — the migrated invoices.** Everything carried over from the
+	   client's previous system holds its cleared QR as an image there
+	   (`/private/files/QR_Phase2_<invoice>.png`), written by the **ERPgulf** zatca
+	   app that system ran. `ksa_compliance` has no record of any of them.
 
-	2. **Only when there is no stored image**, ask `ksa_compliance` to compute the
-	   Phase-1 QR live. That returns `None` when there is no `ZATCA Phase 1 Business
-	   Settings` row for the company, or it is Disabled.
+	2. **`Sales Invoice Additional Fields` — the invoices THIS bench clears.** Once
+	   ZATCA onboarding is done, `ksa_compliance` records the Phase-2 QR there.
 
-	🔴 NEVER REORDER THESE. Recomputing a Phase-1 QR for an invoice cleared
-	under Phase 2 prints a DIFFERENT, weaker code than the buyer was handed and than
-	ZATCA holds against that invoice.
+	3. **Computed Phase-1**, for anything with neither. Returns nothing until a
+	   `ZATCA Phase 1 Business Settings` row exists for the company.
 
-	Which document the QR is taken FROM is `_invoice_for_zatca_qr`'s decision, so a
-	Delivery Note prints the QR of the invoice that billed it rather than nothing.
+	🔴 NEVER PUT A COMPUTED QR BEFORE A RECORDED ONE. Recomputing a Phase-1
+	QR for an invoice that was cleared under Phase 2 prints a DIFFERENT, weaker code
+	than the buyer was handed and than ZATCA holds against that invoice.
 
-	The document must still print when both sources come up empty, so this degrades
-	to `""` and the format omits the `<img>` rather than emitting a broken one. The
-	ImportError is caught too, because a print format is not the place to discover
-	that an app is missing.
+	The document must still print when all three come up empty, so this degrades to
+	`""` and the format omits the `<img>` rather than emitting a broken one — 705
+	migrated invoices predate the client's ZATCA rollout and never had a QR at all.
+	The ImportError is caught too, because a print format is not the place to
+	discover that an app is missing.
 
-	🔴 THE PATHS ARE NOT THE SAME. "Nothing stored and not onboarded" is
+	🔴 THE PATHS ARE NOT THE SAME. "Nothing recorded and not onboarded" is
 	expected and stays silent. Anything that RAISES is not expected, and a Saudi tax
 	invoice that quietly starts printing without its QR must leave a trace — so
 	everything else is logged and only then degraded.
@@ -638,14 +656,13 @@ def yht_zatca_qr(doc) -> str:
 		return ""
 	invoice_doctype, invoice_name = target
 
-	if invoice_name == cstr(doc.get("name")):
-		stored_url = doc.get("ksa_einv_qr")
-	else:
-		stored_url = frappe.db.get_value(invoice_doctype, invoice_name, "ksa_einv_qr")
-
-	stored = _stored_zatca_qr_b64(stored_url)
+	stored = _stored_zatca_qr_b64(doc.get("ksa_einv_qr"))
 	if stored:
 		return stored
+
+	phase_2 = _phase_2_zatca_qr_b64(invoice_name)
+	if phase_2:
+		return phase_2
 
 	try:
 		from ksa_compliance.jinja import get_zatca_phase_1_qr_for_invoice
