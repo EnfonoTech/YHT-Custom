@@ -16,6 +16,8 @@ be one upgrade away from silently shadowing, or being shadowed by, another app's
 """
 
 import json
+import os
+from base64 import b64encode
 
 import frappe
 from frappe.utils import cint, cstr, flt, fmt_money, formatdate
@@ -517,26 +519,83 @@ def yht_creator_contact(doc) -> dict:
 	}
 
 
+def _stored_zatca_qr_b64(url) -> str:
+	"""Base-64 of the QR image at `url`, or `""` when there is none to read.
+
+	🔴 THE URL IS DATA, NOT A LITERAL. It arrives from the invoice's own
+	`ksa_einv_qr` Attach field, so the resolved path is CHECKED to still sit
+	inside this site's own files directory. Without that check a crafted `../`
+	value would read any file the bench user can read and print it, base-64'd,
+	on a customer-facing tax invoice.
+
+	Reading the bytes directly is deliberate: the QR is printed ON the invoice
+	the caller is already permitted to print, so routing through the File
+	doctype would add a permission hop the print job does not need.
+	"""
+	url = (url or "").split("?")[0]
+	if url.startswith("/private/files/"):
+		root = os.path.realpath(frappe.get_site_path("private", "files"))
+		rel = url[len("/private/files/") :]
+	elif url.startswith("/files/"):
+		root = os.path.realpath(frappe.get_site_path("public", "files"))
+		rel = url[len("/files/") :]
+	else:
+		return ""
+
+	path = os.path.realpath(os.path.join(root, rel))
+	if path != root and not path.startswith(root + os.sep):
+		return ""
+	if not os.path.isfile(path):
+		return ""
+
+	try:
+		with open(path, "rb") as fh:
+			return b64encode(fh.read()).decode()
+	except OSError:
+		frappe.log_error(title="yht_zatca_qr could not read a stored QR", message=path)
+		return ""
+
+
 def yht_zatca_qr(doc) -> str:
-	"""Base-64 PNG for the ZATCA Phase-1 QR, or `""`.
+	"""Base-64 PNG for the invoice's ZATCA QR, or `""`.
 
-	`ksa_compliance.jinja.get_zatca_phase_1_qr_for_invoice` returns `None` when
-	there is no `ZATCA Phase 1 Business Settings` row for the company, or it is
-	Disabled — which is the state this site is in until onboarding (blocked on
-	CSR/OTP). The invoice must still print, so this degrades to `""` and the format
-	omits the `<img>` entirely rather than emitting a broken one.
+	TWO SOURCES, TRIED IN THIS ORDER. They are NOT interchangeable.
 
+	1. **The QR the invoice was actually issued with.** Every invoice carried
+	   over from the client's previous system holds its cleared ZATCA QR as an
+	   image in `ksa_einv_qr` (`/private/files/QR_Phase2_<invoice>.png`), written
+	   there by the **ERPgulf** zatca app that system ran — NOT by
+	   `ksa_compliance`, which is what this bench runs and which holds no record
+	   of any of them (`Sales Invoice Additional Fields` is empty here). That
+	   image is the document of record: it carries the Phase-2 cryptographic
+	   stamp, and nothing on this site can recompute it.
+
+	2. **Only when there is no stored image**, ask `ksa_compliance` to compute the
+	   Phase-1 QR live from the invoice's own fields. That returns `None` when
+	   there is no `ZATCA Phase 1 Business Settings` row for the company, or it is
+	   Disabled — the state this site is in until onboarding.
+
+	🔴 NEVER REORDER THESE. Recomputing a Phase-1 QR for an invoice that was
+	cleared under Phase 2 would print a DIFFERENT, weaker QR than the one the
+	buyer was originally handed and than the one ZATCA holds against that invoice.
+
+	The invoice must still print when both sources come up empty, so this degrades
+	to `""` and the format omits the `<img>` rather than emitting a broken one.
 	The ImportError is caught too, because a print format is not the place to
 	discover that an app is missing.
 
-	🔴 THE TWO PATHS ARE NOT THE SAME. "Not onboarded" is expected and stays
-	silent. Anything that RAISES is not expected, and a Saudi tax invoice that
-	quietly starts printing without its Phase-1 QR must leave a trace somewhere —
-	so everything else is logged and only then degraded.
+	🔴 THE PATHS ARE NOT THE SAME. "Nothing stored and not onboarded" is
+	expected and stays silent. Anything that RAISES is not expected, and a Saudi
+	tax invoice that quietly starts printing without its QR must leave a trace
+	somewhere — so everything else is logged and only then degraded.
 	"""
 	name = doc.get("name") if hasattr(doc, "get") else None
 	if not name:
 		return ""
+
+	stored = _stored_zatca_qr_b64(doc.get("ksa_einv_qr") if hasattr(doc, "get") else None)
+	if stored:
+		return stored
 
 	try:
 		from ksa_compliance.jinja import get_zatca_phase_1_qr_for_invoice
@@ -549,7 +608,7 @@ def yht_zatca_qr(doc) -> str:
 	except Exception:
 		frappe.log_error(
 			title="yht_zatca_qr failed",
-			message=f"Sales Invoice: {name}\n\n{frappe.get_traceback()}",
+			message=f"Sales Invoice: {{name}}\n\n{{frappe.get_traceback()}}",
 		)
 		return ""
 

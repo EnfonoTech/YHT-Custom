@@ -1165,6 +1165,47 @@ class TestZatcaQr(FrappeTestCase):
 		self.assertIn("data:image/png;base64,", html)
 
 
+	def test_a_stored_qr_is_preferred_over_a_recomputed_one(self):
+		"""check 34a — the migrated invoices carry the QR they were CLEARED with under
+		Phase 2, in `ksa_einv_qr`. Recomputing a Phase-1 QR for one of those would
+		print a different, weaker code than the buyer was handed and than ZATCA holds."""
+		name = frappe.db.get_value(
+			"Sales Invoice", {"docstatus": 1, "ksa_einv_qr": ("!=", "")}, "name"
+		)
+		if not name:
+			self.skipTest("no invoice carries a stored ZATCA QR on this site")
+		doc = frappe.get_doc("Sales Invoice", name)
+		expected = print_helpers._stored_zatca_qr_b64(doc.get("ksa_einv_qr"))
+		self.assertTrue(expected, "the stored QR file should be readable")
+		self.assertEqual(helper("yht_zatca_qr")(doc), expected)
+
+	def test_the_stored_qr_path_cannot_escape_the_site(self):
+		"""check 34b — `ksa_einv_qr` is an Attach field, so its value is DATA. A `../`
+		walk must not turn a customer-facing invoice into a file-read primitive."""
+		for hostile in (
+			"/private/files/../../../../etc/passwd",
+			"/files/../../site_config.json",
+			"/files/../private/files/../../../etc/hostname",
+			"http://example.invalid/qr.png",
+			"/etc/passwd",
+			"",
+			None,
+		):
+			self.assertEqual(print_helpers._stored_zatca_qr_b64(hostile), "", hostile)
+
+	def test_an_invoice_with_no_stored_qr_still_prints(self):
+		"""check 34c — 705 migrated invoices predate the client's ZATCA rollout and
+		carry no QR at all. They must print, without a broken <img>."""
+		name = frappe.db.get_value(
+			"Sales Invoice", {"docstatus": 1, "ksa_einv_qr": ("in", ("", None))}, "name"
+		)
+		if not name:
+			self.skipTest("every invoice on this site carries a QR")
+		html = render("Sales Invoice", name, "KATC Tax Invoice", no_letterhead=1)
+		self.assertGreater(len(html), 2000)
+		self.assertNotIn('src="data:image/png;base64,"', html)
+
+
 # ====================================== bank block and Bank Account permission
 
 
