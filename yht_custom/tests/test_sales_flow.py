@@ -416,12 +416,55 @@ class TestSalesReturnEntryPoints(FrappeTestCase):
 		self.assertIn("yht_custom.sales_flow.return_naming_series", code)
 
 	def test_return_naming_series_reports_what_the_hook_will_do(self):
-		"""The endpoint the form reads must agree with the hook that names the doc."""
+		"""The endpoint the form reads must agree with the hook that names the doc.
+
+		🔴 THIS TEST USED TO PASS FOR THE WRONG REASON.
+
+		It asserted only that Administrator gets ``None``, on the reasoning that a
+		bypass role opts out of the branch override. That held until the series
+		learned to fall back to the site's only branch — and the assertion still
+		went green, because the alphabetically-earlier
+		``test_a_return_takes_the_credit_note_series`` leaves a SECOND Branch alive
+		for the rest of the class, which is exactly the condition that switches the
+		fallback off. Run on its own it failed. So both halves are now asserted
+		against a branch count this test establishes itself.
+		"""
 		from yht_custom import branch_defaults, sales_flow
 
 		frappe.set_user("Administrator")
-		# Administrator holds a bypass role, so the branch override does not apply and
-		# the endpoint must say so rather than promise a series it will not deliver.
+
+		def forget():
+			for attr in ("yht_sole_branch_cache", "yht_branch_config_cache"):
+				if hasattr(frappe.local, attr):
+					delattr(frappe.local, attr)
+
+		branches = frappe.get_all("Branch", pluck="name", limit=2)
+		if len(branches) == 1:
+			credit = frappe.db.get_value(
+				"Branch Naming Series",
+				{"parent": branches[0], "parent_doctype": "Sales Invoice", "use_for_return": 1},
+				"naming_series",
+			)
+			if credit:
+				forget()
+				# One branch means there is no other counter to protect, so even
+				# Administrator — every bypass role at once — is told the return
+				# series, and the endpoint must promise what the hook delivers.
+				self.assertEqual(sales_flow.return_naming_series("Sales Invoice"), credit)
+				self.assertEqual(
+					branch_defaults.configured_series("Sales Invoice", is_return=1), credit
+				)
+
+		# A second branch is a genuine choice, so the endpoint must stop promising.
+		guard = "_Test YHT Endpoint Branch Guard"
+		created = not frappe.db.exists("Branch", guard)
+		if created:
+			frappe.get_doc({"doctype": "Branch", "branch": guard}).insert(ignore_permissions=True)
+			self.addCleanup(
+				lambda: frappe.delete_doc("Branch", guard, force=1, ignore_permissions=True)
+			)
+		self.addCleanup(forget)
+		forget()
 		self.assertIsNone(sales_flow.return_naming_series("Sales Invoice"))
 		self.assertIsNone(branch_defaults.configured_series("Sales Invoice", is_return=1))
 

@@ -239,8 +239,12 @@ def make_sales_invoice_from_sales_order(source_name, target_doc=None, third=None
 def return_naming_series(doctype: str = "Sales Invoice") -> str | None:
 	"""The series a RETURN of ``doctype`` will take, for the calling user's branch.
 
-	``None`` means "leave the picker alone" — the caller holds a bypass role, or the
-	branch configures no return series for this doctype.
+	``None`` means "leave the picker alone": the branch configures no return series
+	for this doctype, or the series could not be resolved at all — several branches
+	exist and this caller is pinned to none of them. A bypass role is NOT on its own
+	enough to return ``None`` any more: on a single-branch site the series falls back
+	to that branch for everybody, because a credit note must not take the invoice
+	counter whoever keys it in. See ``branch_defaults._branch_series_rows``.
 
 	The entry point calls this so the form shows the series it will actually get.
 	Without it the picker keeps the form's pre-filled ``KSIN-`` after ``is_return`` is
