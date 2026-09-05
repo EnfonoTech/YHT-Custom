@@ -188,6 +188,7 @@ MODULE_PROFILE = "Branch User"
 PROVISIONING_STEPS = (
 	"ensure_branch_user_role",
 	"ensure_branch_custom_fields",
+	"ensure_fiscal_year_custom_fields",
 	"preserve_standard_docperms",
 	"setup_branch_user_permissions",
 	"ensure_module_profile",
@@ -419,6 +420,46 @@ ITEM_GROUP_CUSTOM_FIELDS = [
 		"description": "Letter prefix for auto-generated item codes in this group, e.g. <code>BV</code> gives <code>BV-0001</code>. Leave empty to keep entering item codes by hand.",
 	},
 ]
+
+
+#: MoM — the fiscal year staff read on the document, and filter lists by. Derived
+#: from the document date on every save; see `yht_custom/fiscal_year.py` for why it
+#: must NEVER carry a fixed default.
+def _fiscal_year_field(insert_after):
+	from yht_custom.fiscal_year import FIELDNAME
+
+	return [
+		{
+			"fieldname": FIELDNAME,
+			"label": "Fiscal Year",
+			"fieldtype": "Link",
+			"options": "Fiscal Year",
+			"insert_after": insert_after,
+			"read_only": 1,
+			"no_copy": 1,
+			"in_standard_filter": 1,
+			"print_hide": 1,
+			"description": "Derived from the document date on every save. To change it, change the date.",
+		}
+	]
+
+
+def ensure_fiscal_year_custom_fields():
+	"""One Link field per transaction doctype, anchored to that doctype's own date.
+
+	The anchor differs because the date does: selling documents carry
+	`transaction_date`, accounting and stock documents `posting_date`. The mapping
+	lives in `yht_custom.fiscal_year.DATE_FIELD` so the field, the hook, the patch
+	and the tests all read the same list.
+	"""
+	from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
+
+	from yht_custom.fiscal_year import DATE_FIELD
+
+	create_custom_fields(
+		{doctype: _fiscal_year_field(date_field) for doctype, date_field in DATE_FIELD.items()},
+		ignore_validate=True,
+	)
 
 
 def ensure_branch_custom_fields():

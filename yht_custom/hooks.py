@@ -200,7 +200,27 @@ def _merge_events(base: dict, extra: dict) -> dict:
 
 
 doc_events = _merge_events(doc_events, _FLOW_EVENTS)
+
+# --- fiscal year ---------------------------------------------------------
+# Derived on validate from each doctype's own date. The doctype list is repeated
+# here rather than imported: hooks.py is read before the app is importable, and a
+# test asserts this tuple matches `yht_custom.fiscal_year.DATE_FIELD`.
+_FISCAL_YEAR_EVENTS = {
+	doctype: {"validate": "yht_custom.fiscal_year.set_fiscal_year"}
+	for doctype in (
+		"Sales Invoice",
+		"Purchase Invoice",
+		"Delivery Note",
+		"Purchase Receipt",
+		"Payment Entry",
+		"Journal Entry",
+		"Sales Order",
+		"Quotation",
+	)
+}
+
 doc_events = _merge_events(doc_events, _DISCOUNT_EVENTS)
+doc_events = _merge_events(doc_events, _FISCAL_YEAR_EVENTS)
 
 # -------------------------------------------------------------------- fixtures
 # A fixture needs BOTH the entry here AND the record itself — a name missing from
@@ -233,6 +253,14 @@ fixtures = [
 					"Employee-custom_is_saudi_national",
 					"Employee-custom_gosi_number",
 					"Employee-custom_iqama_number",
+					"Sales Invoice-custom_fiscal_year",
+					"Purchase Invoice-custom_fiscal_year",
+					"Delivery Note-custom_fiscal_year",
+					"Purchase Receipt-custom_fiscal_year",
+					"Payment Entry-custom_fiscal_year",
+					"Journal Entry-custom_fiscal_year",
+					"Sales Order-custom_fiscal_year",
+					"Quotation-custom_fiscal_year",
 				],
 			]
 		],

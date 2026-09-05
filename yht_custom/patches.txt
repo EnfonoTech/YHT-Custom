@@ -2,3 +2,4 @@
 
 [post_model_sync]
 yht_custom.patches.backfill_line_item_discount_total
+yht_custom.patches.backfill_fiscal_year
