@@ -16,15 +16,21 @@ frappe.provide("yht.simple_party");
 
 const SAUDI_HINT = __("4 digits");
 
-function address_fields() {
+// A standard (B2B) e-invoice is rejected without the buyer's district, so the mode
+// that produces one makes the national address mandatory IN THE FORM rather than
+// letting the server throw after the operator has typed everything.
+const B2B_ONLY = "eval:doc.mode=='B2B'";
+
+function address_fields(require_for_b2b) {
+	const needed = require_for_b2b ? B2B_ONLY : "";
 	return [
 		{ fieldtype: "Section Break", label: __("National Address") },
-		{ fieldname: "address_line1", fieldtype: "Data", label: __("Street Name") },
-		{ fieldname: "custom_building_number", fieldtype: "Data", label: __("Building Number"), description: SAUDI_HINT },
-		{ fieldname: "custom_area", fieldtype: "Data", label: __("District") },
+		{ fieldname: "address_line1", fieldtype: "Data", label: __("Street Name"), mandatory_depends_on: needed },
+		{ fieldname: "custom_building_number", fieldtype: "Data", label: __("Building Number"), description: SAUDI_HINT, mandatory_depends_on: needed },
+		{ fieldname: "custom_area", fieldtype: "Data", label: __("District"), mandatory_depends_on: needed },
 		{ fieldtype: "Column Break" },
-		{ fieldname: "city", fieldtype: "Data", label: __("City") },
-		{ fieldname: "pincode", fieldtype: "Data", label: __("Postal Code"), description: __("5 digits") },
+		{ fieldname: "city", fieldtype: "Data", label: __("City"), mandatory_depends_on: needed },
+		{ fieldname: "pincode", fieldtype: "Data", label: __("Postal Code"), description: __("5 digits"), mandatory_depends_on: needed },
 		{ fieldname: "custom_additional_number", fieldtype: "Data", label: __("Additional Number"), description: SAUDI_HINT },
 		{ fieldname: "custom_short_address", fieldtype: "Data", label: __("Short Address"), description: __("e.g. RQAA2929") },
 	];
@@ -34,12 +40,28 @@ function party_fields(doctype, defaults) {
 	const is_customer = doctype === "Customer";
 	const fields = [
 		{
+			fieldname: "mode",
+			fieldtype: "Select",
+			label: __("Registration"),
+			options: ["B2B", "B2C"].join("\n"),
+			default: defaults.default_mode || "B2B",
+			reqd: 1,
+			description: is_customer
+				? __("B2B is a VAT-registered business and needs a VAT number and a full national address. B2C is an individual.")
+				: __("B2B is a registered company, B2C an individual."),
+		},
+		{
 			fieldname: "party_name",
 			fieldtype: "Data",
 			label: is_customer ? __("Customer Name") : __("Supplier Name"),
 			reqd: 1,
 		},
-		{ fieldname: "tax_id", fieldtype: "Data", label: __("VAT Number") },
+		{
+			fieldname: "tax_id",
+			fieldtype: "Data",
+			label: __("VAT Number"),
+			mandatory_depends_on: is_customer ? B2B_ONLY : "",
+		},
 		{ fieldtype: "Column Break" },
 		{
 			fieldname: "group",
@@ -67,7 +89,7 @@ function party_fields(doctype, defaults) {
 			{ fieldtype: "Column Break" },
 			{ fieldname: "email", fieldtype: "Data", options: "Email", label: __("Email") },
 		],
-		address_fields()
+		address_fields(is_customer)
 	);
 }
 
@@ -115,6 +137,7 @@ function show_dialog(doctype, defaults, on_created) {
 				method: "yht_custom.api.party.create_party",
 				args: {
 					doctype,
+					mode: values.mode,
 					party_name: values.party_name,
 					tax_id: values.tax_id,
 					group: values.group,

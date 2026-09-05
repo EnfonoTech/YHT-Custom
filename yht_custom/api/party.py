@@ -29,6 +29,61 @@ from frappe.utils import cstr
 
 SUPPORTED = ("Customer", "Supplier")
 
+#: The two ways a party is registered, and the only thing that changes between
+#: them. Kept as data so the dialog and the server agree on the vocabulary.
+MODES = ("B2B", "B2C")
+
+#: Address fields a Standard (B2B) e-invoice cannot clear without. ZATCA rejects a
+#: standard invoice whose buyer address is missing its district, and on this site
+#: that was not hypothetical -- 578 of 578 Saudi addresses had no district. So the
+#: mode that produces standard invoices is the mode that insists on them.
+B2B_ADDRESS_REQUIRED = (
+	("address_line1", "Street Name"),
+	("custom_building_number", "Building Number"),
+	("custom_area", "District"),
+	("city", "City"),
+	("pincode", "Postal Code"),
+)
+
+
+def _normalise_mode(mode, tax_id=None):
+	"""``(mode, declared)`` -- the mode, and whether the CALLER said it.
+
+	The mode is INFERRED, never defaulted, when it is missing: a caller that hands
+	over a VAT number is describing a registered business, one that does not is
+	describing a walk-in. That matters because this endpoint pre-dates the mode and
+	still has callers that never pass one; defaulting them to B2B made four of them
+	fail on requirements they had no way to know about.
+
+	``declared`` is the difference between a promise and a guess. An explicit B2B --
+	what the dialog sends -- is a promise that the invoice can clear, so it is held
+	to the full national address. An inferred one only routes the VAT number to the
+	field ZATCA reads, which is a strict improvement on what the caller had before.
+	"""
+	declared = bool(cstr(mode).strip())
+	if not declared:
+		return ("B2B" if cstr(tax_id).strip() else "B2C"), False
+
+	mode = cstr(mode).strip().upper()
+	if mode not in MODES:
+		frappe.throw(_("Mode must be B2B or B2C"))
+	return mode, True
+
+
+def _vat_fieldname(doctype):
+	"""The field ZATCA actually reads, when the site has it.
+
+	`ksa_compliance.is_b2b_customer` tests `custom_vat_registration_number`, NOT the
+	core `tax_id`. A customer carrying a VAT number in `tax_id` alone is therefore
+	invoiced as SIMPLIFIED with no buyer VAT -- measured here as 14 customers of
+	435. So B2B writes BOTH fields, and this resolves the second one per doctype:
+	Supplier has no such field (there is no ZATCA rule for a supplier), Customer
+	does.
+	"""
+	if frappe.get_meta(doctype).has_field("custom_vat_registration_number"):
+		return "custom_vat_registration_number"
+	return None
+
 #: Address fields the dialog collects, in the order they are asked for.
 ADDRESS_FIELDS = (
 	"address_line1",
@@ -48,6 +103,7 @@ ADDRESS_FIELDS = (
 def create_party(
 	doctype: str,
 	party_name: str,
+	mode: str | None = None,
 	tax_id: str | None = None,
 	group: str | None = None,
 	territory: str | None = None,
@@ -72,23 +128,36 @@ def create_party(
 		frappe.throw(_("Name is required"))
 
 	address = frappe.parse_json(address) if isinstance(address, str) else (address or {})
+	mode, declared = _normalise_mode(mode, tax_id)
+	_validate_mode_requirements(doctype, mode, tax_id, address, declared)
 
-	party = _make_party(doctype, party_name, tax_id, group, territory)
+	party = _make_party(doctype, party_name, tax_id, group, territory, mode)
 	address_name = _make_address(doctype, party.name, party_name, address)
 	contact_name = _make_contact(doctype, party.name, party_name, mobile, email)
 
 	return {"name": party.name, "address": address_name, "contact": contact_name}
 
 
-def _make_party(doctype, party_name, tax_id, group, territory):
+def _make_party(doctype, party_name, tax_id, group, territory, mode="B2B"):
+	"""Create the party. The mode decides its TYPE and where its VAT number lands."""
 	doc = frappe.new_doc(doctype)
 	doc.update({f"{doctype.lower()}_name": party_name})
 
+	tax_id = cstr(tax_id).strip()
 	if tax_id:
-		doc.tax_id = cstr(tax_id).strip()
+		doc.tax_id = tax_id
+		# The core field alone is not enough: ZATCA reads the custom one, so a B2B
+		# party writes both or it is invoiced as simplified. See _vat_fieldname.
+		vat_field = _vat_fieldname(doctype)
+		if vat_field and mode == "B2B":
+			doc.set(vat_field, tax_id)
+
+	# customer_type / supplier_type -- set generically, and only where it exists.
+	type_field = f"{doctype.lower()}_type"
+	if doc.meta.has_field(type_field):
+		doc.set(type_field, "Company" if mode == "B2B" else "Individual")
 
 	if doctype == "Customer":
-		doc.customer_type = "Company"
 		doc.customer_group = group or default_group("Customer")
 		doc.territory = territory or default_territory()
 	else:
@@ -96,6 +165,29 @@ def _make_party(doctype, party_name, tax_id, group, territory):
 
 	doc.insert()
 	return doc
+
+
+def _validate_mode_requirements(doctype, mode, tax_id, address, declared=True):
+	"""B2C asks for nothing extra; B2B is a promise that the invoice can clear.
+
+	Enforced for Customer only. A standard e-invoice makes claims about the BUYER --
+	their VAT number and their national address -- and ZATCA rejects it when either
+	is missing. Nothing in the spec constrains a supplier record, so a B2B supplier
+	is just a company with a tax id.
+	"""
+	if mode != "B2B" or doctype != "Customer" or not declared:
+		return
+
+	if not cstr(tax_id).strip():
+		frappe.throw(_("A VAT Number is required for a B2B customer"))
+
+	missing = [label for field, label in B2B_ADDRESS_REQUIRED if not cstr(address.get(field)).strip()]
+	if missing:
+		frappe.throw(
+			_("A B2B customer needs a full national address. Missing: {0}").format(
+				", ".join(_(label) for label in missing)
+			)
+		)
 
 
 def default_group(doctype: str) -> str | None:
@@ -204,4 +296,8 @@ def get_party_defaults(doctype: str):
 		"territory": default_territory() if doctype == "Customer" else None,
 		"country": _default_country(),
 		"can_create": bool(frappe.has_permission(doctype, "create")),
+		"modes": list(MODES),
+		"default_mode": "B2B",
+		"vat_field": _vat_fieldname(doctype),
+		"b2b_address_required": [field for field, _label in B2B_ADDRESS_REQUIRED],
 	}

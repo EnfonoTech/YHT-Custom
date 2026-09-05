@@ -185,3 +185,136 @@ class TestPartyDefaults(FrappeTestCase):
 		territory = party.default_territory()
 		if territory:
 			self.assertFalse(frappe.db.get_value("Territory", territory, "is_group"))
+
+
+class TestPartyModes(FrappeTestCase):
+	"""🔴 B2B/B2C, and the field ZATCA actually reads.
+
+	`ksa_compliance.is_b2b_customer` tests `custom_vat_registration_number`, NOT the
+	core `tax_id`. Before this, the dialog wrote `tax_id` only — so a VAT-registered
+	buyer created through it was invoiced as SIMPLIFIED with no buyer VAT, and the
+	XML submitted to ZATCA said the same. Measured on this site the day it was
+	found: 14 of 435 customers carried a VAT number in `tax_id` alone.
+
+	So the mode is not cosmetic. B2B writes both fields and insists on the national
+	address a standard invoice cannot clear without; B2C asks for neither.
+	"""
+
+	def tearDown(self):
+		frappe.set_user("Administrator")
+		frappe.db.rollback()
+
+	def _address(self, **overrides):
+		return {
+			"address_line1": "King Fahd Road",
+			"custom_building_number": "1234",
+			"custom_area": "Al Aqrabiyah",
+			"city": "Al Khobar",
+			"pincode": "34421",
+			"country": "Saudi Arabia",
+			**overrides,
+		}
+
+	def test_a_b2b_customer_carries_the_vat_number_zatca_reads(self):
+		out = party.create_party(
+			doctype="Customer",
+			mode="B2B",
+			party_name="_Test YHT B2B Customer",
+			tax_id="311111111100003",
+			address=self._address(),
+		)
+		doc = frappe.get_doc("Customer", out["name"])
+		self.assertEqual(doc.customer_type, "Company")
+		self.assertEqual(doc.tax_id, "311111111100003")
+		if doc.meta.has_field("custom_vat_registration_number"):
+			self.assertEqual(
+				doc.custom_vat_registration_number,
+				"311111111100003",
+				"the field ksa_compliance reads was left empty — the invoice would clear as simplified",
+			)
+
+	def test_a_b2c_customer_is_an_individual_and_needs_nothing_else(self):
+		out = party.create_party(
+			doctype="Customer", mode="B2C", party_name="_Test YHT B2C Customer"
+		)
+		doc = frappe.get_doc("Customer", out["name"])
+		self.assertEqual(doc.customer_type, "Individual")
+		self.assertFalse(doc.tax_id)
+		if doc.meta.has_field("custom_vat_registration_number"):
+			self.assertFalse(doc.custom_vat_registration_number)
+
+	def test_a_b2b_customer_without_a_vat_number_is_refused(self):
+		with self.assertRaises(frappe.ValidationError):
+			party.create_party(
+				doctype="Customer",
+				mode="B2B",
+				party_name="_Test YHT B2B No VAT",
+				address=self._address(),
+			)
+
+	def test_a_b2b_customer_without_a_district_is_refused(self):
+		"""The district is the one every address on this site was missing."""
+		with self.assertRaises(frappe.ValidationError):
+			party.create_party(
+				doctype="Customer",
+				mode="B2B",
+				party_name="_Test YHT B2B No District",
+				tax_id="311111111100003",
+				address=self._address(custom_area=""),
+			)
+
+	def test_the_address_rule_does_not_apply_to_a_supplier(self):
+		"""ZATCA constrains the BUYER. A supplier is just a company with a tax id."""
+		out = party.create_party(
+			doctype="Supplier",
+			mode="B2B",
+			party_name="_Test YHT B2B Supplier",
+			tax_id="311111111100003",
+		)
+		doc = frappe.get_doc("Supplier", out["name"])
+		self.assertEqual(doc.tax_id, "311111111100003")
+		if doc.meta.has_field("supplier_type"):
+			self.assertEqual(doc.supplier_type, "Company")
+
+	def test_a_b2c_supplier_is_an_individual(self):
+		out = party.create_party(
+			doctype="Supplier", mode="B2C", party_name="_Test YHT B2C Supplier"
+		)
+		doc = frappe.get_doc("Supplier", out["name"])
+		if doc.meta.has_field("supplier_type"):
+			self.assertEqual(doc.supplier_type, "Individual")
+
+	def test_an_unknown_mode_is_refused(self):
+		with self.assertRaises(frappe.ValidationError):
+			party.create_party(doctype="Customer", mode="B2X", party_name="_Test YHT Bad Mode")
+
+	def test_a_missing_mode_is_inferred_from_the_vat_number(self):
+		"""🔴 Defaulting to B2B broke four existing callers that pass no VAT.
+
+		They are legitimate — a short-code address, no address, no contact — and had
+		no way to satisfy a requirement invented after they were written. So a missing
+		mode is inferred, and only a DECLARED B2B is held to the address promise.
+		"""
+		self.assertEqual(party._normalise_mode(None), ("B2C", False))
+		self.assertEqual(party._normalise_mode("", ""), ("B2C", False))
+		self.assertEqual(party._normalise_mode(None, "311111111100003"), ("B2B", False))
+		self.assertEqual(party._normalise_mode("b2c"), ("B2C", True))
+		self.assertEqual(party._normalise_mode("B2B"), ("B2B", True))
+
+	def test_an_inferred_b2b_still_routes_the_vat_to_the_zatca_field(self):
+		"""The inference is not a loophole — it fixes the bug for old callers too."""
+		out = party.create_party(
+			doctype="Customer",
+			party_name="_Test YHT Inferred B2B",
+			tax_id="311111111100003",
+			address=self._address(custom_area=""),   # incomplete, and NOT refused
+		)
+		doc = frappe.get_doc("Customer", out["name"])
+		if doc.meta.has_field("custom_vat_registration_number"):
+			self.assertEqual(doc.custom_vat_registration_number, "311111111100003")
+
+	def test_the_dialog_is_told_which_modes_exist(self):
+		d = party.get_party_defaults("Customer")
+		self.assertEqual(d["modes"], ["B2B", "B2C"])
+		self.assertEqual(d["default_mode"], "B2B")
+		self.assertIn("custom_area", d["b2b_address_required"])
