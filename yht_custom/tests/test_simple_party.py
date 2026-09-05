@@ -318,3 +318,56 @@ class TestPartyModes(FrappeTestCase):
 		self.assertEqual(d["modes"], ["B2B", "B2C"])
 		self.assertEqual(d["default_mode"], "B2B")
 		self.assertIn("custom_area", d["b2b_address_required"])
+
+
+class TestQuickEntryOverride(FrappeTestCase):
+	"""🔴 THE BUTTON WAS IN THE ONE PLACE THE OPERATOR NEVER LOOKS.
+
+	The dialog was reachable only from the Customer/Supplier LIST. An operator
+	keying a Sales Invoice meets the party at the customer field, and "Create a
+	new Customer" there ran erpnext's quick entry — which creates the party and
+	stops, leaving the address to a second form nobody opens. That is the exact
+	failure `api/party.py` exists to prevent, so the dialog has to be behind the
+	link field too.
+
+	`frappe.ui.form.make_quick_entry` resolves `frappe.ui.form.<Doctype>QuickEntryForm`
+	(frappe/public/js/frappe/form/quick_entry.js:13); erpnext registers one for
+	each party, and app_include_js loads after erpnext's bundle, so replacing the
+	class is enough — no patching of frappe.
+	"""
+
+	def _js(self):
+		path = frappe.get_app_path("yht_custom", "public", "js", "simple_party.js")
+		with open(path, encoding="utf-8") as handle:
+			return handle.read()
+
+	def test_both_party_quick_entry_forms_are_replaced(self):
+		src = self._js()
+		self.assertIn('frappe.ui.form.CustomerQuickEntryForm = quick_entry_form("Customer")', src)
+		self.assertIn('frappe.ui.form.SupplierQuickEntryForm = quick_entry_form("Supplier")', src)
+
+	def test_it_extends_the_framework_class_rather_than_patching_frappe(self):
+		src = self._js()
+		self.assertIn("extends frappe.ui.form.QuickEntryForm", src)
+		self.assertNotIn("frappe.ui.form.make_quick_entry =", src)
+
+	def test_setup_returns_a_promise(self):
+		"""QuickEntryForm.setup() is contracted to return one; the caller awaits it."""
+		self.assertIn("return Promise.resolve(this);", self._js())
+
+	def test_the_partially_typed_name_is_carried_over(self):
+		"""controls/link.js:196 parks it in frappe.route_options.name_field."""
+		src = self._js()
+		self.assertIn("options.name_field", src)
+		self.assertIn('dialog.set_value("party_name", prefill)', src)
+
+	def test_the_callback_hands_back_a_name(self):
+		"""The link control does `set_value(doc.name)` and nothing else."""
+		self.assertIn("this.after_insert({ doctype, name: party.name })", self._js())
+
+	def test_the_bundle_is_cache_busted(self):
+		"""app_include_js is cached hard; a stale bundle is a silent no-op."""
+		path = frappe.get_app_path("yht_custom", "hooks.py")
+		with open(path, encoding="utf-8") as handle:
+			hooks = handle.read()
+		self.assertRegex(hooks, r"simple_party\.js\?v=\d+")

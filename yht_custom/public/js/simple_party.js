@@ -93,7 +93,7 @@ function party_fields(doctype, defaults) {
 	);
 }
 
-yht.simple_party.open = function (doctype, on_created) {
+yht.simple_party.open = function (doctype, on_created, prefill) {
 	frappe.call({
 		method: "yht_custom.api.party.get_party_defaults",
 		args: { doctype },
@@ -106,12 +106,12 @@ yht.simple_party.open = function (doctype, on_created) {
 				});
 				return;
 			}
-			show_dialog(doctype, defaults, on_created);
+			show_dialog(doctype, defaults, on_created, prefill);
 		},
 	});
 };
 
-function show_dialog(doctype, defaults, on_created) {
+function show_dialog(doctype, defaults, on_created, prefill) {
 	const dialog = new frappe.ui.Dialog({
 		title: doctype === "Customer" ? __("New Customer") : __("New Supplier"),
 		size: "large",
@@ -167,8 +167,50 @@ function show_dialog(doctype, defaults, on_created) {
 			});
 		},
 	});
+	// Whatever the operator had already typed into the link field. Carrying it over
+	// is the difference between a shortcut and starting again.
+	if (prefill) dialog.set_value("party_name", prefill);
 	dialog.show();
 }
+
+
+// ── link-field quick entry ─────────────────────────────────────────────────
+// The list-view button only reaches someone who went to the list. An operator
+// keying a Sales Invoice meets the party at the CUSTOMER FIELD, and "Create a new
+// Customer" there ran erpnext's quick entry -- which stops at the party and leaves
+// the address for a second form nobody opens.
+//
+// `frappe.ui.form.make_quick_entry` resolves `frappe.ui.form.<Doctype>QuickEntryForm`
+// (quick_entry.js:13) and erpnext registers one for both parties. Replacing that
+// class puts the same dialog behind every link field, with no patching of frappe.
+// app_include_js loads after erpnext's bundle, so this assignment is the one that
+// survives.
+
+function quick_entry_form(doctype) {
+	return class extends frappe.ui.form.QuickEntryForm {
+		setup() {
+			// controls/link.js:196 parks the partially-typed name here before calling us.
+			const options = frappe.route_options || {};
+			const typed = options.name_field;
+			delete options.name_field;
+
+			yht.simple_party.open(
+				doctype,
+				(party) => {
+					// The caller does `set_value(doc.name)` and nothing else.
+					if (this.after_insert) this.after_insert({ doctype, name: party.name });
+				},
+				typed
+			);
+
+			// setup() is contracted to return a promise; the dialog owns the flow now.
+			return Promise.resolve(this);
+		}
+	};
+}
+
+frappe.ui.form.CustomerQuickEntryForm = quick_entry_form("Customer");
+frappe.ui.form.SupplierQuickEntryForm = quick_entry_form("Supplier");
 
 // ── list-view button ─────────────────────────────────────────────────────────
 ["Customer", "Supplier"].forEach((doctype) => {
