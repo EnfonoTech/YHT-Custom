@@ -222,6 +222,15 @@ _FISCAL_YEAR_EVENTS = {
 doc_events = _merge_events(doc_events, _DISCOUNT_EVENTS)
 doc_events = _merge_events(doc_events, _FISCAL_YEAR_EVENTS)
 
+# --- opening invoice tool ----------------------------------------------
+# erpnext builds the invoice dict with no hook of any kind, so the controller
+# is subclassed to carry the PO number and remark across. See
+# yht_custom/opening_invoice.py for why a doc_event cannot do this.
+override_doctype_class = {
+	"Opening Invoice Creation Tool": "yht_custom.opening_invoice.YHTOpeningInvoiceCreationTool",
+}
+
+
 # -------------------------------------------------------------------- fixtures
 # A fixture needs BOTH the entry here AND the record itself — a name missing from
 # this filter list is silently not exported.
@@ -261,6 +270,8 @@ fixtures = [
 					"Journal Entry-custom_fiscal_year",
 					"Sales Order-custom_fiscal_year",
 					"Quotation-custom_fiscal_year",
+					"Opening Invoice Creation Tool Item-custom_po_no",
+					"Opening Invoice Creation Tool Item-custom_remarks",
 				],
 			]
 		],

@@ -189,6 +189,7 @@ PROVISIONING_STEPS = (
 	"ensure_branch_user_role",
 	"ensure_branch_custom_fields",
 	"ensure_fiscal_year_custom_fields",
+	"ensure_opening_invoice_custom_fields",
 	"preserve_standard_docperms",
 	"setup_branch_user_permissions",
 	"ensure_module_profile",
@@ -458,6 +459,44 @@ def ensure_fiscal_year_custom_fields():
 
 	create_custom_fields(
 		{doctype: _fiscal_year_field(date_field) for doctype, date_field in DATE_FIELD.items()},
+		ignore_validate=True,
+	)
+
+
+#: The Opening Invoice Creation Tool imports a customer PO number and a remark
+#: alongside each opening balance. `in_list_view` puts them straight in the grid;
+#: `yht_custom/opening_invoice.py` is what actually carries them onto the invoice.
+OPENING_INVOICE_ITEM_CUSTOM_FIELDS = [
+	{
+		"fieldname": "custom_po_no",
+		"label": "Customer's Purchase Order",
+		"fieldtype": "Data",
+		"insert_after": "invoice_number",
+		"in_list_view": 1,
+		"description": "Copied to the invoice: <code>po_no</code> on a Sales Invoice, <code>bill_no</code> on a Purchase Invoice.",
+	},
+	{
+		"fieldname": "custom_remarks",
+		"label": "Remarks",
+		"fieldtype": "Small Text",
+		"insert_after": "custom_po_no",
+		"in_list_view": 1,
+		"description": "Copied to the invoice's <code>remarks</code>.",
+	},
+]
+
+
+def ensure_opening_invoice_custom_fields():
+	"""Grid columns for the Opening Invoice Creation Tool's child table.
+
+	The controller override in `yht_custom.opening_invoice` reads these two
+	fieldnames, so the field definitions and the mapping have to stay in step - a
+	test asserts they do.
+	"""
+	from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
+
+	create_custom_fields(
+		{"Opening Invoice Creation Tool Item": OPENING_INVOICE_ITEM_CUSTOM_FIELDS},
 		ignore_validate=True,
 	)
 
