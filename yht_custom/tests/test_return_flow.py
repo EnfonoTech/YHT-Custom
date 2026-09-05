@@ -762,3 +762,128 @@ class TestCreditNoteSettlesOriginal(FrappeTestCase):
 
 		source = inspect.getsource(accounts_controller.AccountsController)
 		self.assertIn("self.update_outstanding_for_self = 1", source)
+
+
+class TestSoleBranchSeriesFallback(FrappeTestCase):
+	"""🔴 THE FEATURE THAT HAD NEVER ONCE FIRED IN PRODUCTION.
+
+	`set_naming_series_from_branch` was correct and fully tested, and for its whole
+	life it returned at the first line on every real document. Measured on Khobar
+	2026-09-05: of the four users on the branch, three had raised ZERO invoices —
+	two of them near-miss addresses, `ameen@` beside the real `ameenm@` and
+	`abdullahmtp@` beside `abdullamanakat@` — and the fourth holds five bypass
+	roles. The two accounts that raise nearly every invoice, 1,494 and 327 of them,
+	were on no branch at all.
+
+	Nothing failed, which is why it survived: the form's pre-filled series was the
+	right one for a plain invoice. Only a RETURN was wrong, and only once the
+	default became the invoice series — at which point the next credit note would
+	have taken an invoice number.
+
+	So these tests assert resolution for the user the branch table does NOT list,
+	which is the case the older tests could not reach.
+	"""
+
+	def _forget_caches(self):
+		for attr in ("yht_sole_branch_cache", "yht_branch_config_cache"):
+			if hasattr(frappe.local, attr):
+				delattr(frappe.local, attr)
+
+	def setUp(self):
+		self._forget_caches()
+
+	def tearDown(self):
+		self._forget_caches()
+		frappe.db.rollback()
+
+	def _sole_branch_or_skip(self):
+		names = frappe.get_all("Branch", pluck="name", limit=2)
+		if len(names) != 1:
+			self.skipTest("not a single-branch site")
+		return names[0]
+
+	def test_a_bypass_user_still_gets_the_return_series(self):
+		"""The whole point: numbering is a property of the document, not the user."""
+		from yht_custom import branch_defaults
+
+		branch = self._sole_branch_or_skip()
+		credit = frappe.db.get_value(
+			"Branch Naming Series",
+			{"parent": branch, "parent_doctype": "Sales Invoice", "use_for_return": 1},
+			"naming_series",
+		)
+		if not credit:
+			self.skipTest("branch configures no sales return series")
+
+		# Administrator is the strongest bypass there is, and is on no branch.
+		self.assertTrue(branch_defaults._is_bypass("Administrator"))
+		self.assertIsNone(branch_defaults._user_branch_config("Administrator"))
+		self.assertEqual(branch_defaults.configured_series("Sales Invoice", is_return=1), credit)
+
+	def test_the_hook_flips_a_return_off_the_invoice_series(self):
+		"""Asserts the HOOK'S OUTPUT — the older test could only reach a mapped user."""
+		from yht_custom import branch_defaults
+
+		branch = self._sole_branch_or_skip()
+		plain, credit = (
+			frappe.db.get_value(
+				"Branch Naming Series",
+				{"parent": branch, "parent_doctype": "Sales Invoice", "use_for_return": flag},
+				"naming_series",
+			)
+			for flag in (0, 1)
+		)
+		if not (plain and credit):
+			self.skipTest("branch configures no sales invoice/return series pair")
+
+		ret = frappe.new_doc("Sales Invoice")
+		ret.naming_series = plain  # exactly what the desk pre-fills
+		ret.is_return = 1
+		branch_defaults.set_naming_series_from_branch(ret)
+		self.assertEqual(ret.naming_series, credit, "a return kept the invoice series")
+
+		inv = frappe.new_doc("Sales Invoice")
+		inv.naming_series = plain
+		inv.is_return = 0
+		branch_defaults.set_naming_series_from_branch(inv)
+		self.assertEqual(inv.naming_series, plain, "a plain invoice was moved")
+
+	def test_a_deliberate_in_prefix_pick_is_still_honoured(self):
+		"""KSEPI- and KSXI- stay reachable — the prefix guard outranks the fallback."""
+		from yht_custom import branch_defaults
+
+		branch = self._sole_branch_or_skip()
+		prefix = frappe.db.get_value("Branch", branch, "custom_doc_prefix")
+		if not prefix:
+			self.skipTest("branch has no document prefix")
+
+		chosen = f"{prefix}EPI-.YY.-.####"
+		pi = frappe.new_doc("Purchase Invoice")
+		pi.naming_series = chosen
+		pi.is_return = 0
+		branch_defaults.set_naming_series_from_branch(pi)
+		self.assertEqual(pi.naming_series, chosen)
+
+	def test_a_second_branch_switches_the_fallback_off(self):
+		"""Two counters means a real choice, and the code must refuse to guess it."""
+		from yht_custom import branch_defaults
+
+		self._sole_branch_or_skip()
+		second = "_Test YHT Sole Branch Guard"
+		if not frappe.db.exists("Branch", second):
+			frappe.get_doc({"doctype": "Branch", "branch": second}).insert(ignore_permissions=True)
+		self._forget_caches()
+
+		self.assertIsNone(branch_defaults._sole_branch())
+		self.assertEqual(branch_defaults._branch_series_rows("Sales Invoice"), ("", []))
+		self.assertIsNone(branch_defaults.configured_series("Sales Invoice", is_return=1))
+
+	def test_the_lookup_is_cached_per_request(self):
+		"""It runs on before_insert for every doctype — it must not re-query per document."""
+		from yht_custom import branch_defaults
+
+		self._sole_branch_or_skip()
+		first = branch_defaults._sole_branch()
+		self.assertEqual(frappe.local.yht_sole_branch_cache, first)
+		frappe.local.yht_sole_branch_cache = "sentinel"
+		self.assertEqual(branch_defaults._sole_branch(), "sentinel")

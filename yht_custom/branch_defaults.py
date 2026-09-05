@@ -41,6 +41,20 @@ def _is_bypass(user=None) -> bool:
 	return bool(set(frappe.get_roles(user)) & set(BYPASS_ROLES))
 
 
+def _sole_branch():
+	"""The site's only ``Branch``, or ``None`` when there is more than one.
+
+	Cached per request. ``Ellipsis`` marks "not looked up yet", so a genuine
+	``None`` is not re-queried once per document.
+	"""
+	cached = getattr(frappe.local, "yht_sole_branch_cache", Ellipsis)
+	if cached is Ellipsis:
+		names = frappe.get_all("Branch", pluck="name", limit=2)
+		cached = names[0] if len(names) == 1 else None
+		frappe.local.yht_sole_branch_cache = cached
+	return cached
+
+
 def _user_branch_config(user=None):
 	"""The user's Branch Configuration name, or None. Cached per request."""
 	user = user or frappe.session.user
@@ -86,19 +100,47 @@ def apply_branch_defaults(doc, method=None):
 
 
 def _branch_series_rows(doctype: str):
-	"""``(prefix, rows)`` for the calling user's branch, or ``("", [])``.
+	"""``(prefix, rows)`` for the branch whose counters this document belongs to.
 
-	``("", [])`` means "leave the form's choice alone": a bypass role, no branch
-	configuration, or no series configured for this doctype.
+	Resolution order:
+
+	1. the caller's Branch Configuration, unless they hold a bypass role
+	2. failing that, the site's ONLY branch
+
+	``("", [])`` means "leave the form's choice alone": several branches exist and
+	this user is not pinned to one, or the branch configures no series for this
+	doctype.
+
+	🔴 WHY THE SOLE-BRANCH FALLBACK EXISTS
+
+	The series is a property of the DOCUMENT, not a permission. A credit note must
+	not consume the invoice counter no matter who keys it in — that is a numbering
+	fault, not an access-control decision, and the bypass roles were never meant to
+	license one.
+
+	Measured on Khobar 2026-09-05, every resolution path was dead and the feature
+	had never once fired in production: of the four users listed on the branch,
+	three had raised ZERO invoices (two are near-miss addresses — ``ameen@`` beside
+	the real ``ameenm@``, ``abdullahmtp@`` beside ``abdullamanakat@``) and the
+	fourth holds five bypass roles. Meanwhile the two accounts that raise nearly
+	every invoice, 1,494 and 327 of them, appear on no branch at all. So returns
+	kept whatever the form pre-filled, and once that default became the invoice
+	series a return was one save away from taking an invoice number.
+
+	A one-branch site has no other counter to protect, which is the entire premise
+	of the branch check — so there is nothing left for it to decide. The moment a
+	second ``Branch`` exists the fallback switches itself off and Branch
+	Configuration is authoritative again. The prefix guard in
+	``set_naming_series_from_branch`` still honours a deliberate in-prefix pick,
+	which is what keeps ``KSEPI-`` and ``KSXI-`` reachable.
 	"""
-	if _is_bypass():
-		return "", []
+	branch = None
+	if not _is_bypass():
+		config = _user_branch_config()
+		if config:
+			branch = frappe.db.get_value("Branch Configuration", config, "branch")
 
-	config = _user_branch_config()
-	if not config:
-		return "", []
-
-	branch = frappe.db.get_value("Branch Configuration", config, "branch")
+	branch = branch or _sole_branch()
 	if not branch:
 		return "", []
 
@@ -135,7 +177,8 @@ def set_naming_series_from_branch(doc, method=None):
 	  nothing to change — or it starts with this branch's prefix and is not the
 	  branch's series for the OTHER return flavour, i.e. the operator picked it
 	  on purpose
-	* the user holds a bypass role
+	* the user holds a bypass role AND the site has more than one branch, so
+	  ``_branch_series_rows`` declines to guess which counter they meant
 
 	That second clause is load-bearing and was missing until 2026-08-26. A plain
 	``startswith(prefix)`` guard made the return series unreachable: the form
