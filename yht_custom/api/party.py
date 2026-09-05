@@ -236,7 +236,7 @@ def default_territory() -> str | None:
 	return leaves[0] if leaves else None
 
 
-def _make_address(doctype, party, party_name, values):
+def _make_address(doctype, party, party_name, values, address_type="Billing"):
 	"""Skip silently when nothing was filled in — an empty address is not an error.
 
 	`saudi_address.before_insert` turns a Short Code into the address title, and
@@ -250,7 +250,7 @@ def _make_address(doctype, party, party_name, values):
 	doc = frappe.new_doc("Address")
 	doc.update(filled)
 	doc.address_title = party_name
-	doc.address_type = "Billing"
+	doc.address_type = address_type or "Billing"
 	doc.country = filled.get("country") or _default_country()
 	doc.is_primary_address = 1
 	doc.append("links", {"link_doctype": doctype, "link_name": party})

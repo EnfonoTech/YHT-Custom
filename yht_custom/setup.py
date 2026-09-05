@@ -190,6 +190,7 @@ PROVISIONING_STEPS = (
 	"ensure_branch_custom_fields",
 	"ensure_fiscal_year_custom_fields",
 	"ensure_opening_invoice_custom_fields",
+	"ensure_party_vat_override_custom_fields",
 	"preserve_standard_docperms",
 	"setup_branch_user_permissions",
 	"ensure_module_profile",
@@ -213,6 +214,48 @@ PROVISIONING_STEPS = (
 	"setup_hr",
 )
 
+
+#: The manager override on a repeated VAT registration number. A duplicate is
+#: sometimes legitimate — a branch of a group billing under one registration — so
+#: the rule is "not without a name against it" rather than "never". The reason is
+#: mandatory when the box is ticked, which is what makes the override auditable.
+VAT_OVERRIDE_CUSTOM_FIELDS = [
+	{
+		"fieldname": "custom_allow_duplicate_vat",
+		"label": "Allow Duplicate VAT",
+		"fieldtype": "Check",
+		"default": "0",
+		"insert_after": "tax_id",
+		"description": "Manager override. Requires a reason, and a Sales Manager role.",
+	},
+	{
+		"fieldname": "custom_duplicate_vat_reason",
+		"label": "Duplicate VAT Reason",
+		"fieldtype": "Small Text",
+		"insert_after": "custom_allow_duplicate_vat",
+		"depends_on": "eval:doc.custom_allow_duplicate_vat",
+		"mandatory_depends_on": "eval:doc.custom_allow_duplicate_vat",
+	},
+]
+
+
+def ensure_party_vat_override_custom_fields():
+	"""Two fields per party, so the duplicate-VAT override leaves a record.
+
+	`api.customer.enforce_vat_duplicate_rule` and its supplier twin read these on
+	`validate`, so the rules hold whether the party was made through the dialog or
+	typed straight into the form. Without the fields the hook reads None and every
+	duplicate is silently refused with no way to allow one.
+	"""
+	from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
+
+	create_custom_fields(
+		{
+			"Customer": VAT_OVERRIDE_CUSTOM_FIELDS,
+			"Supplier": VAT_OVERRIDE_CUSTOM_FIELDS,
+		},
+		ignore_validate=True,
+	)
 
 def after_migrate():
 	"""Entry point wired from hooks.py.

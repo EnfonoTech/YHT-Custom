@@ -19,7 +19,6 @@ app_include_js = [
 	"/assets/yht_custom/js/expense_invoice.js?v=5",
 	"/assets/yht_custom/js/price_assist.js?v=6",
 	"/assets/yht_custom/js/payment_assist.js?v=3",
-	"/assets/yht_custom/js/simple_party.js?v=3",
 	"/assets/yht_custom/js/rate_lock.js?v=2",
 ]
 app_include_css = "/assets/yht_custom/css/yht_custom.css?v=7"
@@ -32,9 +31,14 @@ doctype_js = {
 	# Print Arabic with LH on Quotation). ONE file under four doctypes — it guards
 	# its own registration so the handlers cannot stack up across a session.
 	"Delivery Note": "public/js/katc_print_buttons.js",
-	"Sales Invoice": "public/js/katc_print_buttons.js",
 	"Sales Order": "public/js/katc_print_buttons.js",
-	"Quotation": "public/js/katc_print_buttons.js",
+	# Create New Customer / Supplier — the button sits above the party field on the
+	# forms where an operator actually meets a new party. Ported from rmax_custom.
+	"Sales Invoice": ["public/js/katc_print_buttons.js", "public/js/create_customer.js"],
+	"Quotation": ["public/js/katc_print_buttons.js", "public/js/create_customer.js"],
+	"Purchase Invoice": "public/js/create_supplier.js",
+	"Purchase Order": "public/js/create_supplier.js",
+	"Purchase Receipt": "public/js/create_supplier.js",
 }
 doctype_list_js = {}
 
@@ -98,6 +102,10 @@ doc_events = {
 	# Item code generation — before_insert, because frappe runs it BEFORE
 	# set_new_name() and ERPNext's Item.autoname ends with name = item_code.
 	"Item": {"before_insert": "yht_custom.item_naming.set_item_code_from_group"},
+	# The duplicate-VAT rule is enforced on validate as well as in the dialog —
+	# otherwise the Customer form itself is the way around it.
+	"Customer": {"validate": "yht_custom.api.customer.enforce_vat_duplicate_rule"},
+	"Supplier": {"validate": "yht_custom.api.supplier.enforce_vat_duplicate_rule"},
 }
 
 # --- flow policy (Step 5) -------------------------------------------------
