@@ -34,7 +34,11 @@ doctype_js = {
 	"Sales Order": "public/js/katc_print_buttons.js",
 	# Create New Customer / Supplier — the button sits above the party field on the
 	# forms where an operator actually meets a new party. Ported from rmax_custom.
-	"Sales Invoice": ["public/js/katc_print_buttons.js", "public/js/create_customer.js"],
+	"Sales Invoice": [
+		"public/js/katc_print_buttons.js",
+		"public/js/create_customer.js",
+		"public/js/sales_return_delivery.js",
+	],
 	"Quotation": ["public/js/katc_print_buttons.js", "public/js/create_customer.js"],
 	"Purchase Invoice": "public/js/create_supplier.js",
 	"Purchase Order": "public/js/create_supplier.js",

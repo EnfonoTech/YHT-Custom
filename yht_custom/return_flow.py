@@ -337,6 +337,26 @@ def enforce_return_stock_route(doc, method=None):
 	if _came_back_on_a_stock_return(doc):
 		return
 
+	# The credit-note-first route, for a branch that has opted into it.
+	#
+	# The rule above is a client POLICY — "a credit note means goods physically coming
+	# back" — not a correctness requirement, and some branches work the other way round:
+	# credit the invoice, then bring the stock back on a delivery return raised from the
+	# credit note. `update_stock` is already 0 by this point, so the note itself still
+	# moves nothing; `yht_custom.delivery_return` is what moves it, and that refuses to
+	# run unless every row traces back to one delivery note, which is the same link
+	# ERPNext's over-return guard counts against.
+	#
+	# Sales side only. The purchase side has no equivalent entry point, and the message
+	# it would otherwise get is an instruction a buyer cannot follow.
+	if doc.doctype == "Sales Invoice":
+		from yht_custom.yht_custom.doctype.yht_return_settings.yht_return_settings import (
+			allow_delivery_note_from_sales_return,
+		)
+
+		if allow_delivery_note_from_sales_return():
+			return
+
 	title, message = ROUTE_MESSAGE[doc.doctype]
 	frappe.throw(_(message), title=_(title))
 

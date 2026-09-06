@@ -1,0 +1,62 @@
+{
+ "actions": [],
+ "creation": "2026-09-06 12:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "section_delivery_return",
+  "delivery_return_help",
+  "allow_delivery_note_from_sales_return"
+ ],
+ "fields": [
+  {
+   "fieldname": "section_delivery_return",
+   "fieldtype": "Section Break",
+   "label": "Delivery Return From a Credit Note"
+  },
+  {
+   "fieldname": "delivery_return_help",
+   "fieldtype": "HTML",
+   "options": "<p>The standing rule is that a credit note means goods physically coming back, so a return of delivered goods is raised on the <b>Delivery Note</b> (<i>Create &gt; Sales Return</i>, tick <i>Issue Credit Note</i>).</p><p>Tick the box below to also allow the reverse order: raise the credit note against the invoice first, then use <b>Create &gt; Delivery Note</b> on that credit note to bring the stock back. The delivery return is linked to both the credit note and the original delivery note.</p><p><b>Leave it off unless the branch actually works that way.</b> With it on, a credit note for delivered goods can be submitted before any stock has come back.</p>"
+  },
+  {
+   "default": "0",
+   "description": "Adds Create &gt; Delivery Note to a submitted sales return, and allows that credit note to be raised before the goods come back.",
+   "fieldname": "allow_delivery_note_from_sales_return",
+   "fieldtype": "Check",
+   "label": "Allow Delivery Note From a Sales Return"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-09-06 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Yht Custom",
+ "name": "YHT Return Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Accounts Manager"
+  },
+  {
+   "read": 1,
+   "role": "Sales Manager"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
