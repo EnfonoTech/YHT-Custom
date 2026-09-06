@@ -200,6 +200,7 @@ PROVISIONING_STEPS = (
 	"setup_branch_letterheads",
 	"setup_katc_letterhead",
 	"setup_default_print_formats",
+	"setup_sales_invoice_qr",
 	"setup_form_layout",
 	"setup_credit_note_settles_original",
 	"apply_field_moves",
@@ -256,6 +257,52 @@ def ensure_party_vat_override_custom_fields():
 		},
 		ignore_validate=True,
 	)
+
+#: Sales Invoice formats that must carry the ZATCA QR, and where each one lives.
+#:
+#: `Sales Invoice Print` is erpnext's. `printview.get_print_format` (printview.py:429)
+#: resolves the template from the FORMAT'S OWN MODULE — so the file that wins is
+#: whichever app the DB record's `module` points at. yht_custom ships its own copy
+#: under module "Yht Custom" and syncs AFTER erpnext, so ours is the one that lands.
+#: That is why the QR survives a migrate here while editing erpnext's file would not.
+QR_SALES_INVOICE_FORMATS = ("KATC Tax Invoice", "Sales Invoice Print")
+
+
+def setup_sales_invoice_qr():
+	"""Every Sales Invoice format we own must render the ZATCA QR.
+
+	The QR itself is `print_helpers.yht_zatca_qr`, which returns the strongest code
+	that exists for the invoice: the one it was CLEARED with when it carries a stored
+	`ksa_einv_qr` (1,736 invoices here arrived that way), then a live Phase 2 QR, then
+	a computed Phase 1 one.
+
+	This step does not edit anything — it re-points `Sales Invoice Print` at our copy
+	if a migrate handed it back to erpnext, and complains loudly if either format has
+	lost its QR block. Silence is the failure mode worth guarding against: a Saudi
+	invoice printed without its QR is not a compliant document, and nothing about the
+	page says so.
+	"""
+	for name in QR_SALES_INVOICE_FORMATS:
+		if not frappe.db.exists("Print Format", name):
+			continue
+
+		if name == "Sales Invoice Print":
+			module = frappe.db.get_value("Print Format", name, "module")
+			if module != "Yht Custom":
+				frappe.db.set_value("Print Format", name, "module", "Yht Custom", update_modified=False)
+
+		html = frappe.db.get_value("Print Format", name, "html") or ""
+		if name == "Sales Invoice Print":
+			continue  # ours is file-backed; the module pointer above is what matters
+		if "yht_zatca_qr" not in html:
+			frappe.log_error(
+				message=(
+					"%s no longer calls yht_zatca_qr, so invoices printed with it carry no "
+					"ZATCA QR." % name
+				),
+				title="yht_custom: Sales Invoice print format lost its ZATCA QR",
+			)
+
 
 def after_migrate():
 	"""Entry point wired from hooks.py.
