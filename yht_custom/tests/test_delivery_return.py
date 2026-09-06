@@ -326,7 +326,15 @@ class TestExhaustedLines(FrappeTestCase):
 			delivery_return.make_delivery_note_from_sales_return(name)
 
 	def test_it_survives_save_and_submit(self):
-		"""The mapper only builds the document — validate and the ledger run on save."""
+		"""The mapper only builds the document — validate and the ledger run on save.
+
+		⚠️ THIS TEST CLEANS UP AFTER ITSELF, and has to.
+
+		`frappe.db.rollback()` is not enough here: submitting a stock document writes
+		Stock Ledger Entries through a path that commits, so four delivery notes from
+		earlier runs were found sitting on yht-test hours later. Cancel and delete
+		explicitly; the rollback in tearDown stays as a backstop for everything else.
+		"""
 		allowed = _actionable()
 		if not allowed:
 			self.skipTest("no actionable credit note on this site")
@@ -334,13 +342,57 @@ class TestExhaustedLines(FrappeTestCase):
 		dn = delivery_return.make_delivery_note_from_sales_return(allowed[0])
 		dn.insert(ignore_permissions=True)
 		dn.submit()
+		self.addCleanup(self._remove, dn.name)
 
 		self.assertEqual(dn.docstatus, 1)
+		# `is_cancelled` matters: a rolled-back test reuses the same series number, so
+		# the cancelled entries of an earlier document answer to this voucher_no too.
 		entries = frappe.get_all(
-			"Stock Ledger Entry", filters={"voucher_no": dn.name}, fields=["actual_qty"]
+			"Stock Ledger Entry",
+			filters={"voucher_no": dn.name, "is_cancelled": 0},
+			fields=["actual_qty"],
 		)
 		self.assertTrue(entries, "the delivery return moved no stock")
 		self.assertTrue(
 			all(e.actual_qty > 0 for e in entries),
 			"a delivery RETURN must bring stock back IN, not send it out",
 		)
+
+		# The credit note must now name THIS return, or it never reads as billed.
+		dn.reload()
+		self.assertEqual(dn.per_billed, 100.0, "the delivery return was left unbilled")
+		self.assertEqual(dn.status, "Completed")
+
+	@staticmethod
+	def _remove(name):
+		if not frappe.db.exists("Delivery Note", name):
+			return
+		doc = frappe.get_doc("Delivery Note", name)
+		if doc.docstatus == 1:
+			doc.flags.ignore_permissions = True
+			doc.cancel()
+		frappe.delete_doc("Delivery Note", name, force=1, ignore_permissions=True)
+		frappe.db.commit()
+
+	def test_a_credit_note_that_already_came_back_is_refused(self):
+		"""🔴 `against_sales_invoice` cannot see a return made the site's usual way.
+
+		Delivery Note ▸ Sales Return ▸ Issue Credit Note produces a delivery return
+		carrying NO `against_sales_invoice`, so the duplicate check never saw it and
+		the button was offered for stock that had already come back — measured on
+		KSSR-26-0035, whose goods returned on KSDR-26-0042 on 2026-08-31.
+		"""
+		names = [r.name for r in frappe.get_all(
+			"Sales Invoice", filters={"is_return": 1, "docstatus": 1},
+			fields=["name"], limit_page_length=200)]
+		spent = [n for n in names
+		         if delivery_return._already_came_back(frappe.get_doc("Sales Invoice", n))]
+		if not spent:
+			self.skipTest("no credit note on this site has already come back")
+
+		state = delivery_return.can_make_delivery_note(spent[0])
+		self.assertFalse(state["allowed"])
+		self.assertIn("already came back", state["reason"])
+		with self.assertRaises(frappe.ValidationError):
+			delivery_return.make_delivery_note_from_sales_return(spent[0])
+

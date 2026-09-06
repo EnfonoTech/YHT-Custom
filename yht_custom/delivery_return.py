@@ -89,6 +89,33 @@ def _already_returned(dn_rows):
 	return {r.dn_detail: -flt(r.qty) for r in rows}
 
 
+def _already_came_back(credit_note):
+	"""The delivery return this credit note ALREADY has, if any.
+
+	🔴 THE GUARD THAT `against_sales_invoice` CANNOT PROVIDE.
+
+	`can_make_delivery_note` only knew about returns THIS feature had made. A credit
+	note raised the site's usual way — Delivery Note ▸ Sales Return ▸ Issue Credit
+	Note — already has its delivery return, and that return carries no
+	`against_sales_invoice` because nothing mapped it from an invoice. Measured on
+	yht-test: KSSR-26-0035 was offered the button although KSDR-26-0042 had brought
+	the same stock back on 2026-08-31.
+
+	The link that DOES exist in both routes is on the credit note itself: its rows
+	name the delivery note the goods came back on. `return_flow` already asks exactly
+	this question, so ask it there rather than writing a second version.
+	"""
+	from yht_custom.return_flow import _came_back_on_a_stock_return
+
+	if not _came_back_on_a_stock_return(credit_note):
+		return None
+	for row in credit_note.get("items") or []:
+		note = cstr(row.get("delivery_note"))
+		if note:
+			return note
+	return None
+
+
 def _exhausted(mapping):
 	"""Rows whose delivered quantity has already been returned in full.
 
@@ -133,14 +160,17 @@ def can_make_delivery_note(source_name: str):
 		limit_page_length=1,
 	)
 	spent = _exhausted(mapping) if mapping else []
+	came_back = _already_came_back(doc)
 	return {
 		"allowed": bool(mapping)
 		and not unresolved
 		and len(notes) == 1
 		and not existing
-		and not spent,
+		and not spent
+		and not came_back,
 		"reason": (
-			"already created" if existing
+			"the stock already came back on %s" % came_back if came_back
+			else "already created" if existing
 			else "no row links back to a delivery note" if not mapping
 			else "rows %s do not link back to a delivery note" % ", ".join(str(i) for i in unresolved)
 			if unresolved
@@ -149,7 +179,7 @@ def can_make_delivery_note(source_name: str):
 			else ""
 		),
 		"delivery_note": list(notes)[0] if len(notes) == 1 else None,
-		"existing": existing[0] if existing else None,
+		"existing": existing[0] if existing else came_back,
 	}
 
 
@@ -200,6 +230,16 @@ def make_delivery_note_from_sales_return(source_name: str, target_doc=None):
 
 	original_note = list(notes)[0]
 
+	came_back = _already_came_back(credit_note)
+	if came_back:
+		frappe.throw(
+			_(
+				"The goods on this credit note already came back on delivery return {0}. "
+				"Raising another would return the same stock twice."
+			).format(came_back),
+			title=_("Already Returned"),
+		)
+
 	spent = _exhausted(mapping)
 	if spent:
 		idx = sorted(
@@ -245,6 +285,10 @@ def make_delivery_note_from_sales_return(source_name: str, target_doc=None):
 		# `dn_detail` is what ERPNext's over-return guard counts against — without it a
 		# second delivery return of the same line saves with only a message.
 		target_row.dn_detail = dn_row
+		# Belt and braces: get_mapped_doc copies same-named fields, so clear these
+		# even though the field_map no longer asks for them.
+		target_row.so_detail = None
+		target_row.against_sales_order = None
 		target_row.against_sales_invoice = source_parent.name
 		target_row.si_detail = source_row.name
 		if warehouse:
@@ -260,12 +304,25 @@ def make_delivery_note_from_sales_return(source_name: str, target_doc=None):
 			},
 			"Sales Invoice Item": {
 				"doctype": "Delivery Note Item",
+				# 🔴 `so_detail` IS DELIBERATELY NOT CARRIED OVER.
+				#
+				# `DeliveryNote.update_billing_status` (delivery_note.py:743) reads
+				#   if d.si_detail and not d.so_detail:  billed_amt = d.amount
+				#   elif d.so_detail:                    ...allocate across the sales order
+				# so a row carrying both takes the sales-order path, which spreads the
+				# billed amount over the delivery notes for that order and leaves this
+				# return on zero. Measured on yht-test, same credit note, same run:
+				# with so_detail the return is `Return` / per_billed 0; without it,
+				# `Completed` / per_billed 100 / billed_amt -200.
+				#
+				# The credit note bills this return directly, and `si_detail` says so
+				# exactly — which is the better of the two links. The site's existing
+				# route reaches `Completed` the other way round, with si_detail empty
+				# and so_detail set; it cannot have both either.
 				"field_map": {
 					"serial_no": "serial_no",
 					"batch_no": "batch_no",
 					"cost_center": "cost_center",
-					"sales_order": "against_sales_order",
-					"so_detail": "so_detail",
 				},
 				"postprocess": update_item,
 				"condition": lambda row: row.name in mapping,
@@ -276,3 +333,110 @@ def make_delivery_note_from_sales_return(source_name: str, target_doc=None):
 		postprocess,
 	)
 	return doc
+
+
+def _credit_note_rows_for(doc):
+	"""``{credit note row: (delivery return row, credit note)}`` for a return we built.
+
+	Provenance is the pair the mapper wrote: `against_sales_invoice` naming a
+	submitted sales return, and `si_detail` naming the row on it.
+	"""
+	out = {}
+	for row in doc.get("items") or []:
+		invoice = cstr(row.get("against_sales_invoice"))
+		si_row = cstr(row.get("si_detail"))
+		if invoice and si_row:
+			out[si_row] = (row.name, invoice)
+	return out
+
+
+def link_credit_note_to_delivery_return(doc, method=None):
+	"""`Delivery Note.on_submit` — point the credit note at THIS return.
+
+	🔴 WITHOUT THIS THE RETURN NEVER READS AS BILLED.
+
+	`DeliveryNote.update_billing_status` (delivery_note.py:740) works from the
+	INVOICE side: it credits whichever delivery note the invoice row names in
+	`delivery_note` / `dn_detail`. In the route this site already uses, the credit
+	note is mapped FROM the delivery return, so those fields name the return and it
+	lands on `Completed` with `per_billed = 100` — measured on KSDR-26-0003/5/6.
+
+	Coming the other way the credit note already exists, and its rows point at the
+	ORIGINAL delivery note, because that is how `delivery_return` traced the chain.
+	So the billing was attributed to the original — which netted its `per_billed` to
+	zero against the forward invoice — and the return itself sat on `Return` with
+	nothing billed against it.
+
+	Repointing those two fields puts the pair in exactly the shape the existing
+	route produces. It also makes the credit note satisfy
+	`_came_back_on_a_stock_return` after the fact: its rows now name a delivery note
+	that IS a return, which is the very condition the 2026-08-26 policy asks for.
+
+	`delivery_note` and `dn_detail` are not `allow_on_submit`, and the credit note is
+	submitted, so this writes through `db.set_value` rather than `save()` — saving a
+	submitted parent to change a child row is how you get "Not allowed to change
+	after submission".
+	"""
+	if not cint(doc.get("is_return")):
+		return
+
+	mapping = _credit_note_rows_for(doc)
+	if not mapping:
+		return
+
+	previous = set()
+	for si_row, (dn_row, invoice) in mapping.items():
+		was = frappe.db.get_value("Sales Invoice Item", si_row, "delivery_note")
+		if was and was != doc.name:
+			previous.add(was)
+		frappe.db.set_value(
+			"Sales Invoice Item", si_row,
+			{"delivery_note": doc.name, "dn_detail": dn_row},
+			update_modified=False,
+		)
+
+	doc.update_billing_status()
+	# The original delivery note just lost the credit that was wrongly attributed to
+	# it, so its own percentage has to be recomputed too.
+	for name in previous:
+		if frappe.db.exists("Delivery Note", name):
+			frappe.get_doc("Delivery Note", name).update_billing_percentage()
+
+
+def unlink_credit_note_from_delivery_return(doc, method=None):
+	"""`Delivery Note.on_cancel` — give the credit note its original links back.
+
+	Leaving the rows pointing at a cancelled delivery note would keep the billing
+	attributed to a document that no longer exists as far as the ledger is concerned,
+	and would block a second attempt: the mapper refuses when a delivery return is
+	already linked.
+	"""
+	if not cint(doc.get("is_return")):
+		return
+
+	mapping = _credit_note_rows_for(doc)
+	if not mapping:
+		return
+
+	invoices = {invoice for _row, invoice in mapping.values()}
+	restored = set()
+	for invoice in invoices:
+		if not frappe.db.exists("Sales Invoice", invoice):
+			continue
+		credit_note = frappe.get_doc("Sales Invoice", invoice)
+		_notes, original, _unresolved = _resolve_rows(credit_note)
+		for si_row, (dn_row, _wh) in original.items():
+			if si_row not in mapping:
+				continue
+			parent = frappe.db.get_value("Delivery Note Item", dn_row, "parent")
+			frappe.db.set_value(
+				"Sales Invoice Item", si_row,
+				{"delivery_note": parent, "dn_detail": dn_row},
+				update_modified=False,
+			)
+			if parent:
+				restored.add(parent)
+
+	for name in restored:
+		if frappe.db.exists("Delivery Note", name):
+			frappe.get_doc("Delivery Note", name).update_billing_percentage()

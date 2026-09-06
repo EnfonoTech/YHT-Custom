@@ -231,8 +231,21 @@ _FISCAL_YEAR_EVENTS = {
 	)
 }
 
+# --- delivery return raised from a credit note ---------------------------
+# 🔴 MERGED, NOT DECLARED IN THE LITERAL ABOVE. `doc_events.update({...})` for the
+# branch defaults replaces the whole "Delivery Note" key, so an entry written up
+# there is silently dropped — the handlers simply never ran, and the only symptom
+# was a delivery return that stayed unbilled.
+_DELIVERY_RETURN_EVENTS = {
+	"Delivery Note": {
+		"on_submit": "yht_custom.delivery_return.link_credit_note_to_delivery_return",
+		"on_cancel": "yht_custom.delivery_return.unlink_credit_note_from_delivery_return",
+	},
+}
+
 doc_events = _merge_events(doc_events, _DISCOUNT_EVENTS)
 doc_events = _merge_events(doc_events, _FISCAL_YEAR_EVENTS)
+doc_events = _merge_events(doc_events, _DELIVERY_RETURN_EVENTS)
 
 # --- opening invoice tool ----------------------------------------------
 # erpnext builds the invoice dict with no hook of any kind, so the controller
