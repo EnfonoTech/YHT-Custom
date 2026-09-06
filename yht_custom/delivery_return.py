@@ -142,6 +142,93 @@ def _exhausted(mapping):
 	return spent
 
 
+def _note_of_rows(dn_rows):
+	"""``{delivery row: its delivery note}`` in one query."""
+	if not dn_rows:
+		return {}
+	return {
+		r.name: r.parent
+		for r in frappe.get_all(
+			"Delivery Note Item",
+			filters={"name": ("in", list(dn_rows))},
+			fields=["name", "parent"],
+			limit_page_length=0,
+		)
+	}
+
+
+def _existing_return_for(credit_note, delivery_note):
+	"""The delivery return this credit note already raised against THIS note, if any.
+
+	Per delivery note, not per credit note. An invoice shipped on several notes needs
+	one return each, so a return already made against the first must not stop the
+	second — which is what a credit-note-wide check did.
+	"""
+	rows = frappe.get_all(
+		"Delivery Note Item",
+		filters={"against_sales_invoice": credit_note, "docstatus": ("<", 2)},
+		fields=["parent"],
+		limit_page_length=0,
+	)
+	for r in {x.parent for x in rows}:
+		if frappe.db.get_value("Delivery Note", r, "return_against") == delivery_note:
+			return r
+	return None
+
+
+@frappe.whitelist()
+def delivery_note_options(source_name: str):
+	"""One entry per delivery note behind this credit note, with what can be done.
+
+	🔴 WHY THIS EXISTS.
+
+	An invoice delivered in several shipments produces a credit note whose lines
+	trace back to several delivery notes, and `return_against` is a single link — so
+	one return cannot reverse them all. The old code simply refused, and told the
+	operator to raise them by hand: on khobhar that is 11 credit notes and **97**
+	delivery returns to type, which nobody was going to do.
+
+	So the span is no longer a refusal, it is a list. Each note gets its own return,
+	each with its own `return_against`, which is exactly the shape ERPNext's
+	over-return guard expects.
+	"""
+	credit_note = frappe.get_doc("Sales Invoice", source_name)
+	_notes, mapping, unresolved = _resolve_rows(credit_note)
+	if not mapping:
+		return []
+
+	parents = _note_of_rows({dn_row for dn_row, _wh in mapping.values()})
+	spent = set(_exhausted(mapping))
+	rows_by_idx = {r.name: r.idx for r in credit_note.get("items") or []}
+
+	grouped = {}
+	for credit_row, (dn_row, _wh) in mapping.items():
+		note = parents.get(dn_row)
+		if not note:
+			continue
+		bucket = grouped.setdefault(note, {"delivery_note": note, "rows": 0, "spent": 0, "idx": []})
+		bucket["rows"] += 1
+		bucket["idx"].append(rows_by_idx.get(credit_row))
+		if credit_row in spent:
+			bucket["spent"] += 1
+
+	options = []
+	for note, bucket in grouped.items():
+		existing = _existing_return_for(source_name, note)
+		bucket["existing"] = existing
+		bucket["idx"] = sorted(i for i in bucket["idx"] if i)
+		if existing:
+			bucket["status"] = "created"
+		elif bucket["spent"] == bucket["rows"]:
+			bucket["status"] = "returned in full"
+		else:
+			bucket["status"] = "pending"
+		options.append(bucket)
+
+	options.sort(key=lambda b: b["delivery_note"])
+	return options
+
+
 @frappe.whitelist()
 def can_make_delivery_note(source_name: str):
 	"""What the form needs to decide whether to offer the button — and say why not."""
@@ -153,39 +240,39 @@ def can_make_delivery_note(source_name: str):
 		return {"allowed": False, "reason": "not a submitted sales return"}
 
 	notes, mapping, unresolved = _resolve_rows(doc)
-	existing = frappe.get_all(
-		"Delivery Note Item",
-		filters={"against_sales_invoice": source_name, "docstatus": ("<", 2)},
-		pluck="parent",
-		limit_page_length=1,
-	)
-	spent = _exhausted(mapping) if mapping else []
 	came_back = _already_came_back(doc)
+	options = [] if came_back else delivery_note_options(source_name)
+	pending = [o for o in options if o["status"] == "pending"]
+	created = [o for o in options if o["status"] == "created"]
+
 	return {
-		"allowed": bool(mapping)
-		and not unresolved
-		and len(notes) == 1
-		and not existing
-		and not spent
-		and not came_back,
+		"allowed": bool(pending) and not unresolved and not came_back,
 		"reason": (
 			"the stock already came back on %s" % came_back if came_back
-			else "already created" if existing
 			else "no row links back to a delivery note" if not mapping
 			else "rows %s do not link back to a delivery note" % ", ".join(str(i) for i in unresolved)
 			if unresolved
-			else "rows span %s delivery notes" % len(notes) if len(notes) != 1
-			else "the delivered quantity has already been returned in full" if spent
+			else "already created" if created and not pending
+			else "the delivered quantity has already been returned in full" if options and not pending
 			else ""
 		),
-		"delivery_note": list(notes)[0] if len(notes) == 1 else None,
-		"existing": existing[0] if existing else came_back,
+		# One note to go at means the button can act without asking; several means
+		# the form has to let the operator pick which shipment is coming back.
+		"delivery_note": pending[0]["delivery_note"] if len(pending) == 1 else None,
+		"options": options,
+		"pending": len(pending),
+		"existing": created[0]["existing"] if created else came_back,
 	}
 
 
 @frappe.whitelist()
-def make_delivery_note_from_sales_return(source_name: str, target_doc=None):
-	"""Build the delivery return that brings the credited stock back."""
+def make_delivery_note_from_sales_return(source_name: str, delivery_note: str | None = None, target_doc=None):
+	"""Build the delivery return that brings the credited stock back.
+
+	`delivery_note` names WHICH shipment is coming back. It may be omitted when the
+	credit note traces to exactly one; when it traces to several the caller has to
+	say, because each note needs its own return and its own `return_against`.
+	"""
 	if not allow_delivery_note_from_sales_return():
 		frappe.throw(
 			_("Creating a delivery return from a credit note is switched off. Turn it on in {0}.").format(
@@ -217,18 +304,40 @@ def make_delivery_note_from_sales_return(source_name: str, target_doc=None):
 		frappe.throw(
 			_("None of these lines were delivered on a Delivery Note."), title=_("Nothing to Return")
 		)
-	if len(notes) != 1:
-		# One delivery return can only reverse one delivery note: `return_against` is a
-		# single link, and ERPNext counts the over-return against it.
+	# `frappe.model.mapper.make_mapped_doc` calls `method(source_name)` with ONE
+	# positional argument and stashes everything else in `frappe.flags.args`
+	# (mapper.py:29). So a dialog opening this through `open_mapped_doc` cannot reach
+	# the parameter directly, and the flag is where the chosen note actually arrives.
+	if not delivery_note:
+		delivery_note = (frappe.flags.args or {}).get("delivery_note")
+	delivery_note = cstr(delivery_note).strip() or None
+	if delivery_note and delivery_note not in notes:
+		frappe.throw(
+			_("{0} is not one of the delivery notes behind this credit note.").format(delivery_note)
+		)
+	if not delivery_note and len(notes) != 1:
+		# Each note needs its OWN return — `return_against` is a single link and
+		# ERPNext counts the over-return against it. So ask which one, rather than
+		# refusing outright as this did before.
 		frappe.throw(
 			_(
-				"These lines came from {0} different delivery notes. Raise one delivery "
-				"return per delivery note instead."
+				"These lines came from {0} different delivery notes. Choose which one is "
+				"coming back — one delivery return is raised per delivery note."
 			).format(len(notes)),
-			title=_("More Than One Delivery Note"),
+			title=_("Choose a Delivery Note"),
 		)
 
-	original_note = list(notes)[0]
+	original_note = delivery_note or list(notes)[0]
+
+	# Only the rows delivered on THIS note travel onto THIS return.
+	parents = _note_of_rows({dn_row for dn_row, _wh in mapping.values()})
+	mapping = {
+		credit_row: value
+		for credit_row, value in mapping.items()
+		if parents.get(value[0]) == original_note
+	}
+	if not mapping:
+		frappe.throw(_("No line on this credit note was delivered on {0}.").format(original_note))
 
 	came_back = _already_came_back(credit_note)
 	if came_back:
@@ -254,15 +363,12 @@ def make_delivery_note_from_sales_return(source_name: str, target_doc=None):
 			title=_("Already Returned"),
 		)
 
-	already = frappe.get_all(
-		"Delivery Note Item",
-		filters={"against_sales_invoice": source_name, "docstatus": ("<", 2)},
-		pluck="parent",
-		limit_page_length=1,
-	)
+	already = _existing_return_for(source_name, original_note)
 	if already:
 		frappe.throw(
-			_("Delivery return {0} was already raised from this credit note.").format(already[0]),
+			_("Delivery return {0} was already raised from this credit note against {1}.").format(
+				already, original_note
+			),
 			title=_("Already Created"),
 		)
 

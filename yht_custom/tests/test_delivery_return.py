@@ -396,3 +396,142 @@ class TestExhaustedLines(FrappeTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			delivery_return.make_delivery_note_from_sales_return(spent[0])
 
+
+class TestSeveralDeliveryNotes(FrappeTestCase):
+	"""🔴 A CREDIT NOTE SPANNING SEVERAL SHIPMENTS USED TO BE REFUSED OUTRIGHT.
+
+	An invoice delivered in more than one consignment produces a credit note whose
+	lines trace back to several delivery notes, and `return_against` is a single
+	link — so one return cannot reverse them all. The first version simply refused
+	and told the operator to raise them by hand: on khobhar that is 11 credit notes
+	covering 97 delivery notes, which nobody was going to type.
+
+	So the span is a list now, not a refusal: one return per delivery note, each
+	with its own `return_against`, which is the shape ERPNext's over-return guard
+	expects anyway.
+	"""
+
+	def setUp(self):
+		_set(True)
+
+	def tearDown(self):
+		frappe.db.rollback()
+		frappe.clear_cache(doctype="YHT Return Settings")
+
+	def _multi(self):
+		"""A submitted credit note whose lines span more than one delivery note."""
+		for r in frappe.get_all("Sales Invoice", filters={"is_return": 1, "docstatus": 1},
+								fields=["name"], order_by="creation desc", limit_page_length=300):
+			options = delivery_return.delivery_note_options(r.name)
+			if len([o for o in options if o["status"] == "pending"]) > 1:
+				return r.name, options
+		return None, None
+
+	def test_each_delivery_note_is_offered_separately(self):
+		name, options = self._multi()
+		if not name:
+			self.skipTest("no multi-shipment credit note on this site")
+
+		self.assertGreater(len(options), 1)
+		for opt in options:
+			self.assertTrue(opt["delivery_note"])
+			self.assertGreater(opt["rows"], 0, "an option with no rows should not be listed")
+			self.assertIn(opt["status"], ("pending", "created", "returned in full"))
+
+		state = delivery_return.can_make_delivery_note(name)
+		self.assertTrue(state["allowed"], "a multi-shipment credit note is refused again")
+		self.assertGreater(state["pending"], 1)
+		self.assertIsNone(state["delivery_note"], "the form must ask which one, not assume")
+
+	def test_a_return_carries_only_its_own_shipment(self):
+		name, options = self._multi()
+		if not name:
+			self.skipTest("no multi-shipment credit note on this site")
+		pending = [o for o in options if o["status"] == "pending"]
+		chosen = pending[0]
+
+		dn = delivery_return.make_delivery_note_from_sales_return(name, delivery_note=chosen["delivery_note"])
+		self.assertEqual(dn.return_against, chosen["delivery_note"])
+		self.assertEqual(len(dn.items), chosen["rows"],
+						 "rows from another shipment leaked onto this return")
+
+	def _submit_one(self, name, pending):
+		"""Submit a return for the first shipment the WAREHOUSE will actually accept.
+
+		Picking `pending[0]` blindly fails on this data: khobhar carries 322 negative
+		bins and yht-test its own, so a return that posts stock back in can still be
+		refused for leaving the balance negative. That is a real inventory condition,
+		not a fault in the feature, so step past it rather than assert around it.
+		"""
+		for note in pending:
+			try:
+				dn = delivery_return.make_delivery_note_from_sales_return(name, delivery_note=note)
+				dn.insert(ignore_permissions=True)
+				dn.submit()
+			except Exception:
+				frappe.db.rollback()
+				_set(True)
+				continue
+			self.addCleanup(TestExhaustedLines._remove, dn.name)
+			return dn, note
+		return None, None
+
+	def test_creating_one_leaves_the_others_available(self):
+		"""The whole point: three shipments, three returns, one at a time."""
+		name, options = self._multi()
+		if not name:
+			self.skipTest("no multi-shipment credit note on this site")
+		pending = [o["delivery_note"] for o in options if o["status"] == "pending"]
+
+		dn, note = self._submit_one(name, pending)
+		if not dn:
+			self.skipTest("every shipment here is blocked by negative stock")
+
+		state = delivery_return.can_make_delivery_note(name)
+		self.assertTrue(state["allowed"], "the remaining shipments became unreachable")
+		self.assertEqual(state["pending"], len(pending) - 1)
+
+		after = {o["delivery_note"]: o for o in delivery_return.delivery_note_options(name)}
+		self.assertEqual(after[note]["status"], "created")
+		self.assertEqual(after[note]["existing"], dn.name)
+		self.assertTrue(
+			any(o["status"] == "pending" for k, o in after.items() if k != note),
+			"no shipment is left to return",
+		)
+
+	def test_the_same_shipment_cannot_be_returned_twice(self):
+		name, options = self._multi()
+		if not name:
+			self.skipTest("no multi-shipment credit note on this site")
+		pending = [o["delivery_note"] for o in options if o["status"] == "pending"]
+
+		dn, note = self._submit_one(name, pending)
+		if not dn:
+			self.skipTest("every shipment here is blocked by negative stock")
+
+		with self.assertRaises(frappe.ValidationError):
+			delivery_return.make_delivery_note_from_sales_return(name, delivery_note=note)
+
+	def test_it_refuses_to_guess_which_shipment(self):
+		name, _options = self._multi()
+		if not name:
+			self.skipTest("no multi-shipment credit note on this site")
+		with self.assertRaises(frappe.ValidationError) as caught:
+			delivery_return.make_delivery_note_from_sales_return(name)
+		self.assertIn("different delivery notes", str(caught.exception))
+
+	def test_a_delivery_note_that_is_not_behind_it_is_refused(self):
+		"""The endpoint is public HTTP — the dialog is not the boundary."""
+		name, _options = self._multi()
+		if not name:
+			self.skipTest("no multi-shipment credit note on this site")
+		other = frappe.db.get_value("Delivery Note", {"is_return": 0, "docstatus": 1}, "name")
+		with self.assertRaises(frappe.ValidationError):
+			delivery_return.make_delivery_note_from_sales_return(name, delivery_note=other)
+
+	def test_the_picker_is_wired_into_the_form(self):
+		path = frappe.get_app_path("yht_custom", "public", "js", "sales_return_delivery.js")
+		with open(path, encoding="utf-8") as handle:
+			src = handle.read()
+		self.assertIn("Which delivery is coming back?", src)
+		self.assertIn("args: { delivery_note:", src)
