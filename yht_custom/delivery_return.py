@@ -397,10 +397,12 @@ def link_credit_note_to_delivery_return(doc, method=None):
 
 	doc.update_billing_status()
 	# The original delivery note just lost the credit that was wrongly attributed to
-	# it, so its own percentage has to be recomputed too.
+	# it, so its own row amounts have to be rebuilt — `update_billing_percentage`
+	# only re-totals what is already on the rows, which would leave the original
+	# reading 0% billed when the forward invoice had in fact billed it in full.
 	for name in previous:
 		if frappe.db.exists("Delivery Note", name):
-			frappe.get_doc("Delivery Note", name).update_billing_percentage()
+			frappe.get_doc("Delivery Note", name).update_billing_status()
 
 
 def unlink_credit_note_from_delivery_return(doc, method=None):
@@ -439,4 +441,4 @@ def unlink_credit_note_from_delivery_return(doc, method=None):
 
 	for name in restored:
 		if frappe.db.exists("Delivery Note", name):
-			frappe.get_doc("Delivery Note", name).update_billing_percentage()
+			frappe.get_doc("Delivery Note", name).update_billing_status()
