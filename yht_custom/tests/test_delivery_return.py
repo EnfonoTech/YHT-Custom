@@ -43,6 +43,18 @@ def _credit_notes():
 	return one, many, none
 
 
+def _actionable():
+	"""Credit notes the feature will actually accept.
+
+	"Traces to one delivery note" is NOT the same as "can be returned": the delivered
+	quantity may already have come back. Two tests assumed it was, picked the newest
+	traced note, and broke the moment the exhausted-line guard landed — the guard was
+	right and the assumption was wrong.
+	"""
+	one, _many, _none = _credit_notes()
+	return [n for n in one if delivery_return.can_make_delivery_note(n)["allowed"]]
+
+
 def _set(enabled):
 	frappe.db.set_single_value("YHT Return Settings", SETTING, 1 if enabled else 0)
 	frappe.clear_cache(doctype="YHT Return Settings")
@@ -101,10 +113,10 @@ class TestDeliveryReturnMapping(FrappeTestCase):
 		frappe.clear_cache(doctype="YHT Return Settings")
 
 	def test_it_builds_a_delivery_return_linked_both_ways(self):
-		one, _many, _none = _credit_notes()
-		if not one:
-			self.skipTest("no traced credit note on this site")
-		name = one[0]
+		actionable = _actionable()
+		if not actionable:
+			self.skipTest("no actionable credit note on this site")
+		name = actionable[0]
 
 		credit = frappe.get_doc("Sales Invoice", name)
 		dn = delivery_return.make_delivery_note_from_sales_return(name)
@@ -127,10 +139,10 @@ class TestDeliveryReturnMapping(FrappeTestCase):
 			self.assertLess(row.qty, 0, "a delivery RETURN must carry negative quantities")
 
 	def test_the_quantities_match_the_credit_note_line_for_line(self):
-		one, _many, _none = _credit_notes()
-		if not one:
-			self.skipTest("no traced credit note on this site")
-		name = one[0]
+		actionable = _actionable()
+		if not actionable:
+			self.skipTest("no actionable credit note on this site")
+		name = actionable[0]
 		credit = {r.name: r.qty for r in frappe.get_doc("Sales Invoice", name).items}
 		dn = delivery_return.make_delivery_note_from_sales_return(name)
 		for row in dn.items:
@@ -249,4 +261,86 @@ class TestWiring(FrappeTestCase):
 			"yht_custom.delivery_return.make_delivery_note_from_sales_return",
 			frappe.whitelisted_methods if hasattr(frappe, "whitelisted_methods") else
 			[f"{m.__module__}.{m.__name__}" for m in frappe.whitelisted],
+		)
+
+
+class TestExhaustedLines(FrappeTestCase):
+	"""🔴 THE BUTTON MUST NOT LEAD TO ERPNext's OWN ERROR.
+
+	A credit note whose delivered quantity has already come back is a real and common
+	shape — on yht-test, 3 of 110 submitted credit notes. Before this guard the button
+	appeared, the operator filled nothing in, saved, and met
+	`StockOverReturnError: Cannot return more than 0.0`. That is the over-return guard
+	working correctly (and proof `dn_detail` is wired), but it is a poor way to find
+	out, and the request was explicitly for a route without errors.
+
+	So the exhausted case is detected up front: no button, and the endpoint refuses
+	with a sentence naming the row.
+	"""
+
+	def setUp(self):
+		_set(True)
+
+	def tearDown(self):
+		frappe.db.rollback()
+		frappe.clear_cache(doctype="YHT Return Settings")
+
+	def _exhausted_credit_note(self):
+		one, _many, _none = _credit_notes()
+		for name in one:
+			state = delivery_return.can_make_delivery_note(name)
+			if state["reason"].startswith("the delivered quantity"):
+				return name
+		return None
+
+	def test_an_exhausted_credit_note_is_not_offered(self):
+		name = self._exhausted_credit_note()
+		if not name:
+			self.skipTest("no fully-returned credit note on this site")
+		self.assertFalse(delivery_return.can_make_delivery_note(name)["allowed"])
+
+	def test_it_refuses_before_erpnext_has_to(self):
+		name = self._exhausted_credit_note()
+		if not name:
+			self.skipTest("no fully-returned credit note on this site")
+		with self.assertRaises(frappe.ValidationError) as caught:
+			delivery_return.make_delivery_note_from_sales_return(name)
+		message = str(caught.exception)
+		self.assertIn("already been returned", message)
+		self.assertNotIn("Cannot return more than", message, "ERPNext's raw error reached the operator")
+
+	def test_a_saved_delivery_return_blocks_a_second_one(self):
+		"""One credit note, one delivery return — checked by against_sales_invoice."""
+		allowed = _actionable()
+		if not allowed:
+			self.skipTest("no actionable credit note on this site")
+		name = allowed[0]
+		dn = delivery_return.make_delivery_note_from_sales_return(name)
+		dn.insert(ignore_permissions=True)
+
+		state = delivery_return.can_make_delivery_note(name)
+		self.assertFalse(state["allowed"])
+		self.assertEqual(state["reason"], "already created")
+		self.assertEqual(state["existing"], dn.name)
+		with self.assertRaises(frappe.ValidationError):
+			delivery_return.make_delivery_note_from_sales_return(name)
+
+	def test_it_survives_save_and_submit(self):
+		"""The mapper only builds the document — validate and the ledger run on save."""
+		allowed = _actionable()
+		if not allowed:
+			self.skipTest("no actionable credit note on this site")
+
+		dn = delivery_return.make_delivery_note_from_sales_return(allowed[0])
+		dn.insert(ignore_permissions=True)
+		dn.submit()
+
+		self.assertEqual(dn.docstatus, 1)
+		entries = frappe.get_all(
+			"Stock Ledger Entry", filters={"voucher_no": dn.name}, fields=["actual_qty"]
+		)
+		self.assertTrue(entries, "the delivery return moved no stock")
+		self.assertTrue(
+			all(e.actual_qty > 0 for e in entries),
+			"a delivery RETURN must bring stock back IN, not send it out",
 		)

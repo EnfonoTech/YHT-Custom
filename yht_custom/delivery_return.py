@@ -72,6 +72,49 @@ def _resolve_rows(credit_note):
 	return notes, mapping, unresolved
 
 
+def _already_returned(dn_rows):
+	"""``{delivery row: qty already returned}`` — as a positive number.
+
+	ERPNext stores a return row's qty as NEGATIVE, so the sum is negated to read as
+	"this much has come back". One query for the whole document.
+	"""
+	if not dn_rows:
+		return {}
+	rows = frappe.get_all(
+		"Delivery Note Item",
+		filters={"dn_detail": ("in", list(dn_rows)), "docstatus": 1},
+		fields=["dn_detail", "sum(qty) as qty"],
+		group_by="dn_detail",
+	)
+	return {r.dn_detail: -flt(r.qty) for r in rows}
+
+
+def _exhausted(mapping):
+	"""Rows whose delivered quantity has already been returned in full.
+
+	Without this the button is offered, the operator fills nothing in, saves, and
+	meets ERPNext's own `StockOverReturnError: Cannot return more than 0.0` — which is
+	the guard working correctly but is a poor way to find out. Measured on yht-test:
+	2 of the first 6 candidates were already fully returned.
+	"""
+	dn_rows = [dn_row for dn_row, _wh in mapping.values()]
+	if not dn_rows:
+		return []
+	delivered = {
+		r.name: flt(r.qty)
+		for r in frappe.get_all(
+			"Delivery Note Item", filters={"name": ("in", dn_rows)}, fields=["name", "qty"]
+		)
+	}
+	returned = _already_returned(dn_rows)
+	spent = []
+	for credit_row, (dn_row, _wh) in mapping.items():
+		remaining = flt(delivered.get(dn_row, 0)) - flt(returned.get(dn_row, 0))
+		if remaining <= 0:
+			spent.append(credit_row)
+	return spent
+
+
 @frappe.whitelist()
 def can_make_delivery_note(source_name: str):
 	"""What the form needs to decide whether to offer the button — and say why not."""
@@ -89,14 +132,20 @@ def can_make_delivery_note(source_name: str):
 		pluck="parent",
 		limit_page_length=1,
 	)
+	spent = _exhausted(mapping) if mapping else []
 	return {
-		"allowed": bool(mapping) and not unresolved and len(notes) == 1 and not existing,
+		"allowed": bool(mapping)
+		and not unresolved
+		and len(notes) == 1
+		and not existing
+		and not spent,
 		"reason": (
 			"already created" if existing
 			else "no row links back to a delivery note" if not mapping
 			else "rows %s do not link back to a delivery note" % ", ".join(str(i) for i in unresolved)
 			if unresolved
 			else "rows span %s delivery notes" % len(notes) if len(notes) != 1
+			else "the delivered quantity has already been returned in full" if spent
 			else ""
 		),
 		"delivery_note": list(notes)[0] if len(notes) == 1 else None,
@@ -150,6 +199,20 @@ def make_delivery_note_from_sales_return(source_name: str, target_doc=None):
 		)
 
 	original_note = list(notes)[0]
+
+	spent = _exhausted(mapping)
+	if spent:
+		idx = sorted(
+			cint(row.idx) for row in credit_note.get("items") or [] if row.name in spent
+		)
+		frappe.throw(
+			_(
+				"Row {0}: the delivered quantity has already been returned in full, so there "
+				"is nothing left to bring back. Check the delivery note's own returns before "
+				"raising another."
+			).format(", ".join(str(i) for i in idx)),
+			title=_("Already Returned"),
+		)
 
 	already = frappe.get_all(
 		"Delivery Note Item",
