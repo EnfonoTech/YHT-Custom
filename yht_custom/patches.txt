@@ -5,3 +5,4 @@ yht_custom.patches.backfill_line_item_discount_total
 yht_custom.patches.backfill_fiscal_year
 yht_custom.patches.purge_orphan_global_search
 yht_custom.patches.drop_title_as_voucher_no
+yht_custom.patches.clear_empty_list_filters

@@ -55,36 +55,5 @@
 
 		settings.filters = existing.concat([[FIELD, "=", frappe.boot.yht_current_fiscal_year]]);
 
-		// 🔴 `settings.filters` ALONE REACHES ALMOST NOBODY, AND THAT IS NOT
-		// OBVIOUS. `list_view.js::setup_defaults` reads it at Priority 2 only:
-		//
-		//     if (Array.isArray(this.view_user_settings.filters))  // Priority 1
-		//         this.filters = this.validate_filters(saved_filters);
-		//     else                                                 // Priority 2
-		//         this.filters = (this.settings.filters || []).map(...)
-		//
-		// `Array.isArray([])` is TRUE. Opening a list once saves a filters array —
-		// usually an EMPTY one — and from then on Priority 1 wins with nothing in
-		// it, so the default never applies again. Measured on the client site:
-		// 591 saved list settings across these eight doctypes, 92 distinct users.
-		// Shipping only the line above would have been a feature that quietly
-		// does nothing for every person who has ever used the system.
-		//
-		// `onload` runs after `setup_defaults` and before the first `refresh()`
-		// (list_view.js:333, then :341), so assigning here is picked up by the
-		// initial fetch — no second query, no visible re-filter.
-		//
-		// It applies ONLY when nothing else is filtering. A saved filter, a
-		// filter in the route, or one the doctype's own list JS set is left
-		// alone: the year is a default, not a policy.
-		const prior = settings.onload;
-		settings.onload = function (listview) {
-			if (prior) prior(listview);
-			if (!frappe.boot.yht_current_fiscal_year) return;
-			if (listview.filters && listview.filters.length) return;
-			listview.filters = [
-				[listview.doctype, FIELD, "=", frappe.boot.yht_current_fiscal_year],
-			];
-		};
 	}
 })();
