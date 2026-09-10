@@ -54,12 +54,22 @@ POSTAL_CODE = re.compile(r"^\d{5}$")
 SHORT_ADDRESS = re.compile(r"^[A-Z]{4}\d{4}$")
 
 #: The three national-address fields ksa_compliance does not ship.
+#:
+#: ⚠️ THE `insert_after` VALUES HERE ARE THE ADDRESS LAYOUT (client sheet item
+#: 29), NOT DECORATION. `create_custom_fields` re-applies every key on this dict
+#: — `insert_after` included — on every migrate, so this is the only place these
+#: three can be positioned; a second opinion elsewhere would be overwritten and
+#: then rewritten, forever. The standard fields around them are ordered by
+#: `field_layout.FIELD_MOVES["Address"]` and the other apps' custom fields by
+#: `field_layout.CUSTOM_FIELD_MOVES["Address"]`; the left column reads
+#: Short Address · Type · Building No · Street Name · Additional No · Unit No ·
+#: District · Postal Code · City · Country.
 ADDRESS_CUSTOM_FIELDS = [
 	{
 		"fieldname": "custom_additional_number",
 		"label": "Additional Number",
 		"fieldtype": "Data",
-		"insert_after": "custom_area",
+		"insert_after": "address_line1",
 		"length": 4,
 		"description": "Four-digit secondary number from the national address.",
 	},
@@ -71,10 +81,11 @@ ADDRESS_CUSTOM_FIELDS = [
 		"length": 8,
 	},
 	{
+		# First on the form, in place of the hidden Address Title it feeds.
 		"fieldname": "custom_short_address",
 		"label": "Short Address",
 		"fieldtype": "Data",
-		"insert_after": "custom_unit_number",
+		"insert_after": "address_title",
 		"length": 8,
 		"description": "SPL short code, four letters then four digits (e.g. <code>RQAA2929</code>). Becomes the address title on a new address.",
 	},

@@ -733,6 +733,39 @@ touch /home/v15/yht-bench/sites/assets/assets.json
 sudo supervisorctl signal QUIT yht-bench-web:yht-bench-frappe-web
 ```
 
+### `__global_search` orphan purge (client sheet item 27) — manual, opt-in
+
+The patch `yht_custom.patches.purge_orphan_global_search` is registered in `[post_model_sync]` but
+**deletes nothing unless the site asks**, and it is marked as run either way. So on
+`yht-khobhar.enfonoerp.com` — where roughly **890,007** rows and no Patch Log entry are outstanding —
+the manual route below is the *only* route. Three steps, in this order:
+
+```bash
+# 1. PRE-FLIGHT, read-only. Its output goes into the deploy record BEFORE anything is deleted.
+cd /home/v15/yht-bench && sudo -u v15 bench --site yht-khobhar.enfonoerp.com \
+  execute yht_custom.global_search_purge.report
+
+# 2. Arm it. Without this flag the patch and nothing else will delete a single row.
+sudo -u v15 bench --site yht-khobhar.enfonoerp.com set-config yht_purge_global_search 1
+
+# 3. Purge, and REPEAT until it reports `finished: True`.
+sudo -u v15 bench --site yht-khobhar.enfonoerp.com \
+  execute yht_custom.global_search_purge.purge
+```
+
+- **On the client site this runs inside the 02:00–05:00 IST window**, with the authorisation recorded
+  in `~/.claude/skills/enfono-servers/LIVE_STATE.md` — the same rule as any other out-of-window work
+  on this box. `__global_search` is MyISAM: there is **no transaction and no rollback**, every delete
+  is final, and the load lands on a MariaDB shared with four live client sites on the other bench.
+- `purge()` stops cleanly on `time_budget` and reports `remaining_estimate`; run it again. It is
+  idempotent — it only ever deletes rows it has just proved have no record.
+- Rows naming a DocType with **no table on this site** are skipped and counted, not deleted (gate Q2).
+  Passing `include_missing=True` deletes them; that is the largest and least reversible group and it
+  needs a decision, not a default.
+- **Never** `bench rebuild-global-search`, `rebuild_for_all_doctypes`, or `OPTIMIZE TABLE
+  __global_search` — a full MyISAM rebuild of 890k rows with the table locked throughout.
+- On `yht-test` there is no window and it may simply be run to completion.
+
 ### Running the test suite
 
 **Tests run on `yht-test`, and ONLY on `yht-test`.** `allow_tests` is now `false` on

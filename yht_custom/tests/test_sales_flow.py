@@ -51,14 +51,23 @@ class TestFlowPolicy(FrappeTestCase):
 		frappe.db.rollback()
 
 	# ------------------------------------------------------- update_stock
+	#
+	# 🔴 THE RULE HERE REVERSED ON 2026-09-10 (client sheet item 25, gate Q1).
+	# It used to force `update_stock = 0` for every non-bypass user — the MoM §2.2
+	# "Delivery Note is compulsory" policy — and the two tests below asserted
+	# exactly that. The client has since asked twice for a standalone invoice to
+	# open TICKED for branch users, so the question is now *have these goods
+	# already moved*, not *who is keying this in*. The full case set lives in
+	# `test_client_sheet_batch3.TestItem25LinkageRule`; what is kept here is the
+	# pair that used to encode the old policy, rewritten to the new one.
 
-	def test_branch_user_cannot_bill_and_ship_in_one_document(self):
+	def test_a_branch_user_may_now_bill_and_ship_in_one_document(self):
 		frappe.set_user(USER)
 		si = frappe.new_doc("Sales Invoice")
 		si.company = self.company
 		si.update_stock = 1
 		sales_flow.enforce_delivery_note_route(si)
-		self.assertEqual(si.update_stock, 0)
+		self.assertEqual(si.update_stock, 1, "the linkage rule is still reading roles")
 
 	def test_manager_keeps_the_direct_route(self):
 		frappe.set_user("Administrator")
@@ -68,11 +77,15 @@ class TestFlowPolicy(FrappeTestCase):
 		sales_flow.enforce_delivery_note_route(si)
 		self.assertEqual(si.update_stock, 1, "Administrator lost the direct-stock bypass")
 
-	def test_purchase_invoice_stock_moves_to_the_receipt(self):
+	def test_purchase_invoice_stock_moves_to_the_receipt_once_it_is_linked(self):
+		"""The purchase side has no `validate_purchase_receipt` backstop, so this
+		rule is the only thing standing between a `pr_detail` row and the stock
+		being received a second time."""
 		frappe.set_user(USER)
 		pi = frappe.new_doc("Purchase Invoice")
 		pi.company = self.company
 		pi.update_stock = 1
+		pi.append("items", {"item_code": self.item, "qty": 1, "rate": 10, "pr_detail": "SOME-PR-ROW"})
 		sales_flow.enforce_purchase_receipt_route(pi)
 		self.assertEqual(pi.update_stock, 0)
 

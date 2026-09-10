@@ -18,34 +18,97 @@ yht_custom.flow.check = function () {
 	});
 };
 
-frappe.ui.form.on("Sales Invoice", {
-	onload(frm) {
-		apply_si(frm);
+// ------------------------------------------------- Update Stock, form side
+//
+// Client sheet item 25. This REPLACED a role-driven handler that un-ticked
+// `update_stock` on every new invoice and greyed the box out for anyone without
+// a bypass role. The rule is now a LINKAGE test, not a role test: a standalone
+// invoice opens ticked for everybody, and the box is only taken away when the
+// goods have already moved. `yht_custom.sales_flow.enforce_delivery_note_route`
+// and its purchase twin decide the same thing on before_validate, so a REST
+// call cannot route around this — the form's job is to say WHY, before a save.
+//
+// ⚠️ READ-ONLY, NEVER HIDDEN. The operator has to SEE that the box is off and
+// read the reason; a field that has vanished just looks like a missing feature.
+// (erpnext's own `depends_on` does hide it once a row carries the link — that
+// is upstream's call, and in that state there is nothing to reconcile anyway.)
+//
+// `frm.set_df_property` on a HEADER field is safe. The recorded no-op is about
+// GRID cells, which need the six-argument per-row form.
+const STOCK_ROUTE = {
+	"Sales Invoice": {
+		row_link: "dn_detail",
+		order_link: "so_detail",
+		moved: __("These goods have already gone out on a Delivery Note."),
+		ordered: __("The Sales Order behind this invoice has already been delivered."),
 	},
-	refresh(frm) {
-		apply_si(frm);
+	"Purchase Invoice": {
+		row_link: "pr_detail",
+		order_link: "po_detail",
+		moved: __("These goods have already arrived on a Purchase Receipt."),
+		ordered: __("The Purchase Order behind this bill has already been received."),
 	},
-});
+};
 
-function apply_si(frm) {
-	yht_custom.flow.check().then((may_direct) => {
-		if (may_direct) return;
+function lock_update_stock(frm, reason) {
+	frm.set_df_property("update_stock", "read_only", reason ? 1 : 0);
+	frm.set_df_property("update_stock", "description", reason || "");
+}
 
-		if (frm.is_new()) frm.set_value("update_stock", 0);
-		frm.set_df_property("update_stock", "read_only", 1);
-		frm.set_df_property(
-			"update_stock",
-			"description",
-			__("Stock is delivered on a Delivery Note. Create the Delivery Note first, then bill it.")
-		);
+function apply_stock_route(frm) {
+	const spec = STOCK_ROUTE[frm.doc.doctype];
+	if (!spec) return;
 
-		if (frm.is_new() && !frm.doc.items?.length) {
-			frm.dashboard.add_comment(
-				__("Bill an existing Delivery Note: use <b>Get Items From → Delivery Note</b>."),
-				"blue",
-				true
-			);
-		}
+	const rows = frm.doc.items || [];
+
+	// 🔴 CLEAR THE CACHE KEY ON EVERY PATH THAT DOES NOT SET IT. It is only ever
+	// written on the server-probe path below, so without this a form that HAD
+	// order-linked rows keeps the old signature after those rows are removed —
+	// and the next call matching that stale signature returns early at the
+	// `=== signature` check, leaving the "already gone out" read-only and its
+	// description on screen for a document that no longer has anything behind it.
+	if (rows.some((row) => row[spec.row_link])) {
+		frm.__yht_stock_route = null;
+		lock_update_stock(frm, spec.moved);
+		return;
+	}
+
+	const details = rows.map((row) => row[spec.order_link]).filter(Boolean);
+	if (!details.length) {
+		frm.__yht_stock_route = null;
+		lock_update_stock(frm, null);
+		return;
+	}
+
+	// Only the server can answer "has the order behind this line already
+	// shipped". Cached per set of rows so a refresh storm does not become a
+	// request storm.
+	const signature = details.slice().sort().join("|");
+	if (frm.__yht_stock_route === signature) return;
+	frm.__yht_stock_route = signature;
+
+	frappe
+		.call({
+			method: "yht_custom.sales_flow.sales_order_has_stock_document",
+			args: { doctype: frm.doc.doctype, details: JSON.stringify(details) },
+		})
+		.then((r) => {
+			if (frm.__yht_stock_route !== signature) return;
+			lock_update_stock(frm, r && r.message ? spec.ordered : null);
+		});
+}
+
+for (const doctype of Object.keys(STOCK_ROUTE)) {
+	frappe.ui.form.on(doctype, {
+		// Both events, and both are needed: `refresh` alone misses the first
+		// paint of a mapped document, `onload` alone misses a re-render after the
+		// items grid changes.
+		onload(frm) {
+			apply_stock_route(frm);
+		},
+		refresh(frm) {
+			apply_stock_route(frm);
+		},
 	});
 }
 

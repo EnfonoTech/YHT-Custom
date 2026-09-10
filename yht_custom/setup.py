@@ -12,7 +12,13 @@ from frappe.utils import cint
 
 from yht_custom.setup_branch_series import setup_branch_series
 from yht_custom.expense_invoice import setup_expense_invoice
-from yht_custom.form_layout import setup_form_layout
+from yht_custom.form_layout import (
+	setup_form_layout,
+	setup_payment_entry_tax_block,
+	setup_return_split_filter,
+	setup_update_stock_default,
+)
+from yht_custom.other_remarks import ensure_other_remarks_fields
 from yht_custom.site_defaults import setup_site_defaults
 from yht_custom.setup_property_setters import setup_ignore_user_permissions
 from yht_custom.discount_totals import setup_discount_grid_columns
@@ -202,6 +208,24 @@ PROVISIONING_STEPS = (
 	"setup_default_print_formats",
 	"setup_sales_invoice_qr",
 	"setup_form_layout",
+	# --- client sheet batch 3 (25 · 33 · 36 · 28) ----------------------------
+	# Each is its OWN entry rather than a call inside `setup_form_layout`. They
+	# are independent, and the per-step try/except/commit below is what stops one
+	# item's failure hiding another's — six items behind one report line is how a
+	# silent no-op survived a week last time.
+	#
+	# 🔴 ITEM 24 IS DELIBERATELY ABSENT. `form_layout.setup_title_as_voucher_no`
+	# still exists but is NOT registered: `title_field = "name"` renders all eight
+	# transaction lists EMPTY (`list_view.js` resolves the subject column through
+	# `frappe.meta.get_docfield`, and `name` is the primary key, not a DocField).
+	# Measured on yht-test: 0 rows on all eight, with a TypeError in the console.
+	# Removing the step is only half the repair — the rows it already wrote are
+	# deleted by `patches/drop_title_as_voucher_no.py`. A replacement mechanism is
+	# a design decision; see `.pipeline/changes.md`, "Spec Issues".
+	"setup_update_stock_default",
+	"setup_payment_entry_tax_block",
+	"setup_return_split_filter",
+	"ensure_other_remarks_fields",
 	"setup_credit_note_settles_original",
 	"apply_field_moves",
 	"setup_discount_grid_columns",
@@ -342,6 +366,10 @@ def _imported(name):
 		"setup_branch_series": setup_branch_series,
 		"setup_default_print_formats": setup_default_print_formats,
 		"setup_form_layout": setup_form_layout,
+		"setup_update_stock_default": setup_update_stock_default,
+		"setup_payment_entry_tax_block": setup_payment_entry_tax_block,
+		"setup_return_split_filter": setup_return_split_filter,
+		"ensure_other_remarks_fields": ensure_other_remarks_fields,
 		"setup_site_defaults": setup_site_defaults,
 		"setup_discount_grid_columns": setup_discount_grid_columns,
 		"setup_branch_letterheads": setup_branch_letterheads,

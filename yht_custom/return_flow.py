@@ -309,6 +309,29 @@ def enforce_return_stock_route(doc, method=None):
 		return
 	if doc.doctype not in STOCK_LINK:
 		return
+
+	# 🔴 BEFORE THE BYPASS, AND THAT PLACEMENT IS THE WHOLE FIX. Client sheet item 25
+	# ships `update_stock` with `default = 1`, and `get_mapped_doc` copies field
+	# defaults onto the target — so from that change on, EVERY credit note arrives
+	# ticked. `erpnext/controllers/sales_and_purchase_return.py:77` then throws
+	# *"'Update Stock' can not be checked because items are not delivered via {0}"*
+	# whenever a return carries `update_stock` and its original did not.
+	#
+	# Everything below this point is a POLICY the bypass roles are exempt from. This
+	# is not: it is the arithmetic of the document. Left after the bypass check, a
+	# System Manager / Stock Manager / Accounts Manager — i.e. exactly the roles that
+	# raise credit notes — got the hard throw and could not raise one at all, while a
+	# Branch User could. Left after the expense and "nothing was ever shipped" early
+	# returns, the same throw came back for a service invoice. An exemption from a
+	# policy must not become an exemption from correctness.
+	#
+	# The condition MIRRORS erpnext's own: zero it unless the document being reversed
+	# genuinely moved its own stock, which is the only case where the goods come back
+	# on this document. Zeroing can only ever prevent that throw; it can never turn a
+	# saveable return into an unsaveable one.
+	if cint(doc.get("update_stock")) and not _original_moved_its_own_stock(doc):
+		doc.update_stock = 0
+
 	if _may_bypass():
 		return
 
