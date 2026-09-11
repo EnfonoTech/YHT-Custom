@@ -15,7 +15,7 @@ required_apps = ["frappe/erpnext"]
 app_include_js = [
 	"/assets/yht_custom/js/branch_user_restrict.js?v=8",
 	"/assets/yht_custom/js/branch_user_forms.js?v=1",
-	"/assets/yht_custom/js/sales_flow.js?v=9",
+	"/assets/yht_custom/js/sales_flow.js?v=10",
 	"/assets/yht_custom/js/expense_invoice.js?v=5",
 	"/assets/yht_custom/js/price_assist.js?v=6",
 	"/assets/yht_custom/js/payment_assist.js?v=3",
@@ -44,7 +44,29 @@ doctype_js = {
 	"Purchase Order": "public/js/create_supplier.js",
 	"Purchase Receipt": "public/js/create_supplier.js",
 }
-doctype_list_js = {}
+# 🔴 THE LIST DEFAULT HAS TO COME FROM HERE, NOT FROM `app_include_js`. erpnext's
+# own list JS assigns `frappe.listview_settings["X"]` wholesale, and a doctype's
+# list bundle is fetched when the list is first opened — long after boot. What
+# `frappe/desk/form/meta.py` does is add the doctype's own `<doctype>_list.js`
+# and THEN concatenate the `doctype_list_js` hook file, so a merge from here
+# lands after erpnext's assignment and survives. One file under eight doctypes,
+# the same shape `katc_print_buttons.js` uses on the form side.
+#
+# The eight are `yht_custom.fiscal_year.DATE_FIELD` — repeated literally because
+# hooks.py is read before the app is importable; a test asserts they agree.
+doctype_list_js = {
+	doctype: "public/js/list_defaults.js"
+	for doctype in (
+		"Sales Invoice",
+		"Purchase Invoice",
+		"Delivery Note",
+		"Purchase Receipt",
+		"Payment Entry",
+		"Journal Entry",
+		"Sales Order",
+		"Quotation",
+	)
+}
 
 # ------------------------------------------------------------------- home pages
 role_home_page = {
@@ -243,9 +265,31 @@ _DELIVERY_RETURN_EVENTS = {
 	},
 }
 
+# --- the SI-first delivery back-link (client sheet item 32) --------------
+# 🔴 MERGED FOR THE SAME REASON AS THE BLOCK ABOVE, and it shares both events
+# with it. `delivery_return`'s pair runs on RETURNS and this pair runs on
+# FORWARD notes; they write the same two fields on the same child doctype, so
+# each opens by checking `is_return` and neither may ever touch the other's
+# documents. Declaring either in the `doc_events` literal would see it silently
+# dropped by the branch-defaults `doc_events.update({...})`.
+#
+# ⚠️ `on_cancel` IS DELIBERATELY KEPT, AND IT IS NOT DEAD WEIGHT — but it only
+# ever fires on a SPLIT delivery. Where one note ships a row, the link this pair
+# wrote makes erpnext's own `check_next_docstatus` refuse the cancel before any
+# doc_event runs; where two notes ship it the link is already blank, the cancel
+# proceeds and the handler re-links the survivor. `delivery_backlink`'s module
+# docstring has the full reasoning and the client-facing consequence.
+_DELIVERY_BACKLINK_EVENTS = {
+	"Delivery Note": {
+		"on_submit": "yht_custom.delivery_backlink.link_invoice_rows",
+		"on_cancel": "yht_custom.delivery_backlink.unlink_invoice_rows",
+	},
+}
+
 doc_events = _merge_events(doc_events, _DISCOUNT_EVENTS)
 doc_events = _merge_events(doc_events, _FISCAL_YEAR_EVENTS)
 doc_events = _merge_events(doc_events, _DELIVERY_RETURN_EVENTS)
+doc_events = _merge_events(doc_events, _DELIVERY_BACKLINK_EVENTS)
 
 # --- opening invoice tool ----------------------------------------------
 # erpnext builds the invoice dict with no hook of any kind, so the controller
@@ -297,6 +341,21 @@ fixtures = [
 					"Quotation-custom_fiscal_year",
 					"Opening Invoice Creation Tool Item-custom_po_no",
 					"Opening Invoice Creation Tool Item-custom_remarks",
+					# Client sheet item 28 — "Other Remarks", editable after submit.
+					# NOT `custom_remarks`: that name is taken on this site twice and
+					# with two different fieldtypes (a Check on Payment Entry from
+					# zatca_vat_report, and the Small Text two lines above).
+					"Sales Invoice-custom_other_remarks",
+					"Purchase Invoice-custom_other_remarks",
+					"Delivery Note-custom_other_remarks",
+					"Purchase Receipt-custom_other_remarks",
+					"Payment Entry-custom_other_remarks",
+					"Journal Entry-custom_other_remarks",
+					"Sales Order-custom_other_remarks",
+					"Quotation-custom_other_remarks",
+					"Stock Entry-custom_other_remarks",
+					"Material Request-custom_other_remarks",
+					"Stock Reconciliation-custom_other_remarks",
 				],
 			]
 		],
