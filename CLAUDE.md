@@ -718,6 +718,31 @@ accountant: SI→`CN`, DN→`DRN`, PI→`DBN`, PR→`PRN`.
     partial returns (gotcha 93's neighbour). The goods still come back; there is just
     nothing to credit, and the UI has to SAY so or the clerk assumes it happened.
 
+98. 🔴 **A HIDDEN + MANDATORY FIELD WITH NO DEFAULT MAKES `Customize Form` UNSAVEABLE — FOR
+    THE WHOLE DOCTYPE.** `DocType.validate_fields` throws *"Field Currency in row 37 cannot be
+    hidden and mandatory without default"*, and it rejects the entire form, so one such field
+    blocks every unrelated Customize Form change. We caused it on **six** doctypes at once:
+    `currency` and `conversion_rate` ship `reqd = 1` with no default, and `form_layout.HIDE_FIELDS`
+    hides both on Sales Invoice, Sales Order, Delivery Note, Purchase Invoice, Purchase Receipt and
+    Quotation. It stayed latent for weeks because this app writes Property Setters directly and
+    never meets that validation — only a human pressing **Update** does, and that human was another
+    developer who could not save anything on those forms.
+    **Fix is a default, not un-hiding** (`setup_hidden_required_defaults`, derived from HIDE_FIELDS
+    so a future hidden field is covered automatically; the currency resolves from the Company at run
+    time, never hardcoded). ⚠️ And fixing only the field named in the error is not enough — the
+    first attempt did exactly that and `price_list_currency` / `plc_conversion_rate` still blocked
+    four doctypes through `_CURRENCY_SECTION`. `TestCustomizeFormStaysSaveable` asserts the whole of
+    HIDE_FIELDS and is what caught it.
+99. ⚠️ **`_hide_fields` ONLY EVER ADDS, so dropping a field out of `HIDE_FIELDS` leaves it hidden
+    forever.** The list is not reconciled against existing Property Setters. Un-hiding needs a patch
+    that DELETES the rows — and with `frappe.delete_doc`, not `frappe.db.delete`, because
+    `PropertySetter.on_trash` is what runs `frappe.clear_cache(doctype=…)`; without it the stale
+    hidden flag stays live in the cached meta and the fix reads as a no-op on a running site.
+    Client-sheet item 3 was reversed this way on 2026-09-12: the Taxes and Charges block is visible
+    on Sales Invoice again because **150 of 2,460** submitted invoices carry no tax template — the
+    zero-rated, export and return cases the original note named as its trade-off. `shipping_rule`,
+    `incoterm` and `named_place` stay hidden; 0 invoices use them.
+
 ## Deploy
 
 Repo: **`git@github-yht:EnfonoTech/YHT-Custom.git`** (private). The box has a dedicated read-only deploy key at
