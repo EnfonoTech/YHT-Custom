@@ -318,8 +318,31 @@ accountant: SI→`CN`, DN→`DRN`, PI→`DBN`, PR→`PRN`.
     pre-discount figure, so the line prints the same number as `Total`. And print
     `rounded_total or grand_total`, never bare `grand_total` — ERPNext derives `in_words` from the
     former, so with rounding on, the figure and the words disagree on a customer-facing document.
-44. 🔴 **THIS BOX'S `wkhtmltopdf` IS BUILT AGAINST AN UNPATCHED QT, SO HEADERS AND FOOTERS DO NOT
-    EXIST — and neither does the `<thead>` repeat. This CORRECTS gotcha 37.** `wkhtmltopdf
+44. ✅ **FIXED 2026-09-12 — THIS BENCH NOW USES A PATCHED STATIC `wkhtmltopdf`, SO HEADERS,
+    FOOTERS AND `<thead>` REPEAT ALL WORK. Read this before believing the paragraph below.**
+    `/usr/bin/wkhtmltopdf` (Ubuntu `0.12.6-2build2`) is still unpatched and is still what the
+    OTHER bench uses. A static `0.12.6.1 (with patched qt)` was extracted — `dpkg-deb -x`, NOT
+    installed — to `/opt/wkhtmltox-static/`, and `environment=PATH=...` on the four
+    `yht-bench-*` supervisor programs (web, schedule, both workers) puts it ahead of `/usr/bin`
+    **for this bench only**. `frappe/utils/pdf.py` calls `pdfkit.from_string()` with no
+    `configuration=`, so the binary comes from PATH and PATH is per-process — that is the whole
+    isolation mechanism. Verified both ways: yht-bench resolves the patched build, the other
+    bench still resolves `/usr/bin`, and its processes were never restarted.
+    Measured end to end through `download_pdf` on a 281-line quotation: **"Page 1 of 13"** on
+    every page, and the letterhead plus the column headers repeating on page 2+.
+    ⚠️ **This changed live output on `yht-khobhar` the moment the workers reloaded**, because
+    both sites share the bench — every KATC print gained page numbers and a repeating header.
+    ⚠️ And a `bench console` / `bench execute` run from an SSH shell does **NOT** inherit the
+    supervisor PATH, so it still uses the unpatched binary and will show no page numbers. Export
+    PATH explicitly when testing by hand, or the engine looks broken when it is not.
+    The original finding, kept because it explains the formats' design:
+44b. **The ORIGINAL problem (pre-fix).** `wkhtmltopdf --version` printed a bare `0.12.6` with no
+    `(with patched qt)`, and `--extended-help` said so: *"compiled against a version of QT without
+    the wkhtmltopdf patches … please use the static version"*. Measured three ways:
+    `--footer-center "x"` produced a byte-identical PDF; frappe's extracted `--footer-html`
+    rendered nothing; and a `<thead>` did not repeat on page 2 even for a 120-row table. That is
+    why the KATC formats were designed without relying on either, and why page numbers were an
+    open item with the client for three weeks. This CORRECTED gotcha 37 — and neither does the `<thead>` repeat. This CORRECTS gotcha 37.** `wkhtmltopdf
     --version` prints a bare `0.12.6` with no `(with patched qt)`, and `--extended-help` says so
     outright: *"compiled against a version of QT without the wkhtmltopdf patches … some features
     are missing"*. Measured on EFTSP-013, three ways: `--footer-center "x"` produces a
