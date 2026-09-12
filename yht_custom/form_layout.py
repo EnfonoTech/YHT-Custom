@@ -117,9 +117,20 @@ _TAXES_NOW_VISIBLE = tuple(f for f in _TAXES_BLOCK if f not in _TAXES_NOISE)
 #: currency, and ERPNext still overwrites both from the party in
 #: `set_missing_values`, so the default only ever fills a gap on a brand-new doc.
 #: The currency is resolved from the Company at run time — never hardcoded.
+#: ⚠️ `price_list_currency` / `plc_conversion_rate` ARE IN HERE BECAUSE THE TEST
+#: CAUGHT THEM. The first cut of this map listed only `currency` and
+#: `conversion_rate` — the two fields named in the error the client hit — and
+#: `test_no_hidden_field_is_mandatory_without_a_default` immediately reported four
+#: more doctypes still blocked through `_CURRENCY_SECTION`. Fixing the field in the
+#: error message would have left Customize Form just as unsaveable.
+#:
+#: Purchase Invoice and Purchase Receipt are absent on purpose: `currency` there is
+#: `reqd = 0`, so they were never offenders and the step correctly skips them.
 HIDDEN_REQUIRED_DEFAULTS = {
 	"currency": lambda: _company_currency(),
 	"conversion_rate": lambda: "1",
+	"price_list_currency": lambda: _company_currency(),
+	"plc_conversion_rate": lambda: "1",
 }
 
 #: Fields hidden across the transacting set.
