@@ -18,15 +18,42 @@ from yht_custom.workspace_shortcuts import LABEL, NEW_SHORTCUTS
 
 
 class TestItem3TaxesHidden(FrappeTestCase):
-	"""Hide the Taxes and Charges block on Sales Invoice."""
+	"""Item 3 — the Taxes and Charges block on Sales Invoice.
 
-	def test_the_whole_block_is_hidden(self):
+	🔴 THE CLIENT REVERSED THIS ON 2026-09-12, so the assertion is now the opposite
+	of the one this class shipped with. Keeping the class (rather than deleting it)
+	keeps the history visible: item 3 asked for the block to be hidden, and the
+	original note named the trade-off — "if a zero-rated or export invoice is ever
+	needed, someone with the field unhidden has to raise it". Measured on production
+	when the reversal came in: **150 of 2,460** submitted invoices carry no tax
+	template. The trade-off was not hypothetical, and the client felt it.
+
+	What did NOT change: `SALES VAT 15% - KATC` is still `is_default = 1`, so VAT
+	applies with nobody touching the picker — asserted below, because that is the
+	thing whose loss would actually hurt.
+	"""
+
+	def test_the_noise_fields_are_still_hidden(self):
+		"""shipping_rule / incoterm / named_place — used on 0 invoices, still gone."""
+		from yht_custom.form_layout import _TAXES_NOISE
+
 		meta = frappe.get_meta("Sales Invoice")
-		for fieldname in _TAXES_BLOCK:
+		for fieldname in _TAXES_NOISE:
 			with self.subTest(fieldname=fieldname):
 				field = meta.get_field(fieldname)
 				self.assertTrue(field, f"Sales Invoice has no {fieldname}")
-				self.assertTrue(field.hidden, f"{fieldname} is still visible")
+				self.assertTrue(field.hidden, f"{fieldname} is visible again")
+
+	def test_the_picker_and_the_table_are_visible_again(self):
+		"""The reversal proper — what the client asked to get back."""
+		from yht_custom.form_layout import _TAXES_NOW_VISIBLE
+
+		meta = frappe.get_meta("Sales Invoice")
+		for fieldname in _TAXES_NOW_VISIBLE:
+			with self.subTest(fieldname=fieldname):
+				field = meta.get_field(fieldname)
+				self.assertTrue(field, f"Sales Invoice has no {fieldname}")
+				self.assertFalse(field.hidden, f"{fieldname} is still hidden")
 
 	def test_the_computed_vat_is_NOT_hidden(self):
 		"""The client asked to hide the block, not the tax.

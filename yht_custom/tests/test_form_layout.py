@@ -15,6 +15,7 @@ outside it.
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
+from frappe.utils import cint, cstr
 
 from yht_custom.form_layout import (
 	GROUP_BEFORE,
@@ -403,3 +404,77 @@ class TestFormLayoutBatch3Idempotency(FrappeTestCase):
 		before = frappe.db.count("Property Setter")
 		setup_form_layout()
 		self.assertEqual(frappe.db.count("Property Setter"), before)
+
+
+class TestCustomizeFormStaysSaveable(FrappeTestCase):
+	"""🔴 THE INVARIANT THIS FILE EXISTED WITHOUT, AND IT COST A BLOCKED FORM.
+
+	`DocType.validate_fields` refuses *"Field <X> cannot be hidden and mandatory
+	without default"* — and it refuses the WHOLE form, not just that field. So one
+	hidden + mandatory + defaultless field makes EVERY unrelated Customize Form
+	change on that doctype impossible to save.
+
+	It went unnoticed for weeks because this app writes Property Setters directly
+	and never passes through that validation. Only a human opening Customize Form
+	and pressing Update ever meets it — which is exactly what happened on
+	production, on six doctypes at once, via `currency` and `conversion_rate`.
+
+	Asserted against HIDE_FIELDS itself, so a field hidden in future is covered
+	without anyone remembering this.
+	"""
+
+	def test_no_hidden_field_is_mandatory_without_a_default(self):
+		from yht_custom.form_layout import HIDE_FIELDS
+
+		offenders = []
+		for doctype in HIDE_FIELDS:
+			if not frappe.db.exists("DocType", doctype):
+				continue
+			meta = frappe.get_meta(doctype)
+			for fieldname in HIDE_FIELDS[doctype]:
+				field = meta.get_field(fieldname)
+				if not field:
+					continue
+				if cint(field.hidden) and cint(field.reqd) and not cstr(field.default).strip():
+					offenders.append(f"{doctype}.{fieldname}")
+
+		self.assertFalse(
+			offenders,
+			"hidden + mandatory + no default — Customize Form cannot be saved on "
+			f"these doctypes at all: {offenders}",
+		)
+
+
+class TestTaxesBlockIsBackOnSalesInvoice(FrappeTestCase):
+	"""Client reversal, 2026-09-12. Measured: 150 of 2,460 submitted invoices carry
+	no tax template, so the picker is needed for the zero-rated / export / return
+	cases the original hiding traded away."""
+
+	def test_the_taxes_section_is_visible_again(self):
+		from yht_custom.form_layout import _TAXES_NOW_VISIBLE
+
+		meta = frappe.get_meta("Sales Invoice")
+		for fieldname in _TAXES_NOW_VISIBLE:
+			with self.subTest(fieldname=fieldname):
+				field = meta.get_field(fieldname)
+				self.assertTrue(field, f"Sales Invoice has no {fieldname}")
+				self.assertFalse(cint(field.hidden), f"{fieldname} is still hidden")
+
+	def test_the_three_unused_fields_stay_hidden(self):
+		"""Used on 0 invoices, and they are the noise the client asked to remove."""
+		from yht_custom.form_layout import _TAXES_NOISE
+
+		meta = frappe.get_meta("Sales Invoice")
+		for fieldname in _TAXES_NOISE:
+			with self.subTest(fieldname=fieldname):
+				self.assertTrue(cint(meta.get_field(fieldname).hidden), f"{fieldname} is visible")
+
+	def test_the_default_tax_template_still_carries_the_vat(self):
+		"""Un-hiding the picker adds a choice; it must not have removed automation."""
+		company = frappe.defaults.get_global_default("company")
+		self.assertTrue(
+			frappe.db.get_value(
+				"Sales Taxes and Charges Template", {"company": company, "is_default": 1}, "name"
+			),
+			"no default sales tax template — VAT would now depend on the operator",
+		)

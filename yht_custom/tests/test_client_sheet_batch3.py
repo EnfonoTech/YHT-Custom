@@ -2630,36 +2630,17 @@ class TestItem35ListOpensOnTheCurrentFiscalYear(FrappeTestCase):
 			"the JS does not guard on an empty fiscal year",
 		)
 
-	def test_the_js_also_sets_the_filter_from_onload(self):
-		"""🔴 `settings.filters` ALONE REACHES ALMOST NOBODY.
-
-		`list_view.js::setup_defaults` reads it at Priority 2 only — Priority 1 is
-		`if (Array.isArray(this.view_user_settings.filters))`, and
-		`Array.isArray([])` is TRUE. Opening a list once saves a filters array,
-		usually empty, and the default never applies again. Measured on the client
-		site 2026-09-10: 591 saved list settings across these eight doctypes, 92
-		distinct users — so the `filters` line on its own is a feature that does
-		nothing for everyone who has used the system.
-
-		`onload` runs after `setup_defaults` and before the first `refresh()`, so
-		it lands without a second query. Asserted at source level because the
-		behaviour is in the browser and a Python suite cannot drive it — the
-		rendered proof is a screenshot at DELIVER.
-		"""
-		source = _source("public/js/list_defaults.js")
-		self.assertRegex(
-			source, r"settings\.onload\s*=", "the JS never installs an onload — see the docstring"
-		)
-		self.assertRegex(
-			source,
-			r"listview\.filters\s*&&\s*listview\.filters\.length",
-			"onload must leave an already-filtered list alone",
-		)
-		self.assertIn(
-			"const prior = settings.onload",
-			source,
-			"onload must chain any handler the doctype's own list JS already set",
-		)
+	# 🔴 `test_the_js_also_sets_the_filter_from_onload` WAS DELETED, 2026-09-12.
+	# It asserted `settings.onload =` in list_defaults.js, from an approach that was
+	# tried and REVERTED in the same batch: `onload` fires from `setup_view()`
+	# (list_view.js:333), after setup_defaults has built the filter area and started
+	# the fetch, so assigning `listview.filters` there changes nothing on screen.
+	# The onload came out; the test did not, and it went red and stayed red.
+	#
+	# Worse, the full suite was not re-run after that revert, so the figure quoted in
+	# the merge commit ("717 tests, 3 failures") predated it by three commits. The
+	# mechanism that actually delivers item 35 is
+	# `patches.clear_empty_list_filters`, and it has its own coverage.
 
 	def test_the_field_still_carries_no_default_anywhere(self):
 		"""🔴 35.4, THE ONE THAT MATTERS. A fixed default on the FIELD is what left
