@@ -14,6 +14,7 @@ from yht_custom.setup_branch_series import setup_branch_series
 from yht_custom.expense_invoice import setup_expense_invoice
 from yht_custom.form_layout import (
 	setup_form_layout,
+	setup_hidden_required_defaults,
 	setup_payment_entry_tax_block,
 	setup_return_split_filter,
 	setup_update_stock_default,
@@ -208,6 +209,9 @@ PROVISIONING_STEPS = (
 	"setup_default_print_formats",
 	"setup_sales_invoice_qr",
 	"setup_form_layout",
+	# Must follow setup_form_layout: it reads HIDE_FIELDS to find the hidden+mandatory
+	# fields that make Customize Form unsaveable, so the hiding has to exist first.
+	"setup_hidden_required_defaults",
 	# --- client sheet batch 3 (25 · 33 · 36 · 28) ----------------------------
 	# Each is its OWN entry rather than a call inside `setup_form_layout`. They
 	# are independent, and the per-step try/except/commit below is what stops one
@@ -366,6 +370,7 @@ def _imported(name):
 		"setup_branch_series": setup_branch_series,
 		"setup_default_print_formats": setup_default_print_formats,
 		"setup_form_layout": setup_form_layout,
+		"setup_hidden_required_defaults": setup_hidden_required_defaults,
 		"setup_update_stock_default": setup_update_stock_default,
 		"setup_payment_entry_tax_block": setup_payment_entry_tax_block,
 		"setup_return_split_filter": setup_return_split_filter,

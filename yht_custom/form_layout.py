@@ -21,6 +21,7 @@ import json
 
 import frappe
 from frappe import _
+from frappe.utils import cint, cstr
 
 #: The `Currency and Price List` accordion, emptied of anything YHT uses.
 #:
@@ -68,6 +69,21 @@ _CURRENCY_SECTION = (
 #: currently carry no template (mostly 2024 documents and returns). If a
 #: zero-rated or export invoice is ever needed, someone with the field unhidden
 #: has to raise it.
+#: 🔴 REVERSED 2026-09-12, ON THE CLIENT'S OWN REQUEST. Item 3 of the first client
+#: sheet hid this whole block on Sales Invoice. The client has now asked for the
+#: Taxes and Charges section back, and the numbers say they are right to: measured
+#: on production, **150 of 2,460** submitted invoices carry NO tax template — the
+#: zero-rated, export and return cases the original note flagged as the trade-off
+#: ("if a zero-rated or export invoice is ever needed, someone with the field
+#: unhidden has to raise it"). That someone turned out to be everyone, 150 times.
+#:
+#: `SALES VAT 15% - KATC` is still `is_default = 1`, so VAT continues to apply
+#: without anybody touching the picker. Un-hiding adds a choice; it removes no
+#: automation.
+#:
+#: `_TAXES_BLOCK` is kept as the full membership list because
+#: `patches/unhide_sales_invoice_taxes.py` needs to know every row it must clear,
+#: and the strict existence test asserts against it.
 _TAXES_BLOCK = (
 	"taxes_section",
 	"tax_category",
@@ -78,6 +94,33 @@ _TAXES_BLOCK = (
 	"section_break_40",
 	"taxes",
 )
+
+#: What stays hidden out of that block: used on **0** invoices on this site, and
+#: they are the noise the client asked to be rid of in the first place. Hiding a
+#: field individually still works with its section visible.
+_TAXES_NOISE = ("shipping_rule", "incoterm", "named_place")
+
+#: The rows the reversal makes visible again — what the patch clears.
+_TAXES_NOW_VISIBLE = tuple(f for f in _TAXES_BLOCK if f not in _TAXES_NOISE)
+
+#: 🔴 A HIDDEN + MANDATORY FIELD WITH NO DEFAULT MAKES Customize Form UNSAVEABLE.
+#: `DocType.validate_fields` refuses *"Field Currency in row 37 cannot be hidden
+#: and mandatory without default"*, and that refusal blocks the WHOLE form — so
+#: nobody could save Customize Form on Sales Invoice, Sales Order, Delivery Note,
+#: Purchase Invoice, Purchase Receipt or Quotation, on any unrelated change.
+#:
+#: We caused it: `currency` and `conversion_rate` ship `reqd = 1` with no default,
+#: and HIDE_FIELDS hides both on all six. It stayed latent because our own steps
+#: write Property Setters directly and never go through that validation.
+#:
+#: Giving them a default is the fix rather than un-hiding: the site trades in one
+#: currency, and ERPNext still overwrites both from the party in
+#: `set_missing_values`, so the default only ever fills a gap on a brand-new doc.
+#: The currency is resolved from the Company at run time — never hardcoded.
+HIDDEN_REQUIRED_DEFAULTS = {
+	"currency": lambda: _company_currency(),
+	"conversion_rate": lambda: "1",
+}
 
 #: Fields hidden across the transacting set.
 #:
@@ -92,7 +135,8 @@ HIDE_FIELDS = {
 	# Hiding the SECTION collapses the whole block; the three fields inside are
 	# listed too so they cannot surface via a search or a print format.
 	"Sales Invoice": [
-		*_TAXES_BLOCK,
+		# Was `*_TAXES_BLOCK` — see the constant for why the client reversed it.
+		*_TAXES_NOISE,
 		"project",
 		"currency",
 		"conversion_rate",
@@ -390,6 +434,53 @@ def _gate_address_title():
 	_set_property(doctype, fieldname, "hidden", "0", "Check")
 	_set_property(doctype, fieldname, "depends_on", condition, "Code")
 
+
+
+def _company_currency() -> str:
+	"""The site's own currency, resolved live — never a hardcoded "SAR".
+
+	Falls back through the global default company, then any company, then the
+	system default. Returns "" when nothing resolves, and the caller then writes
+	no default at all rather than an invented one.
+	"""
+	company = frappe.defaults.get_global_default("company") or frappe.db.get_value("Company", {}, "name")
+	if company:
+		currency = frappe.db.get_value("Company", company, "default_currency")
+		if currency:
+			return currency
+	return frappe.db.get_default("currency") or ""
+
+
+def setup_hidden_required_defaults() -> dict:
+	"""Give every hidden + mandatory field a default, so Customize Form can save.
+
+	`DocType.validate_fields` rejects `hidden and reqd and not default` — and it
+	rejects the whole form, not just that field, so one such field blocks every
+	unrelated Customize Form change on that doctype. Our own `_hide_fields` writes
+	Property Setters directly and never meets that validation, which is why this
+	sat latent until somebody opened the form and pressed Update.
+
+	Derived from HIDE_FIELDS rather than listed, so a field hidden in future gets
+	the same treatment automatically.
+	"""
+	written = {}
+	for doctype, fieldnames in HIDE_FIELDS.items():
+		if not frappe.db.exists("DocType", doctype):
+			continue
+		meta = frappe.get_meta(doctype)
+		for fieldname in fieldnames:
+			if fieldname not in HIDDEN_REQUIRED_DEFAULTS:
+				continue
+			field = meta.get_field(fieldname)
+			if not field or not cint(field.reqd) or cstr(field.default).strip():
+				continue
+			value = cstr(HIDDEN_REQUIRED_DEFAULTS[fieldname]()).strip()
+			if not value:
+				# Better an unsaveable form than a document defaulted to a guess.
+				continue
+			_set_property(doctype, fieldname, "default", value, "Text")
+			written[f"{doctype}.{fieldname}"] = value
+	return written
 
 def _hide_fields():
 	for doctype, fieldnames in HIDE_FIELDS.items():
