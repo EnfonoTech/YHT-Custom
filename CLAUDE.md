@@ -318,8 +318,9 @@ accountant: SI→`CN`, DN→`DRN`, PI→`DBN`, PR→`PRN`.
     pre-discount figure, so the line prints the same number as `Total`. And print
     `rounded_total or grand_total`, never bare `grand_total` — ERPNext derives `in_words` from the
     former, so with rounding on, the figure and the words disagree on a customer-facing document.
-44. ✅ **FIXED 2026-09-12 — THIS BENCH NOW USES A PATCHED STATIC `wkhtmltopdf`, SO HEADERS,
-    FOOTERS AND `<thead>` REPEAT ALL WORK. Read this before believing the paragraph below.**
+44. ⚠️ **CHANGED 2026-09-12 — THIS BENCH NOW USES A PATCHED STATIC `wkhtmltopdf`, SO HEADERS,
+    FOOTERS AND `<thead>` REPEAT ALL WORK. It is NOT a free win: read 104 and 105 first,
+    which are the two regressions it caused on the existing KATC formats.**
     `/usr/bin/wkhtmltopdf` (Ubuntu `0.12.6-2build2`) is still unpatched and is still what the
     OTHER bench uses. A static `0.12.6.1 (with patched qt)` was extracted — `dpkg-deb -x`, NOT
     installed — to `/opt/wkhtmltox-static/`, and `environment=PATH=...` on the four
@@ -765,6 +766,85 @@ accountant: SI→`CN`, DN→`DRN`, PI→`DBN`, PR→`PRN`.
     on Sales Invoice again because **150 of 2,460** submitted invoices carry no tax template — the
     zero-rated, export and return cases the original note named as its trade-off. `shipping_rule`,
     `incoterm` and `named_place` stay hidden; 0 invoices use them.
+
+100. 🔴 **A PURGED *TABLE* DOCFIELD ORPHANS ITS ROWS SILENTLY — A PURGED SCALAR COLUMN DOES NOT.
+    The two are not the same failure and only one needs repair.** `Document.load_from_db` selects
+    `*`, so a column whose Custom Field was deleted still lands on the doc: measured live,
+    `doc.custom_invoice_type` returns `'CASH'` and `doc.custom_cr_number` `'2055010787'` with no
+    DocField anywhere. **Child tables are different** — they load from METADATA
+    (`meta._get_table_fields()`), so with the Table DocField gone the attribute is never set at
+    all, jinja resolves it to Undefined, and `{% for %}` over it renders NOTHING and raises
+    NOTHING. The legacy Khobar invoice printed an empty Delivery Note cell on **1,178 of 2,360**
+    submitted invoices while **1,901 rows** sat in `tabDelivery Note si` — a table with no DocType,
+    so `frappe.qb` and `get_all` have no metadata and parameterised SQL is the only reader.
+    ⚠️ Two more consequences of the same purge: `row.get_formatted(f)` with no DocField falls back
+    to a Data format, so a Currency column prints `81` instead of `81.00`; and the raw column
+    returns SQL NULL rather than the `""` a DocField default supplies, so an unguarded
+    `{{ doc.x }}` prints the literal word **None** on a customer-facing invoice — measured on 169
+    invoices for one field and on 23 of the 24 documents raised on this system for another.
+    Guard every purged read with `or ''`.
+101. 🔴 **THE PRINT SANDBOX'S `frappe.db.sql` IS `safe_exec.read_sql`, AND ITS WHITELIST IS
+    `select` / `explain` / `with` ONLY.** A `SHOW TABLES LIKE 'tabX'` existence guard — the obvious
+    way to make a format tolerate a missing legacy table — throws *"Read-Only queries are allowed"*
+    and 417s the ENTIRE print. Use `select count(*) from information_schema.tables where
+    table_schema = database() and table_name = '…'`, which starts with `select` and passes.
+    ✅ What DOES work in the sandbox, all measured on 15.118.0: `frappe.db.sql` with a JOIN,
+    `frappe.get_doc`, `frappe.get_fullname`, `frappe.db.get_value` with a dict filter,
+    `frappe.format_value`, `_().format()` and the `abs_url` filter — as **Administrator and as a
+    Branch User, byte-for-byte identical output**. And `frappe.utils.pdf.inline_private_images`
+    base64-inlines a `/private/files/…` image before wkhtmltopdf sees it, so the legacy QR lookup
+    needs no helper.
+102. 🔴 **DO NOT ADD A `jinja` HOOK IN ORDER TO SHIP A PRINT FORMAT ON THIS BENCH.** The hook is
+    resolved when the environment is BUILT, so between writing the file and reloading the workers
+    it raises for the whole environment and 500s every website page (gotcha 25) — and the reload
+    is exactly what we must not do here, because this bench's gunicorn pool is **shared with the
+    client's production site**. Measured while building the Khobar format: registering one helper
+    took `yht-test`'s `/login` to **HTTP 500 in 19.6 s**, while `yht-khobhar` stayed 200 only
+    because its hook cache had not been cleared — one eviction from the same fault on production.
+    Reverting the two files and `clear-cache` restored both to 200 without touching a worker.
+    **A template is read from disk per render and needs no reload**, so put the logic inline and
+    keep the format self-contained. `test_every_helper_the_template_calls_is_already_registered`
+    holds the line.
+103. ✅ **THE PATCHED wkhtmltopdf ALSO FIXED THE RTL ANCHORING BUG — gotchas 79/86 describe the
+    UNPATCHED build.** The legacy Khobar format carries plain `direction: rtl; text-align: right`
+    Arabic with ordinary spaces and NO RLM/NBSP anchoring of any kind, and on the static
+    `0.12.6.1 (with patched qt)` it renders correctly: verified by eye across three invoices —
+    roughly sixty multi-word item names, the bilingual column headings, the customer's Arabic name
+    and the Arabic amount-in-words — with no overlap anywhere. Before assuming a format needs
+    `print_helpers._rtl`, render it and look. The anchoring in the `KATC *` formats is left in
+    place: it is harmless, and removing it is a change with no benefit.
+
+104. 🔴 **`--disable-smart-shrinking` IS ITSELF A PATCH-ONLY FEATURE, SO SWAPPING TO THE PATCHED
+    BUILD SILENTLY CLIPS EVERY FORMAT WIDER THAN THE PAGE.** `frappe/utils/pdf.py:107` sets that
+    flag unconditionally for any version `> 0.12.3` — which both builds are. The UNPATCHED Qt
+    simply ignored it and always shrank the layout to fit, which is why every KATC format looked
+    right for weeks. The patched build obeys it, renders 1:1, and anything over A4 runs off the
+    right-hand edge with **no error and no warning**.
+    Measured A/B on `KSIN-25-0432`, same document and same format: unpatched → 2 pages with all
+    seven columns; patched → 3 pages with **`Total Inc.Vat` missing entirely** from a Saudi tax
+    invoice, and the letterhead cut mid-word. Scanning all ten KATC formats by page count with the
+    flag on vs off, **three overflow** — `KATC Tax Invoice`, `KATC Proforma Invoice`,
+    `KATC Quotation Proforma` — and seven fit, which is why the quotation kept its columns and the
+    defect was reported as a quotation problem.
+    ⚠️ **Margins are not the fix**: 5 mm left/right brings the last column back but the document is
+    still 3 pages and cramped. Letting the shrink happen gives back the exact old layout. The flag
+    is set in frappe core, which we never edit, so the supported levers are a `pdf_generator` hook
+    (gotcha 48) or narrowing the format. **Check every wide format after an engine change by
+    rendering with and without the flag and comparing PAGE COUNT** — that comparison needs no
+    poppler and catches clipping that a glance at page 1 does not.
+105. 🔴 **TWO NESTED REPEATING ROW GROUPS RENDER AT THE WRONG OFFSET — the letterhead paints OVER
+    the table.** The KATC formats put the letterhead in the OUTER table's `<thead>` so it would
+    repeat (gotcha 34). On the unpatched build nothing repeated, so it never showed; on the patched
+    build the outer `<thead>` repeats *and* `table.katc-items thead` repeats, and the outer one is
+    drawn on top of the body. Reproduced on `KSSQ-26-0762`: the letterhead landed across the column
+    headings and rows 14–17, and the plain quotation additionally emitted a **blank first page**
+    with the whole document pushed to page 2. The client hit both in production.
+    **The supported way to repeat a header is `id="header-html"`** — `prepare_header_footer` lifts
+    it out and passes `--header-html`, and wkhtmltopdf reserves the top margin for it properly
+    (verified: the Khobar invoice repeats its letterhead on page 2 with no overlap). Where a repeat
+    is not wanted, make the row an ordinary `<tbody>` row; that alone fixed all ten KATC formats.
+    ⚠️ `prepare_header_footer` only defaults `margin-top` to 15mm when there is **no** `#header-html`
+    — with one present the margin comes from the format's own CSS, so a tall header needs its own.
 
 ## Deploy
 

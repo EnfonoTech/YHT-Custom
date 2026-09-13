@@ -1,0 +1,392 @@
+{#-
+  Kathoom Alkhobar — Sales Invoice / Credit Note.
+
+  🔴 THIS DIRECTORY IS NOT `katc/`, AND THAT IS DELIBERATE. `templates/includes/katc/`
+  holds OUR redesign, which is governed by invariants of its own — every Arabic literal
+  RLM-wrapped and NBSP-joined (`TestArabicLabelsAreAnchored`), among others. A legacy
+  reproduction is byte-faithful to the incumbent by instruction and must NOT be held to
+  those rules: its Arabic is bare, exactly as the old system wrote it, and it renders
+  correctly because the patched wkhtmltopdf fixed the bidi anchoring bug those invariants
+  were written for. Twelve more legacy formats are coming; they all belong here.
+
+  A REPRODUCTION of the incumbent system's `KATHOOM KHOBAR INV FORMAT NEW`, kept
+  deliberately close to the original: same tables, same column widths, same
+  bilingual labels, same raw `{{ row.qty }}` / `{{ row.rate }}` / `{{ row.amount }}`
+  (they print `2.0`, `270.0`, `540.0` — that is the incumbent's own output, not a
+  defect introduced here). Source: the client's own copy, pasted 2026-09-13, which
+  is NEWER than our 2026-08-18 migration capture — the capture has no
+  "Total after Discount" row, no Terms block and no page-break wrapper.
+
+  Exactly TWO deviations, both because as-is does not survive on this schema.
+  They are marked `DEVIATION 1` and `DEVIATION 2` below. Everything else is the
+  incumbent's markup.
+-#}
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+
+  {%- macro add_header(page_num, max_pages, doc, letter_head, no_letterhead) -%}
+    {% if letter_head and not no_letterhead %}
+    <div id="header-html" class="print-heading">
+        <div class="letter-head">
+        {{ letter_head }}
+        </div>
+    </div>
+    {% endif %}
+    {% if max_pages > 1 %}
+    <p class="text-right">{{ _("Page {0} of {1}").format(page_num, max_pages) }}</p>
+    {% endif %}
+{%- endmacro -%}
+{{ add_header(0,1,doc,letter_head, no_letterhead) }}<br>
+  <div style="text-align:center;font-size:12px;">
+      {% if doc.is_return == 0 %}
+      <b>فاتورة ضريبية</b><br>
+      <b>TAX INVOICE</b>
+      {% endif %}
+      {% if doc.is_return == 1 %}
+      <b>مذكرة الائتمان</b><br>
+      <b>CREDIT NOTE</b>
+      {% endif %}
+  </div>
+
+  <table style="width:100%" border="1px">
+      <tr>
+          <td style="width:20%">Invoice Number :<br>رقم الفاتورة</td>
+          <td style="width:20%">{{doc.name}}</td>
+          <td style="width:20%">Time <br> الوقت</td>
+          <td style="width:20%">{{doc.get_formatted('posting_time')}}</td>
+          {#- DEVIATION 3 (a) — `or ''`. With the Custom Field purged, the raw column
+              comes back as SQL NULL rather than the "" a DocField default would give,
+              and jinja renders None as the literal text `None`. Measured: 169 of 2,360
+              submitted invoices. -#}
+          <td style="width:30%">Invoice Type : {{doc.custom_invoice_type or ''}}</td>
+      </tr>
+      <tr>
+          <td>Sales Executive :</td>
+          <td>
+              {{ frappe.get_fullname(doc.owner) }}
+            </td>
+          <td>Invoice Issue Date <br> تاريخ اصدار الفاتورة</td>
+          <td>{{doc.get_formatted('posting_date')}}</td>
+          <td>PO# {{doc.po_no}}</td>
+      </tr>
+      <tr>
+          <td colspan="2"><b>Buyer - العميل</b></td>
+          <td colspan="3">
+              <b>Delivery Note :</b>
+              {#- DEVIATION 1 — the incumbent looped `doc.custom_delivery_note_`.
+                  That Table DocField was purged; child tables load from METADATA,
+                  so the attribute is never set, the loop renders nothing and raises
+                  nothing. 1,178 of 2,360 submitted invoices printed this cell EMPTY
+                  while the rows sat in `tabDelivery Note si` (1,901 of them).
+
+                  🔴 THIS IS DELIBERATELY INLINE RATHER THAN A `jinja` HELPER. A new
+                  entry in the `jinja` hook is resolved when the environment is built,
+                  so until the workers reload it raises for the WHOLE environment and
+                  500s every website page, /login included (gotcha 25). This bench's
+                  gunicorn pool is SHARED with the client's production site, so that
+                  reload cannot be a step in shipping a print format. A template is
+                  read from disk per render and needs no reload at all.
+
+                  No DocType backs that table, so `frappe.qb` and `get_all` have no
+                  metadata to resolve — SQL is the only reader, parameterised. The
+                  modern `Sales Invoice Item.delivery_note` (item 32) already covers
+                  1,171 of the 1,178; the orphan rows are what the other 7 need. -#}
+              {#- The existence check is a SELECT on purpose: the print sandbox routes
+                  `frappe.db.sql` through `safe_exec.read_sql`, whose whitelist is
+                  `select` / `explain` / `with` only — `SHOW TABLES LIKE` is refused
+                  with *Read-Only queries are allowed*, and the whole print 417s. -#}
+              {%- set has_legacy = frappe.db.sql("select count(*) from information_schema.tables where table_schema = database() and table_name = 'tabDelivery Note si'")[0][0] -%}
+              {%- set legacy_rows = frappe.db.sql("select delivery_note from `tabDelivery Note si` where parent = %s and parenttype = 'Sales Invoice' and parentfield = 'custom_delivery_note_' order by idx asc", doc.name, as_dict=True) if has_legacy else [] -%}
+              {%- set item_notes = (doc.get("items") or []) | map(attribute="delivery_note") | select | list -%}
+              {%- set legacy_notes = legacy_rows | map(attribute="delivery_note") | select | list -%}
+              {{ (item_notes + legacy_notes) | unique | join(", ") }}
+            </td>
+      </tr>
+      <tr>
+            <td>
+                Name<br>
+                اﻹسم
+            </td>
+            <td colspan="4">
+                {% set customer_doc = frappe.get_doc("Customer", doc.customer) %}
+
+                <b>{{ doc.customer_name }}</b><br>
+
+                {% if customer_doc.custom_customer_name_in_arabic %}
+                    <div style="direction: rtl; text-align: right;">
+                        {{ customer_doc.custom_customer_name_in_arabic }}
+                    </div>
+                {% endif %}
+            </td>
+      </tr>
+      {% set customer_address = frappe.db.sql("""
+    SELECT addr.name
+    FROM `tabAddress` addr
+    JOIN `tabDynamic Link` dl ON dl.parent = addr.name
+    WHERE dl.link_doctype = 'Customer'
+    AND dl.link_name = %s
+    AND addr.is_primary_address = 1
+    LIMIT 1
+""", doc.customer, as_dict=True) %}
+
+{% if customer_address %}
+    {% set customer_address_name = customer_address[0]['name'] %}
+{% endif %}
+      <tr>
+          <td colspan="1">VAT Number - الرقم الضريبي</td>
+          <td colspan="2">
+               {% if (frappe.db.get_value("Customer", doc.customer, "tax_id")) %}
+                    {{frappe.db.get_value("Customer", doc.customer, "tax_id") or ''}}
+                {% endif %}
+          </td>
+          <td colspan="1">Country - البلد</td>
+          <td colspan="1">
+              {% if customer_address_name %}
+                  {% set country = frappe.db.get_value("Address", customer_address_name, "country") %}
+                  {{ country or '' }}
+              {% endif %}
+          </td>
+      </tr>
+      <tr>
+          <td colspan="1">Building No. - رقم المبني</td>
+          <td colspan="2">
+              {% if customer_address_name %}
+                  {% set building_no = frappe.db.get_value("Address", customer_address_name, "address_line1") %}
+                  {{ building_no or '' }}
+              {% endif %}
+          </td>
+          <td colspan="1">Street Name - اسم الشارع</td>
+          <td colspan="2">
+              {% if customer_address_name %}
+                  {% set street_name = frappe.db.get_value("Address", customer_address_name, "address_line2") %}
+                  {{ street_name or '' }}
+              {% endif %}
+          </td>
+      </tr>
+      <tr>
+          <td colspan="1">District - الحي</td>
+          <td colspan="2">
+              {% if customer_address_name %}
+                  {% set district = frappe.db.get_value("Address", customer_address_name, "county") %}
+                  {{ district or '' }}
+              {% endif %}
+          </td>
+          <td colspan="1">City - المدينة</td>
+          <td colspan="1">
+              {% if customer_address_name %}
+                  {% set city = frappe.db.get_value("Address", customer_address_name, "city") %}
+                  {{ city or '' }}
+              {% endif %}
+          </td>
+      </tr>
+      <tr>
+          <td colspan="1">Post Code - الرمز البريدي</td>
+          <td colspan="2">
+              {% if customer_address_name %}
+                  {% set post_code = frappe.db.get_value("Address", customer_address_name, "pincode") %}
+                  {{ post_code or '' }}
+              {% endif %}
+          </td>
+          <td colspan="1">Additional No. - الرقم اﻹضافي</td>
+          <td colspan="1">
+              {% if customer_address_name %}
+                  {% set additional_no = frappe.db.get_value("Address", customer_address_name, "custom_additional_number") %}
+                  {{ additional_no or '' }}
+              {% endif %}
+          </td>
+      </tr>
+      <tr>
+          <td colspan="2">CR Number - رقم السجل التجاري</td>
+          <td colspan="2">{{ doc.custom_cr_number or '' }}</td>
+          <td colspan="2"></td>
+      </tr>
+  </table>
+
+    {#- DEVIATION 2 — the incumbent printed `row.custom_tax_amount` and
+        `row.custom_total_amount`, two columns of a purged Custom Field whose data
+        NOTHING on this system writes. Measured: 26 of 28 line rows on invoices
+        raised here hold 0, so as-is prints `TAX AMT 0.00` on every new tax
+        invoice; and 223 of 2,336 legacy invoices already disagree with their own
+        document (KSIN-24-6929 carries 44.35 of tax and 0.00 in the column).
+        `yht_row_taxes` reads ERPNext's own per-line split — see its docstring for
+        why `row_net * vat_rate` is not a substitute. -#}
+    {%- set cur = yht_currency(doc) -%}
+    {%- set rowtax = yht_row_taxes(doc) -%}
+    {%- set ns = namespace(vat_rate=0) -%}
+    {%- for tax in doc.get("taxes") or [] -%}{%- if tax.charge_type == "On Net Total" -%}{%- set ns.vat_rate = ns.vat_rate + (tax.rate or 0) -%}{%- endif -%}{%- endfor -%}
+
+    <table border="1px" style="width:100%">
+        <tr style="text-align:center;">
+            <th style="text-align:center;">
+                <b>SN #<br>رقم</b>
+            </th>
+            <th style="text-align:center;width:70%">
+                <b>ITEMS</b><br>
+                <b>وصف</b>
+            </th>
+            <th style="text-align:center;width:5%">
+                <b>QTY</b><br>
+                <b>كمية</b>
+            </th>
+            <th style="text-align:center;width:5%;">
+                <b>Unit Rate</b><br>
+                <b>سعر الوحدة</b>
+            </th>
+            <th style="text-align:center;width:5%;">
+                <b>EX VAT AMT</b><br>
+                <b>مبلغ  <br>ضريبة <br>القيمة المضافة</b>
+            </th>
+            <th style="text-align:center;">
+                <b>TAX AMT</b><br>
+                <b>مبلغ الضريبة</b>
+            </th>
+            <th style="text-align:center;">
+                <b>Total Inc.Vat</b><br>
+                <b>الإجمالي ش <br>املاً ضريبة<br> القيمة المضافة </b>
+            </th>
+        </tr>
+        {%- for row in doc.items -%}
+    {%- set row_net = row.net_amount or row.amount or 0 -%}
+    {%- set row_tax = rowtax.get(row.name, row_net * ns.vat_rate / 100) -%}
+    <tr style="text-align:left;">
+        <td style="width:5%; text-align:center;"> {% if row.idx %}{{ row.idx }} {% endif %}</td>
+        <td style="width:40%; white-space:normal; padding:0px;">
+            {% if row.item_name %}
+                <span style="display: block;">{{ row.item_name }}</span>
+            {% endif %}
+            {% set arabic_name = frappe.db.get_value("Item", row.item_code, "custom_item_name_in_arabic") %}
+            {% if arabic_name %}
+                <span style="display: block; text-align:right; direction: rtl;">
+                    {{ arabic_name }}
+                </span>
+            {% endif %}
+        </td>
+        <td style="width:10%; text-align:center;"> {% if row.qty %}{{ row.qty }}{% endif %}</td>
+        <td style="width:10%; text-align:center;"> {% if row.rate %}{{ row.rate }}{% endif %}</td>
+        <td style="width:10%; text-align:center;"> {% if row.amount %}{{ row.amount }}{% endif %}</td>
+        <td style="width:10%; text-align:center;">
+            {% if row_tax %}{{ frappe.format_value(row_tax, {"fieldtype": "Currency", "options": doc.currency}) }}
+            {% else %} 0.00 {% endif %}
+        </td>
+        <td style="width:15%; text-align:center;">
+            {% if row_net or row_tax %}{{ frappe.format_value(row_net + row_tax, {"fieldtype": "Currency", "options": doc.currency}) }}
+            {% else %} 0.00 {% endif %}
+        </td>
+    </tr>
+{%- endfor -%}
+      </table>
+
+<!-- =====================================================
+     FOOTER BLOCK — totals + terms + received by
+     Single no-break wrapper keeps everything together
+     ===================================================== -->
+<div style="page-break-inside: avoid;">
+
+    <table style="width:100%; margin-top:4px;" border="1px">
+        <tr>
+            <td rowspan="7" style="text-align:center;">
+                {% set qr_code = frappe.db.get_value('File', {'attached_to_name': doc.name, 'file_name': ['like', '%QR%']}, 'file_url') %}
+                {% if qr_code %}
+                    <img class="qr-code" src="{{ qr_code | abs_url }}" style="width: 70%; margin-top:auto;">
+                {% endif %}
+            </td>
+
+            <td style="text-align:right;width:55%">
+                Total (Excluding VAT) - الإجمالي (باستثناء ضريبة القيمة المضافة)
+            </td>
+            <td style="width:14.5%;text-align:right;">
+                {{ doc.get_formatted('total') }}
+            </td>
+        </tr>
+
+        {% if doc.discount_amount %}
+        <tr>
+            <td style="text-align:right;">
+                Discount - تخفيض
+            </td>
+            <td style="text-align:right;">
+                - {{ doc.get_formatted('discount_amount') }}
+            </td>
+        </tr>
+
+        <tr>
+            <td style="text-align:right;">
+                Total after Discount - الإجمالي بعد الخصم
+            </td>
+            <td style="text-align:right;">
+                {{ frappe.format_value(
+                    (doc.total or 0) - (doc.discount_amount or 0),
+                    {"fieldtype": "Currency", "options": doc.currency}
+                ) }}
+            </td>
+        </tr>
+        {% endif %}
+
+        <tr>
+            <td style="text-align:right;">
+                Total Taxable Amount (Excluding VAT) - إجمالي المبلغ الخاضع للضريبة (باستثناء ضريبة القيمة المضافة)
+            </td>
+            <td style="text-align:right;">
+                {{ doc.get_formatted('net_total') }}
+            </td>
+        </tr>
+
+        <tr>
+            <td style="text-align:right;">
+                VAT Amount 15% - مبلغ ضريبة القيمة المضافة 15%
+            </td>
+            <td style="text-align:right;">
+                {{ doc.get_formatted('total_taxes_and_charges') }}
+            </td>
+        </tr>
+
+        <tr>
+            <td style="text-align:right;">
+                Net Total - صافي المجموع
+            </td>
+            <td style="text-align:right;">
+                {{ doc.get_formatted('grand_total') }}
+            </td>
+        </tr>
+
+        <tr>
+            <td colspan="3">
+                <div style="text-align:left;">
+                    {{ doc.in_words }}
+                </div>
+                <div style="text-align:right; margin-top:2px;">
+                    {#- DEVIATION 3 (b) — same cause, worse reach: the Arabic amount in
+                        words is NULL on 23 of the 24 documents raised on this system, so
+                        every new invoice printed `None` here. Nothing on this system
+                        writes Arabic in-words; the cell is deliberately blank until it
+                        does. -#}
+                    {{ doc.custom_in_words_aed or '' }}
+                </div>
+            </td>
+        </tr>
+    </table>
+
+    {% if doc.terms %}
+    <div style="margin-top:6px; font-size:9pt;">
+        <b>Terms and Conditions - الشروط والأحكام</b><br>
+        {{ doc.terms }}
+    </div>
+    {% endif %}
+
+    <hr style="border:1px solid black; margin:6px 0;">
+
+    <div style="text-align:right;">
+        <b>Received By :</b>
+    </div>
+
+</div>
+
+    <div id="footer-html" class="visible-pdf">
+        {% if footer and not no_letterhead %}
+            <div id="htmlfooter"> {{ footer }} </div>
+        {% endif %}
+        <p class="text-center small page-number visible-pdf">
+            {{ _("Page {0} of {1}").format('<span class="page"></span>', '<span class="topage"></span>') }}
+        </p>
+    </div>

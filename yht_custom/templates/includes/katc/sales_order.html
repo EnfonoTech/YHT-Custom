@@ -8,8 +8,15 @@
 table.katc-doc { width: 100%; border-collapse: collapse; }
 table.katc-doc > thead > tr > td { padding: 0; border: 0; }
 /* The outer cell MUST be allowed to break. A table cell defaults to
-   page-break-inside: avoid, which pushes the whole document onto one page and
-   defeats the <thead> that repeats the letterhead. */
+   page-break-inside: avoid, which pushes the whole document onto one page.
+   🔴 The letterhead row is a <tbody>, NOT a <thead>. It was a <thead> so it would
+   repeat on page 2+ — which did nothing on the unpatched wkhtmltopdf this was
+   designed against, and on the patched build repeats it AT THE WRONG OFFSET:
+   measured on KSSQ-26-0762, the letterhead painted straight over the column
+   headings and rows 14-17, and the plain quotation also emitted a blank first
+   page. Two nested repeating row groups (this one and table.katc-items) is the
+   trigger. The supported way to repeat a header is id="header-html", which
+   frappe extracts into --header-html and wkhtmltopdf reserves margin for. */
 table.katc-doc > tbody > tr > td { padding: 0; border: 0; page-break-inside: auto !important; }
 .katc-title { text-align: center; font-size: 14pt; font-weight: bold; letter-spacing: 1px; margin: 8px 0 0; }
 .katc-title-ar { text-align: center; font-size: 12pt; font-weight: bold; direction: rtl; margin-bottom: 8px; }
@@ -46,8 +53,18 @@ table.katc-items td.ctr { text-align: center; }
    spans resolve. In the browser print view it would render inline instead. */
 .print-format-gutter #footer-html { display: none; }
 </style>
+{#- 🔴 THE LETTERHEAD IS NOT A ROW OF THIS TABLE. It was, and the table then broke
+    BETWEEN the letterhead row and the body cell whenever the body's first chunk did
+    not fit under it — the whole document jumped to page 2 and page 1 printed the
+    letterhead and nothing else. Content-dependent, so it passed on one sample and
+    failed on the next: measured across eight quotations, KSSQ-26-0767 (18 lines)
+    blanked while KSSQ-26-0762 (19 lines) did not. The client hit it twice.
+    `id="header-html"` is frappe's supported mechanism: `prepare_header_footer`
+    extracts it and hands it to wkhtmltopdf as `--header-html`, which draws it in
+    the page margin on EVERY page. It cannot consume body space and so cannot force
+    a break, and it repeats the way the incumbent's prints do. -#}
+{% if letter_head and 'katc-lh' in letter_head %}<div id="header-html" class="katc-head">{{ letter_head }}</div>{% elif no_letterhead %}<div class="katc-spacer" style="height: {{ yht_katc_spacer_pt() }}pt"></div>{% endif %}
 <table class="katc-doc">
-  <thead><tr><td>{% if letter_head and 'katc-lh' in letter_head %}{{ letter_head }}{% elif no_letterhead %}<div class="katc-spacer" style="height: {{ yht_katc_spacer_pt() }}pt"></div>{% endif %}</td></tr></thead>
   <tbody><tr><td>
 {#- `net_total` only reflects the additional discount when it was applied ON the
     net total; with `apply_discount_on = "Grand Total"` it is still the PRE-discount
