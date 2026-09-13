@@ -53,8 +53,18 @@ table.katc-items td.ctr { text-align: center; }
    spans resolve. In the browser print view it would render inline instead. */
 .print-format-gutter #footer-html { display: none; }
 </style>
+{#- 🔴 THE LETTERHEAD IS NOT A ROW OF THIS TABLE. It was, and the table then broke
+    BETWEEN the letterhead row and the body cell whenever the body's first chunk did
+    not fit under it — the whole document jumped to page 2 and page 1 printed the
+    letterhead and nothing else. Content-dependent, so it passed on one sample and
+    failed on the next: measured across eight quotations, KSSQ-26-0767 (18 lines)
+    blanked while KSSQ-26-0762 (19 lines) did not. The client hit it twice.
+    `id="header-html"` is frappe's supported mechanism: `prepare_header_footer`
+    extracts it and hands it to wkhtmltopdf as `--header-html`, which draws it in
+    the page margin on EVERY page. It cannot consume body space and so cannot force
+    a break, and it repeats the way the incumbent's prints do. -#}
+{% if letter_head and 'katc-lh' in letter_head %}<div id="header-html" class="katc-head">{{ letter_head }}</div>{% elif no_letterhead %}<div class="katc-spacer" style="height: {{ yht_katc_spacer_pt() }}pt"></div>{% endif %}
 <table class="katc-doc">
-  <tbody><tr><td>{% if letter_head and 'katc-lh' in letter_head %}{{ letter_head }}{% elif no_letterhead %}<div class="katc-spacer" style="height: {{ yht_katc_spacer_pt() }}pt"></div>{% endif %}</td></tr></tbody>
   <tbody><tr><td>
 {#- `net_total` only reflects the additional discount when it was applied ON the
     net total; with `apply_discount_on = "Grand Total"` it is still the PRE-discount

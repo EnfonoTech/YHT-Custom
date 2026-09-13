@@ -370,6 +370,13 @@ fixtures = [
 # The hook does NOT support "alias:path" — each function is registered under its
 # own __name__, and every app's jinja methods share ONE namespace. Hence the
 # yht_ prefix on the functions themselves.
+# Keeps wkhtmltopdf's smart shrinking on for the KATC formats. Unlike a `jinja`
+# method this is resolved when a PDF is actually rendered, so a missing module
+# cannot 500 every website page — but it still needs a worker reload to take
+# effect, and it is inert until a Print Format names it in `pdf_generator`.
+pdf_generator = ["yht_custom.pdf_shrink.render"]
+
+
 jinja = {
 	"methods": [
 		"yht_custom.print_helpers.yht_branch_header",
