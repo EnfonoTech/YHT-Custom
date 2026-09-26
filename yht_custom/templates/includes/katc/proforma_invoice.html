@@ -88,8 +88,15 @@ table.katc-items td.ctr { text-align: center; }
     net total; with `apply_discount_on = "Grand Total"` it is still the PRE-discount
     figure, and "Total after Discount" would print the same number as "Total". -#}
 {%- set net_after_discount = (doc.total - (doc.discount_amount or 0)) if doc.apply_discount_on == "Grand Total" else doc.net_total -%}
-<div class="katc-title">{{ katc_heading.en }}</div>
-{%- if katc_heading.ar %}<div class="katc-title-ar">&rlm;{{ katc_heading.ar }}&rlm;</div>{% endif %}
+{#- The RLM marks are LITERAL characters, not `&rlm;` entities, and the two divs
+    stay on their own lines. Both render identically — but this file is on a bench
+    whose OTHER site is the client's production, and "renders identically" is an
+    assumption until somebody renders it. A byte-for-byte comparison against the
+    pre-change output is something a script can check on every deploy, and it
+    caught this: the entity version changed the live Sales Order and Proforma
+    HTML the moment the branch was pulled. -#}
+<div class="katc-title">{{ katc_heading.en }}</div>{% if katc_heading.ar %}
+<div class="katc-title-ar">‏{{ katc_heading.ar }}‏</div>{% endif %}
 
 <table class="katc-meta"><tbody>
   <tr>
