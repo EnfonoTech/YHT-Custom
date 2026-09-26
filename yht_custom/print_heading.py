@@ -57,25 +57,28 @@ from yht_custom import features
 #: because `select_print_heading` is a Link and a near-miss creates a second
 #: record rather than reusing theirs.
 ARABIC = {
-	"Sales Quotation": "عرض سعر",
+	"Sales Quotation": "عرض سعر",
 	# `custom_print_as` on Sales Order offers the bare word, and 1,296 documents
 	# already carry it — the alias is what keeps that Select working against the
 	# `Print Heading` record, which is named "Sales Quotation".
-	"Quotation": "عرض سعر",
-	"Proforma Invoice": "فاتورة مبدئية",
-	"Sales Order": "أمر بيع",
-	"Sales Invoice": "فاتورة ضريبية",
-	"Sales Return": "مرتجع مبيعات",
-	"Credit Note": "إشعار دائن",
-	"Debit Note": "إشعار مدين",
-	"Delivery Note": "مذكرة تسليم",
-	"Delivery Note Return": "مرتجع تسليم",
-	"Purchase Invoice": "فاتورة مشتريات",
-	"Purchase Return": "مرتجع مشتريات",
-	"Purchase Order": "أمر شراء",
-	"Expenses Invoice": "فاتورة مصروفات",
-	"Receipt Voucher": "سند قبض",
-	"Payment Voucher": "سند صرف",
+	"Quotation": "عرض سعر",
+	"Proforma Invoice": "فاتورة مبدئية",
+	"Sales Order": "أمر بيع",
+	"Sales Invoice": "فاتورة ضريبية",
+	"Sales Return": "مرتجع مبيعات",
+	"Credit Note": "إشعار دائن",
+	"Debit Note": "إشعار مدين",
+	"Delivery Note": "مذكرة تسليم",
+	"Delivery Note Return": "مرتجع تسليم",
+	"Purchase Invoice": "فاتورة مشتريات",
+	"Purchase Return": "مرتجع مشتريات",
+	"Purchase Order": "أمر شراء",
+	"Expenses Invoice": "فاتورة مصروفات",
+	"Receipt Voucher": "سند قبض",
+	"Payment Voucher": "سند صرف",
+	# CR-004 offers this as a `Print As` option on Purchase Order, so it needs a
+	# Print Heading record and an Arabic twin like every other title.
+	"Purchase Enquiry": "طلب عرض سعر",
 }
 
 #: Heading → what the PAGE says, where the two differ. The record is named for the
@@ -84,6 +87,12 @@ ARABIC = {
 EN_DISPLAY = {
 	"Sales Quotation": "QUOTATION",
 	"Quotation": "QUOTATION",
+	# 🔴 A KSA SALES INVOICE PRINTS AS A TAX INVOICE, and the artefact the client
+	# signed off on says so. The `Print Heading` record has to be named "Sales
+	# Invoice" because that is the one already on 1,108 documents here, but the
+	# page must not start calling itself something the tax authority does not
+	# recognise. A RETURN still resolves to Credit Note and prints CREDIT NOTE.
+	"Sales Invoice": "TAX INVOICE",
 }
 
 
