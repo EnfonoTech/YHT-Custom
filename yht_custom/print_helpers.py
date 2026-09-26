@@ -479,20 +479,90 @@ def yht_party_vat(doc, party_field: str = "customer") -> str:
 	return cstr(frappe.db.get_value(doctype, party, "tax_id") or "").strip()
 
 
-def yht_sales_person(doc) -> str:
-	"""Who the document belongs to, for the `Sales Executive` line.
+#: Where each selling doctype keeps the party whose Sales Team we consult.
+_PARTY_FIELD = {"Quotation": "party_name"}
 
-	The Sales Team's first row, falling back to the full name of whoever created
-	the document. The incumbent site carries this as a Custom Field; Q3 decided we
-	derive it instead of adding one.
+
+def _customer_sales_person(doc) -> str:
+	"""The salesperson assigned to the document's CUSTOMER, or ""."""
+	party_field = _PARTY_FIELD.get(doc.get("doctype"), "customer")
+	party = cstr(doc.get(party_field)).strip()
+	if not party:
+		return ""
+	# `Quotation.party_name` also holds Leads; a Lead has no Sales Team rows, so
+	# the query simply returns nothing rather than needing a quotation_to branch.
+	rows = frappe.db.get_all(
+		"Sales Team",
+		filters={"parenttype": "Customer", "parent": party},
+		fields=["sales_person"],
+		order_by="idx asc",
+		limit=1,
+	)
+	return cstr(rows[0].sales_person).strip() if rows else ""
+
+
+def _sales_person_mobile(sales_person: str) -> str:
+	"""The salesperson's own number, or "".
+
+	🔴 MEASURED 2026-09-26, AND THE ANSWER IS USUALLY "": `Sales Person` carries NO
+	phone field of its own, so the only route is `employee` -> `Employee.cell_number`.
+	Of 26 Sales Persons on this site, 22 carry an `employee` link, several of those
+	point at Employee records that no longer exist, and exactly ONE resolves to a
+	number. `SHAFI`, the person actually assigned to the sampled customers, has no
+	employee link at all. Returning "" is therefore the normal case, not an error —
+	the caller must render the line only when there is something to render.
+	"""
+	if not sales_person:
+		return ""
+	employee = frappe.db.get_value("Sales Person", sales_person, "employee")
+	if not employee:
+		return ""
+	return cstr(frappe.db.get_value("Employee", employee, "cell_number")).strip()
+
+
+def yht_sales_person(doc) -> dict:
+	"""`{name, mobile}` for the `Sales Executive` / `CONTACT` line.
+
+	Resolution order, widened for CR-011's sibling CR-009 (meeting 2026-09-23):
+
+	1. the document's own Sales Team — an explicit override on this document;
+	2. **the CUSTOMER's assigned salesperson** — what the client actually asked
+	   for. 🔴 On a QUOTATION step 1 can never fire: **ERPNext does not ship a
+	   `sales_team` table on Quotation at all** (verified on the live meta — no
+	   Property Setter involved, it is simply absent upstream), while Sales Order,
+	   Sales Invoice and Delivery Note do have one. So every quotation fell through
+	   to step 3 and printed the creator — precisely the *"it shows Created By"*
+	   complaint. 428 of 441 customers carry the row the fallback reads;
+	3. whoever created the document, as before.
+
+	🔴 NAME AND MOBILE ALWAYS DESCRIBE THE SAME PERSON. When a salesperson is named
+	but has no reachable number, `mobile` comes back "" rather than borrowing the
+	creator's — printing one person's name beside another's phone number on a
+	customer-facing quotation is worse than printing no number.
+
+	⚠️ Returns a DICT; it used to return a string. Both call sites in this app were
+	updated with it, and no site-only Print Format calls it (checked on the client
+	site before the change).
 	"""
 	for row in doc.get("sales_team") or []:
 		sales_person = cstr(row.get("sales_person")).strip()
 		if sales_person:
-			return sales_person
+			return {"name": sales_person, "mobile": _sales_person_mobile(sales_person)}
+
+	from_customer = _customer_sales_person(doc)
+	if from_customer:
+		return {"name": from_customer, "mobile": _sales_person_mobile(from_customer)}
 
 	owner = doc.get("owner")
-	return cstr(frappe.db.get_value("User", owner, "full_name")) if owner else ""
+	if not owner:
+		return {"name": "", "mobile": ""}
+	row = frappe.db.get_value("User", owner, ["full_name", "mobile_no", "phone"], as_dict=True)
+	if not row:
+		return {"name": "", "mobile": ""}
+	return {
+		"name": cstr(row.full_name).strip(),
+		"mobile": cstr(row.mobile_no).strip() or cstr(row.phone).strip(),
+	}
 
 
 def yht_creator_contact(doc) -> dict:

@@ -989,7 +989,13 @@ class TestTwoFormatDoctypes(FrappeTestCase):
 
 		self.assertNotEqual(squash(plain), squash(arabic), "the Arabic column is missing")
 		self.assertIn("BANK DETAILS", arabic, "the artefact's VAT / bank block is missing")
-		self.assertNotIn("BANK DETAILS", plain, "Print 1 does not carry a bank block")
+		# ⚠️ CHANGED 2026-09-23 BY THE CLIENT (CR-010). This used to assert the bank
+		# block was ABSENT from the plain format, because the incumbent's `quote Print 1`
+		# artefact has none. The client has now asked for bank details on the quotation
+		# print, so BOTH carry it and the artefact no longer decides this one. Same
+		# lesson as gotcha 76: a same-shape assertion is only valid while the shapes are
+		# genuinely meant to match — when the client says otherwise, the test moves.
+		self.assertIn("BANK DETAILS", plain, "CR-010: the plain quotation now carries it too")
 		self.assertEqual(
 			squash(strip_column_widths(strip_bank_block(strip_first_thead(plain)))),
 			squash(
@@ -1474,15 +1480,28 @@ class TestOtherHelpers(FrappeTestCase):
 		self.assertLessEqual(len(reads), 1, "the address must be read once, not per field")
 
 	def test_sales_person_falls_back_to_the_owner(self):
-		# check 41
+		"""check 41 — the LAST resort, now that there are three steps not two.
+
+		⚠️ Clearing `doc.sales_team` is no longer enough to reach the owner. CR-009
+		(meeting 2026-09-23) inserted the CUSTOMER's assigned salesperson between the
+		two, so this has to pick an order whose customer has no salesperson either —
+		otherwise it asserts the owner and gets the customer's person, which is the
+		new behaviour working correctly rather than a regression.
+		"""
 		yht_sales_person = helper("yht_sales_person")
-		name = artefact_or_any("Sales Order")
-		if not name:
-			self.skipTest("no submitted Sales Order")
-		doc = frappe.get_doc("Sales Order", name)
+		row = frappe.db.sql(
+			"""select so.name from `tabSales Order` so
+			   where not exists (select 1 from `tabSales Team` st
+			                     where st.parenttype = 'Customer' and st.parent = so.customer)
+			   limit 1""",
+			as_dict=True,
+		)
+		if not row:
+			self.skipTest("every Sales Order's customer carries a salesperson")
+		doc = frappe.get_doc("Sales Order", row[0].name)
 		doc.sales_team = []
 		expected = frappe.db.get_value("User", doc.owner, "full_name") or ""
-		self.assertEqual(yht_sales_person(doc), expected)
+		self.assertEqual(yht_sales_person(doc)["name"], expected)
 
 	def test_sales_person_prefers_the_sales_team(self):
 		yht_sales_person = helper("yht_sales_person")
@@ -1492,7 +1511,7 @@ class TestOtherHelpers(FrappeTestCase):
 		if not row:
 			self.skipTest("no Sales Order carries a Sales Team row")
 		doc = frappe.get_doc("Sales Order", row.parent)
-		self.assertEqual(yht_sales_person(doc), row.sales_person)
+		self.assertEqual(yht_sales_person(doc)["name"], row.sales_person)
 
 	def test_creator_contact_returns_name_and_mobile(self):
 		"""check 42 — Q3: this REPLACES the incumbent's `Created By Name` /

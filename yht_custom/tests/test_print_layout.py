@@ -19,6 +19,7 @@ was reported by them:
 """
 
 import io
+import re
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
@@ -79,7 +80,13 @@ class TestTheLetterheadCannotForceAPageBreak(FrappeTestCase):
 		for f in _katc_formats():
 			html = frappe.db.get_value("Print Format", f.name, "html") or ""
 			if "katc-doc" not in html and "{% include" in html:
-				path = html.split('"')[1].replace("yht_custom/", "", 1)
+				# 🔴 Parse the INCLUDE, not the first quoted string in the record. This
+				# used to be `html.split('"')[1]`, which broke the moment a shim grew a
+				# comment containing a quoted phrase — it then tried to open a file named
+				# after that phrase. Match the include tag itself.
+				m = re.search(r'\{%-?\s*include\s+"([^"]+)"', html)
+				self.assertIsNotNone(m, f"{f.name} has an include this test cannot parse")
+				path = m.group(1).replace("yht_custom/", "", 1)
 				html = open(f"{frappe.get_app_path('yht_custom')}/{path}", encoding="utf-8").read()
 			if "letter_head" not in html:
 				continue

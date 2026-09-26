@@ -85,7 +85,7 @@ table.katc-items td.ctr { text-align: center; }
     <td class="lbl">Currency</td><td>{{ cur }}</td>
   </tr>
   <tr>
-    <td class="lbl">Sales Executive</td><td>{{ yht_sales_person(doc) }}</td>
+    <td class="lbl">Sales Executive</td><td>{{ yht_sales_person(doc).name }}</td>
     <td class="lbl">Delivery Date / ‏تاريخ التسليم‏</td><td>{{ yht_date(doc.get("delivery_date")) if doc.get("delivery_date") else "" }}</td>
     <td class="lbl">PO#</td><td>{{ doc.get("po_no") or "" }}</td>
   </tr>
