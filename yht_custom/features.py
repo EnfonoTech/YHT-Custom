@@ -58,6 +58,7 @@ KNOWN = {
 	"cr_006_branch_warehouse": "Branch Configuration fixes the warehouse as well as the cost center (CR-006)",
 	"cr_012_expense_backfill": "Purchase Invoice: expense flag derived from the series (CR-012)",
 	"cr_013_list_columns": "Transaction lists open on ID/Date/Customer/Status (CR-013)",
+	"cr_018_grid_search_width": "Wider link-search dropdown inside a child-table grid cell (CR-018)",
 }
 
 #: Reads as "every known switch is on". Meant for `yht-test`.

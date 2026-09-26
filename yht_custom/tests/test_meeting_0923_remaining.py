@@ -510,6 +510,80 @@ class TestCr015TheRemarksBox(FrappeTestCase):
 		self.assertLess(order.index("custom_other_remarks"), order.index("items"))
 
 
+class TestCr018TheGridSearchDropdown(FrappeTestCase):
+	"""The CR was recorded as being about the COLUMN width. It is about the popup."""
+
+	def _css(self):
+		return _read("public", "css", "yht_custom.css")
+
+	def test_frappes_own_rule_is_still_what_we_are_overriding(self):
+		"""The premise, asserted against upstream rather than remembered.
+
+		`min-width: 250px` on the listbox is WHY the popup ignores the column
+		width. If a frappe upgrade drops or changes it, our override is sized
+		against something that no longer exists and this says so.
+		"""
+		scss = os.path.join(
+			frappe.get_app_path("frappe"), "public", "scss", "common", "awesomeplete.scss"
+		)
+		with open(scss, encoding="utf-8") as handle:
+			source = handle.read()
+		self.assertIn("min-width: 250px", source)
+		self.assertIn("width: 100%", source)
+
+	def test_the_override_is_scoped_to_the_grid(self):
+		"""An ordinary form's link field already spans its column; the navbar
+		search and the filter area would both look wrong at 520px."""
+		css = self._css()
+		self.assertIn(".form-grid .grid-static-col .awesomplete >", css)
+
+	def test_every_selector_carries_the_body_class(self):
+		"""This stylesheet reaches the client's live site on the pull, so ONE
+		unscoped selector is enough to change the live desk. Checked per line,
+		rather than by finding the good case somewhere in the file."""
+		unscoped = [
+			line.strip()
+			for line in self._css().splitlines()
+			if ".grid-static-col .awesomplete" in line
+			and not line.strip().startswith(("*", "/*", "//"))
+			and "body.yht-wide-grid-search" not in line
+		]
+		self.assertEqual(unscoped, [])
+
+	def test_it_is_desktop_only(self):
+		"""`grid.scss` clips `.form-grid-container` horizontally below `md`, so a
+		520px popup would be cut off rather than overflow."""
+		css = self._css()
+		rule = css[css.index("CR-018") :]
+		self.assertIn("@media (min-width: 768px)", rule)
+
+	def test_the_width_clears_the_longest_item_name(self):
+		"""75 characters at the dropdown's type. Sized on the data, not on taste."""
+		css = self._css()
+		self.assertIn("min-width: 520px", css)
+
+	def test_the_switch_name_matches_a_declared_one(self):
+		"""The grep test over Python cannot see this one — it is referenced only
+		from JS, so its name is checked here instead."""
+		js = _read("public", "js", "grid_search_width.js")
+		self.assertIn("cr_018_grid_search_width", js)
+		self.assertIn("cr_018_grid_search_width", features.KNOWN)
+		self.assertIn("cr_018_grid_search_width", self._css())
+
+	def test_the_class_is_written_after_boot_not_at_import_time(self):
+		"""`frappe.boot` is empty when a desk bundle first evaluates, so reading
+		the feature list at import silently gives an empty array for ever."""
+		js = _read("public", "js", "grid_search_width.js")
+		self.assertIn('$(document).on("app_ready startup"', js)
+
+	def test_the_bundle_is_registered_and_the_stylesheet_cache_busted(self):
+		"""Assets under /assets are served with no Cache-Control, so an unbumped
+		`?v=` makes the deploy invisible to anyone already loaded."""
+		hooks = _read("hooks.py")
+		self.assertIn("js/grid_search_width.js?v=", hooks)
+		self.assertNotIn("css/yht_custom.css?v=7", hooks)
+
+
 class TestCr020TheReportGroups(FrappeTestCase):
 	def test_the_groups_are_the_clients_categories(self):
 		labels = [label for label, _names in GROUPS]

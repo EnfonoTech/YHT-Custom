@@ -666,3 +666,52 @@
 	color: #fff;
 	text-decoration: none;
 }
+
+/* ==========================================================================
+   CR-018 — the link-field search dropdown inside a grid cell
+   ==========================================================================
+
+   THE COMPLAINT, in the client's own screen: typing in the Item Code cell of a
+   Sales Order opens a popup barely wider than the column, and a 70-character
+   item name wraps over three lines. The change request was recorded as being
+   about the COLUMN width; it is not. It is about this popup.
+
+   🔴 THE COLUMN IS NOT WHAT SIZES IT. `frappe/public/scss/common/awesomeplete.scss`
+   gives `.awesomplete > [role="listbox"]` `width: 100%` AND `min-width: 250px`,
+   so the box is 250px wide on every grid cell narrower than that — the column
+   could be 60px or 200px and the popup would not move. Widening the Item Code
+   column, which is what the CR as written asked for, changes nothing here.
+
+   WHY 520px. Measured on yht-khobhar 2026-09-26 across every Item: item_name is
+   41 characters at the median, 54 at p90, 63 at p99 and 75 at its longest, and
+   1,119 items are over 45. At the dropdown's `sm` type that puts the longest
+   name on one line at ~520px. The DESCRIPTION still wraps, deliberately —
+   `Item.search_fields` is `item_name,description,item_group,customer_code`, so
+   four values are stacked in every row and the point of the exercise is to read
+   them, not to fit them on one line.
+
+   ⚠️ SCOPED TO THE GRID. An ordinary form's link field already spans its column
+   and needs none of this; the navbar search and the filter area would both look
+   wrong at 520px.
+
+   ⚠️ AND SCOPED TO DESKTOP. `grid.scss` sets `.form-grid-container { overflow-x:
+   clip }` below the `md` breakpoint and `overflow-x: unset !important` above it,
+   so on a phone a 520px popup would be clipped by the container rather than
+   overflow it. Below `md` it keeps frappe's 250px.
+
+   Falling off the right edge is already handled upstream: `link.js` measures the
+   dropdown against the viewport on every open and adds `.awesomplete-align-right`,
+   which flips it to `right: 0`. A wider box flips sooner; it does not run off.
+
+   The `body` class is written by `public/js/grid_search_width.js` from the boot
+   payload, and is absent unless `cr_018_grid_search_width` is on for the site —
+   this stylesheet is served to the client's live site the moment it is pulled,
+   so the selector, not the deploy, is what turns it on. See `yht_custom/features.py`. */
+
+@media (min-width: 768px) {
+	body.yht-wide-grid-search .form-grid .grid-static-col .awesomplete > ul,
+	body.yht-wide-grid-search .form-grid .grid-static-col .awesomplete > [role="listbox"] {
+		min-width: 520px;
+		max-width: min(760px, 92vw);
+	}
+}

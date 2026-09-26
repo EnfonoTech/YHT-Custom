@@ -20,8 +20,9 @@ app_include_js = [
 	"/assets/yht_custom/js/price_assist.js?v=6",
 	"/assets/yht_custom/js/payment_assist.js?v=3",
 	"/assets/yht_custom/js/rate_lock.js?v=2",
+	"/assets/yht_custom/js/grid_search_width.js?v=1",
 ]
-app_include_css = "/assets/yht_custom/css/yht_custom.css?v=7"
+app_include_css = "/assets/yht_custom/css/yht_custom.css?v=8"
 
 # Prefer doctype_js over app_include_js: it takes effect without a `bench build`,
 # which matters because builds are limited to the maintenance window.
