@@ -584,6 +584,45 @@ class TestCr018TheGridSearchDropdown(FrappeTestCase):
 		self.assertNotIn("css/yht_custom.css?v=7", hooks)
 
 
+class TestCr019TheRateDoubleClick(FrappeTestCase):
+	"""Reported as "clicking Rate loads Price Assist". It is a DOUBLE click — and
+	a double click on a number is how you select it to retype it."""
+
+	def _js(self):
+		return _read("public", "js", "price_assist.js")
+
+	def test_the_shortcut_is_a_double_click_on_the_rate_cell(self):
+		"""The mechanism, written down: the CR called it a 'direct-click path' and
+		it is not one, which is why nobody could find it from the transcript."""
+		js = self._js()
+		self.assertIn("DOUBLE_CLICK_MS", js)
+		self.assertIn("[data-fieldname=\"rate\"]", js)
+
+	def test_it_bails_out_before_doing_any_dom_work(self):
+		"""This listener runs on EVERY click in the desk, capture phase. With the
+		switch on it must cost less than it does today, not more."""
+		js = self._js()
+		body = js[js.index("function (event) {") :]
+		self.assertLess(
+			body.index("rate_shortcut_disabled()"),
+			body.index("closest("),
+			"the feature check must come before the DOM walk",
+		)
+
+	def test_the_button_and_the_quiet_hint_are_untouched(self):
+		"""'Keep only the button' — so the button, and the toast that blocks
+		nothing, both stay."""
+		js = self._js()
+		self.assertIn('grid.add_custom_button(__("Price Assist")', js)
+		self.assertIn("yht_custom.price.hint(frm, locals[cdt][cdn])", js)
+
+	def test_the_switch_is_declared_and_the_bundle_cache_busted(self):
+		js = self._js()
+		self.assertIn("cr_019_no_rate_doubleclick", js)
+		self.assertIn("cr_019_no_rate_doubleclick", features.KNOWN)
+		self.assertNotIn("price_assist.js?v=6", _read("hooks.py"))
+
+
 class TestCr020TheReportGroups(FrappeTestCase):
 	def test_the_groups_are_the_clients_categories(self):
 		labels = [label for label, _names in GROUPS]

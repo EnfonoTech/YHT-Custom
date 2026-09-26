@@ -59,6 +59,7 @@ KNOWN = {
 	"cr_012_expense_backfill": "Purchase Invoice: expense flag derived from the series (CR-012)",
 	"cr_013_list_columns": "Transaction lists open on ID/Date/Customer/Status (CR-013)",
 	"cr_018_grid_search_width": "Wider link-search dropdown inside a child-table grid cell (CR-018)",
+	"cr_019_no_rate_doubleclick": "Double-clicking a Rate cell no longer opens Price Assist (CR-019)",
 }
 
 #: Reads as "every known switch is on". Meant for `yht-test`.

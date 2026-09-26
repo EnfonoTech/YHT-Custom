@@ -494,6 +494,29 @@ yht_custom.price.pick_row = function (frm, then) {
 const DOUBLE_CLICK_MS = 600;
 let lastRateClick = { key: null, at: 0 };
 
+// 🔴 CR-019 — THE CLIENT ASKED FOR THIS SHORTCUT TO GO, AND THEY ARE RIGHT.
+//
+// Reported as "when I click on the Rate column, Price Assist loads". It is not a
+// single click: the handler below opens the dialog on a DOUBLE click. But a double
+// click on a number is how anybody selects it to retype it — so an operator
+// reaching for the Rate cell to change 190.00 gets a modal instead of a selection,
+// and has to dismiss it before they can type. The CR's own words were "keep only
+// the button".
+//
+// The button stays. `Price Assist` and `Show Price History` sit in the grid footer
+// (see BUTTON PLACEMENT at the top of this file) and are unaffected, as is the
+// quiet inline hint on `rate`, which is a toast and blocks nothing.
+//
+// Behind a switch because this file is served to the client's live site the moment
+// it is pulled — see `yht_custom/features.py`. Checked BEFORE the `closest()` call
+// so that with the switch on this listener does strictly less work per click than
+// it does today.
+yht_custom.price.rate_shortcut_disabled = function () {
+	return (
+		((frappe.boot && frappe.boot.yht_features) || []).indexOf("cr_019_no_rate_doubleclick") !== -1
+	);
+};
+
 // 🔴 CAPTURE PHASE, and a native listener — not `$(document).on("click", …)`.
 //
 // The jQuery delegated handler was correctly bound (verified live: the selector was registered
@@ -507,6 +530,8 @@ let lastRateClick = { key: null, at: 0 };
 document.addEventListener(
 	"click",
 	function (event) {
+		if (yht_custom.price.rate_shortcut_disabled()) return;
+
 		const cell = event.target instanceof Element
 			? event.target.closest('.grid-row [data-fieldname="rate"]')
 			: null;
