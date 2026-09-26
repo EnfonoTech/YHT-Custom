@@ -192,17 +192,28 @@ class TestCr003TheAddressFirstTab(FrappeTestCase):
 		order = FIELD_ORDER["Address"]
 		self.assertEqual(len(order), len(set(order)))
 
-	def test_the_pairwise_moves_agree_with_the_declared_order(self):
-		"""Both mechanisms run on Address; they must not disagree.
-
-		`_apply_field_order` runs first and `FIELD_MOVES["Address"]` is replayed on
-		its output, so a pair that contradicts the declared order would undo it on
-		every migrate and the form would flip between two layouts.
+	def test_only_one_mechanism_orders_a_doctype(self):
+		"""The pairwise pass runs after the declared one, ON THE SAME LIST — so a
+		doctype in both would have its declared order silently rewritten. It did:
+		Postal Code · City · Country were hoisted above District on every migrate.
 		"""
+		self.assertEqual(set(FIELD_ORDER) & set(FIELD_MOVES), set())
+
+	def test_the_left_column_reads_the_way_the_client_asked(self):
 		order = FIELD_ORDER["Address"]
-		for fieldname, anchor in FIELD_MOVES["Address"]:
-			with self.subTest(field=fieldname):
-				self.assertEqual(order.index(fieldname), order.index(anchor) + 1)
+		sequence = [
+			"custom_short_address",
+			"address_type",
+			"custom_building_number",
+			"address_line1",
+			"custom_additional_number",
+			"custom_area",
+			"pincode",
+			"city",
+			"country",
+		]
+		positions = [order.index(f) for f in sequence]
+		self.assertEqual(positions, sorted(positions), "the client's sequence is not in order")
 
 
 class TestCr004AndCr005ThePrintHeading(FrappeTestCase):

@@ -92,11 +92,12 @@ FIELD_MOVES = {
 		("transaction_date", "customer_name"),
 		("valid_till", "transaction_date"),
 	],
-	"Address": [
-		("pincode", "address_line2"),
-		("city", "pincode"),
-		("country", "city"),
-	],
+	# 🔴 NO `Address` ENTRY ANY MORE — `FIELD_ORDER["Address"]` supersedes it.
+	# The pairwise pass runs AFTER the declared one and on the same list, so the
+	# two were fighting: the declared order put District between Address Line 2
+	# and Postal Code, and the three pairs here then hoisted Postal Code · City ·
+	# Country above it. Two mechanisms, one doctype, one of them silently winning
+	# is exactly the state this module was written to end.
 }
 
 #: CR-003 — doctype → the FULL field order, first tab first.
@@ -147,17 +148,22 @@ STRUCTURAL_FIELDS = {
 
 FIELD_ORDER = {
 	"Address": [
-		# --- first tab: everything a new address needs ----------------------
+		# --- first tab, LEFT column ------------------------------------------
+		# The client's own sequence, from the transcript: Short Address · Type ·
+		# Building No · Street Name · Additional No · District · Postal Code ·
+		# City · Country. `address_line2` and the SPL paste box are not in their
+		# list and sit with the fields they feed.
 		"address_details",
 		"custom_short_address",
 		"custom_national_address_full_data",
-		"custom_building_number",
-		"custom_additional_number",
-		"custom_unit_number",
 		"address_type",
-		"column_break0",
+		"custom_building_number",
 		"address_line1",
 		"address_line2",
+		"custom_additional_number",
+		"custom_unit_number",
+		# --- first tab, RIGHT column -----------------------------------------
+		"column_break0",
 		"custom_area",
 		"pincode",
 		"city",
