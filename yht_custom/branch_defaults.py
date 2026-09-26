@@ -19,11 +19,25 @@ they do not care about:
 import frappe
 from frappe.utils import cint
 
+from yht_custom import features
+
 #: Doctypes whose cost center we override for branch users.
 COST_CENTER_DOCTYPES = (
 	"Sales Invoice",
 	"Purchase Invoice",
 	"Payment Entry",
+	"Delivery Note",
+	"Purchase Receipt",
+	"Sales Order",
+	"Quotation",
+)
+
+#: Doctypes whose warehouse the branch fixes — CR-006. A superset of the cost
+#: center list minus Payment Entry, which moves money and not stock. Quotation is
+#: in because its item rows carry a warehouse that a Sales Order inherits.
+WAREHOUSE_DOCTYPES = (
+	"Sales Invoice",
+	"Purchase Invoice",
 	"Delivery Note",
 	"Purchase Receipt",
 	"Sales Order",
@@ -94,6 +108,69 @@ def apply_branch_defaults(doc, method=None):
 	for row in doc.get("items") or []:
 		if row.meta.has_field("cost_center"):
 			row.cost_center = cost_center
+
+
+# ----------------------------------------------------------------- warehouses
+
+
+def _branch_warehouses(config: str) -> list:
+	"""The warehouses this Branch Configuration lists, in row order."""
+	return frappe.get_all(
+		"Branch Configuration Warehouse", filters={"parent": config}, pluck="warehouse", order_by="idx asc"
+	)
+
+
+def apply_branch_warehouse(doc, method=None):
+	"""CR-006 — the branch's warehouse, the way its cost center already works.
+
+	Client's words: "the session default should be directly fixed there". The
+	business reason is posting stock against the wrong branch, which is a
+	correction that costs a stock reconciliation rather than an edit.
+
+	🔴 IT FILLS AND IT CORRECTS; IT DOES NOT PIN. The cost center handler above
+	overwrites unconditionally, and that is right for a cost center because a
+	document has exactly one. A branch legitimately has SEVERAL warehouses — this
+	one lists them — so overwriting unconditionally would quietly move a transfer
+	between two of the branch's own warehouses onto the first one. The rule is
+	therefore:
+
+	* blank                                   -> the branch's first warehouse
+	* set, but NOT one of the branch's        -> replaced, which is the CR
+	* set, and one of the branch's            -> left alone
+
+	Header `set_warehouse` and every item row, because the row is what reaches the
+	Stock Ledger — the same reason the cost center handler writes both.
+
+	Switched off until `cr_006_branch_warehouse` is on for the site. This runs on
+	`before_validate` for six doctypes on a bench that also serves the client's
+	live site, so "deployed" and "in effect" have to be two different events.
+	"""
+	if doc.doctype not in WAREHOUSE_DOCTYPES:
+		return
+	if not features.enabled("cr_006_branch_warehouse"):
+		return
+	if _is_bypass():
+		return
+
+	config = _user_branch_config()
+	if not config:
+		return
+
+	warehouses = _branch_warehouses(config)
+	if not warehouses:
+		return
+
+	default = warehouses[0]
+	allowed = set(warehouses)
+
+	if doc.meta.has_field("set_warehouse") and (doc.get("set_warehouse") or "") not in allowed:
+		doc.set_warehouse = default
+
+	for row in doc.get("items") or []:
+		if not row.meta.has_field("warehouse"):
+			continue
+		if (row.get("warehouse") or "") not in allowed:
+			row.warehouse = default
 
 
 # -------------------------------------------------------------- naming series

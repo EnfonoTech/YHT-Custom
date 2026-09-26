@@ -231,6 +231,17 @@ def artefact_or_any(doctype):
 	name = ARTEFACT_DOCS.get(doctype)
 	if name and frappe.db.exists(doctype, name):
 		return name
+	# 🔴 A RETURN IS NOT A SUBSTITUTE FOR THE ARTEFACT. Every real artefact is a
+	# forward document, and since CR-004 the title follows the document — so on a
+	# site whose newest Delivery Note is `KSDR-…` these checks were comparing
+	# "DELIVERY NOTE RETURN" against a delivery note's labels and failing for the
+	# right reason on the wrong document.
+	if frappe.get_meta(doctype).get_field("is_return"):
+		forward = frappe.db.get_value(
+			doctype, {"docstatus": 1, "is_return": 0}, "name", order_by="creation desc"
+		)
+		if forward:
+			return forward
 	return submitted(doctype)
 
 

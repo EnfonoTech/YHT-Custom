@@ -67,6 +67,19 @@ DISTRICT_EN = "Ash Shamalyyah"
 DISTRICT_AR = "الشمالية"
 CITY_EN = "Al Khobar"
 CITY_AR = "الخبر"
+#: CR-014 — the Unified/National Number ("الرقم الموحد"), a ten-digit code that
+#: starts with 7. Client's words: "everyone is saying they want to add Unified ID
+#: now… starts with seven".
+#:
+#: 🔴 IT IS NOT A CONSTANT, AND THAT IS THE WHOLE DELIVERY. No field on this site
+#: held it — measured 2026-09-26, `Company` carried six custom fields and none of
+#: them was this — so hardcoding a number here would mean inventing one. The field
+#: is provisioned by `unified_number.setup_unified_number`, the letterhead renders
+#: the segment ONLY when it is filled, and until the client types their number the
+#: letterhead is byte-identical to what it is today. That is what makes this
+#: shippable without an answer from them.
+UNIFIED_NUMBER_FIELD = "custom_unified_number"
+
 CR_NUMBER = "2051226328"
 VAT_NUMBER = "311264592800003"
 TELEPHONE = "+966 13 8972579 / 8651533"
@@ -259,6 +272,23 @@ def setup_katc_letterhead() -> dict:
 # ------------------------------------------------------------------- rendering
 
 
+def unified_number() -> str:
+	"""The company's Unified Number, or `""` — CR-014.
+
+	Guarded on the column existing as well as on the value: `build_content` runs
+	inside `after_migrate`, and on the migrate that CREATES the field the read
+	happens before `create_custom_fields` has necessarily run.
+	"""
+	from yht_custom.letterhead import _company
+
+	# `_company()` returns the DOC, not the name — and a cached doc is not read
+	# again once the field exists, so the value is fetched by name instead.
+	company = _company()
+	if not company or not frappe.db.has_column("Company", UNIFIED_NUMBER_FIELD):
+		return ""
+	return cstr(frappe.db.get_value("Company", company.name, UNIFIED_NUMBER_FIELD)).strip()
+
+
 def build_content() -> str:
 	"""The bilingual header markup.
 
@@ -284,10 +314,23 @@ def build_content() -> str:
 	def ltr(value: str) -> str:
 		return f'<span dir="ltr">{value}</span>'
 
+	unified = unified_number()
+	english_tail = f"C.R. {CR_NUMBER} - VAT No. {VAT_NUMBER}"
+	arabic_tail = f"س.ت {CR_NUMBER} - الرقم الضريبي {VAT_NUMBER}"
+	if unified:
+		# On its own line: the CR/VAT line is already the widest thing in a 42%
+		# column at 2.35mm, and a third number on the same run wraps mid-digit.
+		english_tail += f"<br>Unified No. {unified}"
+		# NO `dir="ltr"` SPAN — one per line at most, and this line has none
+		# already. A bare digit run reads left-to-right inside an RTL paragraph on
+		# its own; adding a second directional box is what produced overlapping
+		# glyph runs in the PDF (gotcha 45, and the comment above `arabic_details`).
+		arabic_tail += f"<br>الرقم الموحد {unified}"
+
 	english_details = (
 		f"Building No. {BUILDING_NO} - Postal Code {POSTAL_CODE} - Additional No. {ADDITIONAL_NO}<br>"
 		f"{STREET_EN} - {DISTRICT_EN} - {CITY_EN}<br>"
-		f"C.R. {CR_NUMBER} - VAT No. {VAT_NUMBER}"
+		f"{english_tail}"
 	)
 	# 🔴 ONE `<span dir="ltr">` PER LINE, AND ONLY WHERE THE RUN IS NOT PURE DIGITS.
 	# wkhtmltopdf 0.12.6's WebKit mis-positions a SECOND explicitly-directional inline
@@ -302,7 +345,7 @@ def build_content() -> str:
 		f"مبنى {BUILDING_NO} - الرمز البريدي {POSTAL_CODE}"
 		f" - الرقم الإضافي {ADDITIONAL_NO}<br>"
 		f"{STREET_AR} - {DISTRICT_AR} - {CITY_AR}<br>"
-		f"س.ت {CR_NUMBER} - الرقم الضريبي {VAT_NUMBER}"
+		f"{arabic_tail}"
 	)
 
 	return f"""<div class="{MARKER_CLASS}">

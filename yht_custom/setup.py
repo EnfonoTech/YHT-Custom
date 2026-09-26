@@ -33,6 +33,11 @@ from yht_custom.workspace_shortcuts import setup_new_shortcuts
 from yht_custom.return_flow import setup_credit_note_settles_original
 from yht_custom.attention_field import ensure_attention_field
 from yht_custom.link_sort import setup_link_sort_order
+from yht_custom.unified_number import setup_unified_number
+from yht_custom.print_heading import setup_print_headings
+from yht_custom.dn_links import setup_delivery_note_links
+from yht_custom.list_columns import setup_list_columns
+from yht_custom.report_groups import setup_report_groups
 
 #: What a Branch User may touch. Per the MoM document set — Quotation, Sales
 #: Order, Delivery Note, Sales Invoice, Purchase Receipt, Purchase Invoice,
@@ -237,6 +242,14 @@ PROVISIONING_STEPS = (
 	"setup_discount_grid_columns",
 	"setup_sales_assist_columns",
 	"setup_new_shortcuts",
+	# --- client meeting 2026-09-23, the remaining change requests ------------
+	# Each its own entry, for the reason the comment above gives: one item's
+	# failure must be reported as itself.
+	"setup_unified_number",        # CR-014
+	"setup_print_headings",        # CR-004 / CR-005
+	"setup_delivery_note_links",   # CR-008
+	"setup_list_columns",          # CR-013 (behind a feature switch)
+	"setup_report_groups",         # CR-020
 	"setup_site_defaults",
 	"setup_report_roles",
 	"setup_branch_payment_modes",
@@ -392,6 +405,11 @@ def _imported(name):
 		"apply_field_moves": apply_field_moves,
 		"ensure_attention_field": ensure_attention_field,
 		"setup_link_sort_order": setup_link_sort_order,
+		"setup_unified_number": setup_unified_number,
+		"setup_print_headings": setup_print_headings,
+		"setup_delivery_note_links": setup_delivery_note_links,
+		"setup_list_columns": setup_list_columns,
+		"setup_report_groups": setup_report_groups,
 	}[name]
 
 

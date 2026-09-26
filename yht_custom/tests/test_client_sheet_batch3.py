@@ -1643,7 +1643,14 @@ class TestItem29AddressForm(FrappeTestCase):
 
 	def test_the_reorder_is_registered_and_drops_nothing(self):
 		field_layout = importlib.import_module("yht_custom.field_layout")
-		self.assertIn("Address", field_layout.FIELD_MOVES, "no Address entry in FIELD_MOVES")
+		# CR-003 moved Address from the pairwise mechanism to the declared one:
+		# the two ran in sequence on the same list and the pairs undid the order
+		# on every migrate. The invariant this test guards — nothing is dropped —
+		# is unchanged and is asserted below against the written Property Setter.
+		self.assertIn("Address", field_layout.FIELD_ORDER, "no Address entry in FIELD_ORDER")
+		self.assertNotIn(
+			"Address", field_layout.FIELD_MOVES, "Address is ordered twice, by two mechanisms"
+		)
 
 		order = json.loads(
 			frappe.db.get_value(

@@ -5,6 +5,19 @@
     BOTH, or the check fails"; that trap is what this removes.
     Flags: katc_show_arabic (adds the Item Name in Arabic column),
            katc_show_bank   (adds the VAT # / BANK DETAILS block). -#}
+{#- CR-004 — ONE FORMAT, THE VARIANT CHOSEN AT PRINT TIME.
+    `katc_show_arabic` is still honoured when a shim sets it, so the existing
+    "… Arabic" Print Format records keep working, but it now ALSO follows the
+    print dialog's own Language selector: `printview` sets `frappe.local.lang`
+    from `_lang`, and `yht_print_lang()` reads it. That is what lets one format
+    answer the client's "give it as a tick option instead" without a second
+    record to keep in sync.
+    The title comes from `select_print_heading` / `custom_print_as` / the
+    doctype's own default, in that order — CR-004's heading axis and the whole
+    of CR-005. It was hardcoded here, which is why the field the client was
+    ALREADY filling on 1,906 Delivery Notes never reached the page. -#}
+{%- set katc_show_arabic = katc_show_arabic or (yht_print_lang() == "ar") -%}
+{%- set katc_heading = yht_print_heading(doc) -%}
 {%- set cur = yht_currency(doc) -%}
 <style>
 .print-format { font-family: Arial, "Noto Sans", sans-serif; font-size: 9pt; color: #000; }
@@ -73,7 +86,15 @@ table.katc-items td.ctr { text-align: center; }
     net total; with `apply_discount_on = "Grand Total"` it is still the PRE-discount
     figure, and "Total after Discount" would print the same number as "Total". -#}
 {%- set net_after_discount = (doc.total - (doc.discount_amount or 0)) if doc.apply_discount_on == "Grand Total" else doc.net_total -%}
-<div class="katc-title">Quotation / ‏عرض سعر‏</div>
+{#- The RLM marks are LITERAL characters, not `&rlm;` entities, and the two divs
+    stay on their own lines. Both render identically — but this file is on a bench
+    whose OTHER site is the client's production, and "renders identically" is an
+    assumption until somebody renders it. A byte-for-byte comparison against the
+    pre-change output is something a script can check on every deploy, and it
+    caught this: the entity version changed the live Sales Order and Proforma
+    HTML the moment the branch was pulled. -#}
+<div class="katc-title">{{ katc_heading.en }}</div>{% if katc_heading.ar %}
+<div class="katc-title-ar">‏{{ katc_heading.ar }}‏</div>{% endif %}
 
 <table class="katc-meta"><tbody>
   <tr>

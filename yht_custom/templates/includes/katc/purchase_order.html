@@ -1,3 +1,19 @@
+{#- CR-021 — Purchase Order print.
+
+    Client's words about the one that exists: it "doesn't show the transaction".
+    Measured 2026-09-26, the site's only Purchase Order format is `Yhtckathoom`,
+    a Print Format Builder record owned by another developer; 283 purchase
+    orders exist and none carries a print heading.
+
+    🔴 THIS IS A SIBLING OF `sales_order.html`, NOT A NEW DESIGN, and the frame
+    above is copied from it deliberately: the style block, the `id="header-html"`
+    letterhead and the breakable outer cell are the three things that took two
+    client-visible regressions to get right (blank first page, letterhead painted
+    over the rows). A second opinion on any of them here would be a third.
+
+    The client explicitly deprioritised this item behind the selling documents —
+    "first quotation, then sales order… then this" — so it lands last and follows
+    CR-004's heading architecture rather than inventing a fourth one. -#}
 {#- SHARED TEMPLATE — see quotation.html. The letterhead is driven by the BUTTON
     (letterhead= / no_letterhead=1), not by a separate format: the spacer used to be
     unconditional here, which is why there was no with-letterhead Sales Order at all.
@@ -79,9 +95,7 @@ table.katc-items td.ctr { text-align: center; }
 {% if letter_head and 'katc-lh' in letter_head %}<div id="header-html" class="katc-head">{{ letter_head }}</div>{% elif no_letterhead %}<div class="katc-spacer" style="height: {{ yht_katc_spacer_pt() }}pt"></div>{% endif %}
 <table class="katc-doc">
   <tbody><tr><td>
-{#- `net_total` only reflects the additional discount when it was applied ON the
-    net total; with `apply_discount_on = "Grand Total"` it is still the PRE-discount
-    figure, and "Total after Discount" would print the same number as "Total". -#}
+
 {%- set net_after_discount = (doc.total - (doc.discount_amount or 0)) if doc.apply_discount_on == "Grand Total" else doc.net_total -%}
 {#- The RLM marks are LITERAL characters, not `&rlm;` entities, and the two divs
     stay on their own lines. Both render identically — but this file is on a bench
@@ -95,38 +109,42 @@ table.katc-items td.ctr { text-align: center; }
 
 <table class="katc-meta"><tbody>
   <tr>
-    <td class="lbl">Customer Name:</td><td>{{ doc.customer_name or doc.customer or "" }}</td>
-    <td class="lbl">Sales Order No:</td><td>{{ doc.name }}</td>
+    <td class="lbl">Supplier Name:</td><td>{{ doc.supplier_name or doc.supplier or "" }}</td>
+    <td class="lbl">Purchase Order No:</td><td>{{ doc.name }}</td>
   </tr>
   <tr>
-    <td class="lbl">Delivery Date:</td><td>{{ yht_date(doc.delivery_date) }}</td>
-    <td class="lbl">Customer's Purchase Order:</td><td>{{ doc.po_no or "" }}</td>
-  </tr>
-  <tr>
-    <td class="lbl">Tax Id:</td><td>{{ doc.tax_id or "" }}</td>
+    <td class="lbl">Required By:</td><td>{{ yht_date(doc.schedule_date) }}</td>
     <td class="lbl">Date:</td><td>{{ yht_date(doc.transaction_date) }}</td>
   </tr>
-{#- CR-011: only rendered when filled — an empty row reads as a missing value. -#}
+  <tr>
+{#- `yht_party_vat` reads the party master when the document's own `tax_id` is
+    empty, which it is on everything imported — the same gap the tax invoice hit. -#}
+    <td class="lbl">Tax Id:</td><td>{{ yht_party_vat(doc, "supplier") }}</td>
+    <td class="lbl">Contact:</td><td>{{ doc.contact_display or "" }}</td>
+  </tr>
 {%- if doc.get("custom_attention_person") %}
   <tr>
     <td class="lbl">Attention:</td><td colspan="3">{{ doc.get("custom_attention_person") }}</td>
+  </tr>
+{%- endif %}
+{%- if doc.get("address_display") %}
+  <tr>
+    <td class="lbl">Supplier Address:</td><td colspan="3">{{ doc.address_display }}</td>
   </tr>
 {%- endif %}
 </tbody></table>
 
 <table class="katc-items">
   <thead><tr>
-{#- 🔴 EVERY column carries an explicit width, and the two sets sum to 100%. Auto
-    layout gives a column as much room as its widest content wants and then lets the
-    text spill past the drawn boundary — which is how the Arabic ran over the Quantity
-    figures. Pinning all of them leaves no freedom to spill into. -#}
+{#- Every column pinned and the two sets summing to 100%, for the reason given in
+    `sales_order.html`: auto layout lets long text spill past the drawn boundary. -#}
 {%- if katc_show_arabic %}
     <th style="width:5%">Sr</th>
-    <th style="width:24%">Item Name</th>
-    <th class="katc-ar-col" style="width:34%">Item Name in Arabic</th>
+    <th style="width:22%">Item Name</th>
+    <th class="katc-ar-col" style="width:31%">Item Name in Arabic</th>
     <th style="width:13%">Quantity</th>
-    <th style="width:12%">Rate</th>
-    <th style="width:12%">Amount</th>
+    <th style="width:13%">Rate</th>
+    <th style="width:16%">Amount</th>
 {%- else %}
     <th style="width:6%">Sr</th>
     <th>Item Name</th>
@@ -158,6 +176,13 @@ table.katc-items td.ctr { text-align: center; }
 
 <div class="katc-words" style="text-align:left"><b>In Words:</b> {{ doc.in_words or "" }}</div>
 <div class="katc-terms"><b>Terms and Conditions:</b><br>{{ doc.terms or "" }}</div>
+
+<table class="katc-sign"><tbody>
+  <tr>
+    <td>Prepared By<div class="katc-rule"></div></td>
+    <td>Approved By<div class="katc-rule"></div></td>
+  </tr>
+</tbody></table>
   </td></tr></tbody>
 </table>
 <div id="footer-html">Page <span class="page"></span> of <span class="topage"></span></div>

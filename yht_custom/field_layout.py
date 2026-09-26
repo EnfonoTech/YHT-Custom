@@ -56,16 +56,156 @@ import frappe
 #:
 #:   Short Address · Type · Street Name · Additional No · Unit No ·
 #:   Address Line 2 · Building No · District · Postal Code · City · Country
+#: CR-007 extends the Sales Invoice pair to the other two selling documents, per
+#: the client's own rollout order. Measured first, because two of the four needed
+#: nothing:
+#:
+#:   Sales Invoice   po_no at position 175, three tabs deep   -> moved (shipped)
+#:   Sales Order     po_no already on the first tab, but in the THIRD column,
+#:                   after delivery_date                      -> moved here
+#:   Delivery Note   po_no / po_date ALREADY sit immediately after tax_id on the
+#:                   front page                               -> nothing to do
+#:   Quotation       has no po_no field at all in ERPNext v15 -> nothing to move,
+#:                   so its entry reorders the essentials it DOES have instead:
+#:                   party, customer, date, valid till ahead of amended_from and
+#:                   the remarks box.
 FIELD_MOVES = {
 	"Sales Invoice": [
 		("po_no", "company_tax_id"),
 		("po_date", "po_no"),
 	],
-	"Address": [
-		("pincode", "address_line2"),
-		("city", "pincode"),
-		("country", "city"),
+	"Sales Order": [
+		("po_no", "tax_id"),
+		("po_date", "po_no"),
 	],
+	# Production already had these on the front page through a hand edit; UAT did
+	# not, and CR-008 / CR-015 anchor on `po_date`. Declaring it makes both sites
+	# converge on the same layout instead of one of them depending on an edit
+	# nobody wrote down.
+	"Delivery Note": [
+		("po_no", "tax_id"),
+		("po_date", "po_no"),
+	],
+	"Quotation": [
+		("party_name", "column_break_7"),
+		("customer_name", "party_name"),
+		("transaction_date", "customer_name"),
+		("valid_till", "transaction_date"),
+	],
+	# 🔴 NO `Address` ENTRY ANY MORE — `FIELD_ORDER["Address"]` supersedes it.
+	# The pairwise pass runs AFTER the declared one and on the same list, so the
+	# two were fighting: the declared order put District between Address Line 2
+	# and Postal Code, and the three pairs here then hoisted Postal Code · City ·
+	# Country above it. Two mechanisms, one doctype, one of them silently winning
+	# is exactly the state this module was written to end.
+}
+
+#: CR-003 — doctype → the FULL field order, first tab first.
+#:
+#: ## Why a whole order and not more `FIELD_MOVES` pairs
+#:
+#: The client asked for "the first page itself, all the mandatory entry columns
+#: should come in the first tab". That is a statement about which side of a Tab
+#: Break every field falls on, and a list of relative moves cannot express it —
+#: move one field and the tab boundary moves under the next pair.
+#:
+#: ## What was actually wrong, measured before writing this
+#:
+#: A `custom_more_details` **Tab Break** already existed on `yht-khobhar`, added
+#: through Customize Form by another developer, and the stored `field_order` put
+#: it after `links` — which left the FIRST tab holding Short Address, Building
+#: No, Additional No, Address Line 1, Area and State, and pushed **Postal Code,
+#: City, Country and Address Type onto the second tab**. Three of those are
+#: `reqd` on this site (`pincode`, `custom_short_address`,
+#: `custom_additional_number` all carry a `reqd` Property Setter), so an operator
+#: filling in the first tab and saving was told a required field was empty on a
+#: tab they had no reason to open. That is the complaint, and it is worse than
+#: "some fields are in an awkward order".
+#:
+#: ## The rule for a field this list does not name
+#:
+#: It goes to the END — i.e. onto the second tab — and is logged. A new Custom
+#: Field added by somebody else must never silently land in the middle of the
+#: mandatory block, and refusing to write anything at all would mean one stray
+#: field disables the whole item. The permutation guard in `apply_field_moves`
+#: still holds: nothing is ever dropped.
+#: Fields this module has to CREATE before it can order them — CR-003.
+#:
+#: The `More Details` Tab Break existed on the live site only, added through
+#: Customize Form by another developer, so UAT had nothing to split on and the
+#: whole item was unverifiable there. Owning the field is what makes the layout
+#: reproducible on any site.
+STRUCTURAL_FIELDS = {
+	"Address": [
+		{
+			"fieldname": "custom_more_details",
+			"label": "More Details",
+			"fieldtype": "Tab Break",
+			"insert_after": "links",
+		},
+		{
+			# The box the SPL national address is pasted into — `public/js/address.js`
+			# fires on it (CR-001). It existed on the live site only, so UAT could
+			# not exercise the parser at all.
+			"fieldname": "custom_national_address_full_data",
+			"label": "National Address Full Data",
+			"fieldtype": "Small Text",
+			"insert_after": "custom_short_address",
+			"description": "Paste the full comma-separated line from SPL; the fields below fill themselves.",
+		},
+		{
+			# Splits the second tab into two columns. Auto-generated name, kept
+			# EXACTLY as the live site spells it: creating a differently-named twin
+			# would leave production with two column breaks on that tab forever.
+			"fieldname": "custom_column_break_mcjwv",
+			"fieldtype": "Column Break",
+			"insert_after": "custom_country_arabic",
+		},
+	]
+}
+
+FIELD_ORDER = {
+	"Address": [
+		# --- first tab, LEFT column ------------------------------------------
+		# The client's own sequence, from the transcript: Short Address · Type ·
+		# Building No · Street Name · Additional No · District · Postal Code ·
+		# City · Country. `address_line2` and the SPL paste box are not in their
+		# list and sit with the fields they feed.
+		"address_details",
+		"custom_short_address",
+		"custom_national_address_full_data",
+		"address_type",
+		"custom_building_number",
+		"address_line1",
+		"address_line2",
+		"custom_additional_number",
+		"custom_unit_number",
+		# --- first tab, RIGHT column -----------------------------------------
+		"column_break0",
+		"custom_area",
+		"pincode",
+		"city",
+		"country",
+		"linked_with",
+		"links",
+		# --- second tab ------------------------------------------------------
+		"custom_more_details",
+		"state",
+		"county",
+		"custom_address_line1_arabic",
+		"custom_area_arabic",
+		"custom_city_arabic",
+		"custom_country_arabic",
+		"custom_translate",
+		"custom_column_break_mcjwv",
+		"is_primary_address",
+		"is_shipping_address",
+		"disabled",
+		"address_title",
+		"email_id",
+		"phone",
+		"fax",
+	]
 }
 
 #: doctype → [(CUSTOM fieldname, the field it must sit immediately after)].
@@ -127,6 +267,20 @@ FIELD_MOVES = {
 #: entry is checked the same way.
 CUSTOM_FIELD_MOVES = {
 	"Address": [],
+	# CR-008 / CR-015 — both fields belong on the Delivery Note's FRONT page, and
+	# `insert_after` alone cannot put them there: the stored `field_order` on
+	# Delivery Note names every field (123 Property Setters on that doctype), and
+	# `meta.sort_fields` returns early in that case and never consults
+	# `insert_after` again. Driving both levers is what `_apply_custom_field_moves`
+	# plus the replay in `apply_field_moves` exists for.
+	# `custom_other_remarks` is deliberately NOT here: it is re-applied by our own
+	# `fixtures` hook, so `_apply_custom_field_moves` refuses to move it and logs a
+	# skip on every migrate. `other_remarks.ANCHORS` positions it instead, which is
+	# the mechanism that actually wins.
+	"Delivery Note": [
+		("custom_sales_order_no", "po_date"),
+		("custom_sales_invoice_no", "custom_sales_order_no"),
+	],
 }
 
 
@@ -281,11 +435,120 @@ def _apply_custom_field_moves(skipped: list) -> int:
 	return written
 
 
+def _write_order(doctype: str, ps_name, order: list) -> None:
+	"""Store a `field_order` Property Setter and drop the doctype's cache."""
+	value = json.dumps(order)
+	if ps_name:
+		frappe.db.set_value("Property Setter", ps_name, "value", value)
+	else:
+		frappe.get_doc(
+			{
+				"doctype": "Property Setter",
+				"doctype_or_field": "DocType",
+				"doc_type": doctype,
+				"property": "field_order",
+				"property_type": "Text",
+				"value": value,
+			}
+		).insert(ignore_permissions=True)
+	frappe.clear_cache(doctype=doctype)
+
+
+def _ensure_structural_fields(skipped: list) -> int:
+	"""Create the Tab Breaks and Column Breaks `FIELD_ORDER` positions.
+
+	Idempotent: `create_custom_fields` skips a field that already exists, so a site
+	where another developer added the same fieldname by hand keeps THEIR record and
+	only the ordering below applies.
+	"""
+	from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
+
+	created = 0
+	for doctype, fields in STRUCTURAL_FIELDS.items():
+		if not frappe.db.exists("DocType", doctype):
+			skipped.append(f"{doctype}: no such doctype")
+			continue
+		missing = [f for f in fields if not frappe.get_meta(doctype).get_field(f["fieldname"])]
+		if not missing:
+			continue
+		create_custom_fields({doctype: missing}, ignore_validate=True)
+		frappe.clear_cache(doctype=doctype)
+		created += len(missing)
+	return created
+
+
+def _apply_field_order(skipped: list) -> int:
+	"""CR-003 — write the whole order for the doctypes that declare one.
+
+	Runs BEFORE the pairwise moves, so `FIELD_MOVES["Address"]` is applied to the
+	order this produced rather than to whatever was there before. The two agree on
+	Address by construction — a test asserts it — and keeping both means the
+	pairwise mechanism stays the general tool and this stays the exception.
+
+	🔴 IT IS A REORDER OF WHAT IS THERE, NOT AN ASSIGNMENT OF WHAT WE WROTE DOWN.
+	The target is built as "the declared fields that actually exist here, in the
+	declared sequence, then everything else in the order it already had", so:
+
+	* a field another developer has added since is never dropped — it goes to the
+	  end, which is the second tab, and is logged
+	* a field we name that this site does not have is skipped, not invented
+	* the result is a permutation of the stored order by construction, which is
+	  the invariant `apply_field_moves` refuses to write without
+	"""
+	written = 0
+
+	for doctype, desired in FIELD_ORDER.items():
+		if not frappe.db.exists("DocType", doctype):
+			skipped.append(f"{doctype}: no such doctype")
+			continue
+
+		# 🔴 THE BASE IS LIVE META, NEVER THE STORED PROPERTY SETTER. `_read_order`
+		# returns the stored value when there is one, and on this site there IS one
+		# — written by the PAIRWISE mechanism, which deliberately seeds from
+		# STANDARD fields only so it cannot fight `insert_after`. Nineteen names,
+		# none of them custom. Against that base every one of Address's thirteen
+		# custom fields reported as absent and nothing moved, twice, including
+		# after the Tab Break itself had been created.
+		#
+		# `meta.fields` is already the stored order with the custom fields spliced
+		# in by `_update_field_order_based_on_insert_after`, so it is the only list
+		# that describes the form as it actually renders — and permuting it is
+		# exactly what a DECLARED order means.
+		ps_name = frappe.db.get_value(
+			"Property Setter",
+			{"doc_type": doctype, "property": "field_order", "doctype_or_field": "DocType"},
+			"name",
+		)
+		order = [f.fieldname for f in frappe.get_meta(doctype).fields]
+		present = [f for f in desired if f in order]
+		trailing = [f for f in order if f not in desired]
+
+		missing = [f for f in desired if f not in order]
+		if missing:
+			skipped.append(f"{doctype}: declared field order names absent fields {missing}")
+		if trailing:
+			skipped.append(f"{doctype}: fields not in the declared order, moved to the end: {trailing}")
+
+		target = present + trailing
+		if target == list(order):
+			continue
+		if sorted(target) != sorted(order):
+			skipped.append(f"{doctype}: refusing a field_order that is not a permutation")
+			continue
+
+		_write_order(doctype, ps_name, target)
+		written += 1
+
+	return written
+
+
 def apply_field_moves() -> dict:
 	"""Idempotent. Only ever REORDERS — never adds or drops a fieldname."""
 	moved, already, skipped = 0, 0, []
 
+	moved += _ensure_structural_fields(skipped)
 	moved += _apply_custom_field_moves(skipped)
+	moved += _apply_field_order(skipped)
 
 	for doctype, moves in FIELD_MOVES.items():
 		if not frappe.db.exists("DocType", doctype):
@@ -331,21 +594,7 @@ def apply_field_moves() -> dict:
 			skipped.append(f"{doctype}: refusing to write a field_order that is not a permutation")
 			continue
 
-		value = json.dumps(order)
-		if ps_name:
-			frappe.db.set_value("Property Setter", ps_name, "value", value)
-		else:
-			frappe.get_doc(
-				{
-					"doctype": "Property Setter",
-					"doctype_or_field": "DocType",
-					"doc_type": doctype,
-					"property": "field_order",
-					"property_type": "Text",
-					"value": value,
-				}
-			).insert(ignore_permissions=True)
-		frappe.clear_cache(doctype=doctype)
+		_write_order(doctype, ps_name, order)
 
 	if skipped:
 		frappe.log_error(message="\n".join(skipped), title="yht_custom: field moves")
