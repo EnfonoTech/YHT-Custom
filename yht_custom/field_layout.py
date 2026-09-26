@@ -142,7 +142,25 @@ STRUCTURAL_FIELDS = {
 			"label": "More Details",
 			"fieldtype": "Tab Break",
 			"insert_after": "links",
-		}
+		},
+		{
+			# The box the SPL national address is pasted into — `public/js/address.js`
+			# fires on it (CR-001). It existed on the live site only, so UAT could
+			# not exercise the parser at all.
+			"fieldname": "custom_national_address_full_data",
+			"label": "National Address Full Data",
+			"fieldtype": "Small Text",
+			"insert_after": "custom_short_address",
+			"description": "Paste the full comma-separated line from SPL; the fields below fill themselves.",
+		},
+		{
+			# Splits the second tab into two columns. Auto-generated name, kept
+			# EXACTLY as the live site spells it: creating a differently-named twin
+			# would leave production with two column breaks on that tab forever.
+			"fieldname": "custom_column_break_mcjwv",
+			"fieldtype": "Column Break",
+			"insert_after": "custom_country_arabic",
+		},
 	]
 }
 

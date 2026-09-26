@@ -158,6 +158,17 @@ class TestCr003TheAddressFirstTab(FrappeTestCase):
 	def test_the_declared_order_exists(self):
 		self.assertIn("Address", FIELD_ORDER)
 
+	def test_the_declared_order_names_nothing_that_does_not_exist(self):
+		"""A name in the declared order that no site carries logs a skip on EVERY
+		migrate, which is how real diagnostics get lost in noise. Every entry is
+		either a standard field, one of ours, or created by `STRUCTURAL_FIELDS`."""
+		meta_fields = {f.fieldname for f in frappe.get_meta("Address").fields}
+		self.assertEqual(set(FIELD_ORDER["Address"]) - meta_fields, set())
+
+	def test_the_paste_box_is_ours_too(self):
+		"""CR-001's parser fires on it, and it existed on the live site only."""
+		self.assertIsNotNone(frappe.get_meta("Address").get_field("custom_national_address_full_data"))
+
 	def test_the_tab_break_is_ours_rather_than_a_hand_edit(self):
 		"""It existed on the live site only, added through Customize Form, so the
 		item could not be verified anywhere else until this module created it."""
