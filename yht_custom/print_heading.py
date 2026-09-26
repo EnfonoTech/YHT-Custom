@@ -309,7 +309,11 @@ def backfill_headings(commit: bool = False) -> dict:
 		]
 		rows = frappe.get_all(
 			doctype,
-			filters={"select_print_heading": ["in", ["", None]], "docstatus": ["<", 2]},
+			# 🔴 `["in", ["", None]]` DOES NOT MATCH NULL. SQL's `IN` compares with `=`,
+			# and `x = NULL` is NULL, not true — so the first run of this filled 18
+			# rows out of thousands and looked like it had nothing to do. `["is",
+			# "not set"]` is the frappe filter that becomes `ifnull(field, '') = ''`.
+			filters={"select_print_heading": ["is", "not set"], "docstatus": ["<", 2]},
 			fields=fields,
 			limit=0,
 		)

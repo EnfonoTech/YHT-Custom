@@ -39,13 +39,23 @@ from yht_custom import address_district, dn_links, expense_invoice, features, pr
 def execute():
 	results = {}
 
+	# 🔴 THE FIELDS THESE BACKFILLS WRITE ARE CREATED IN `after_migrate`, WHICH RUNS
+	# AFTER PATCHES. On the first migrate the Delivery Note columns and the four
+	# new `Print Heading` records did not exist yet, so the backfill quietly wrote
+	# nothing and reported success — measured on yht-test, Quotation, Sales Order
+	# and Purchase Order all came back 0. Both provisioning steps are idempotent,
+	# so calling them here costs nothing on every subsequent run and removes the
+	# ordering dependency entirely.
+	print_heading.setup_print_headings()
+	dn_links.setup_delivery_note_links()
+	frappe.db.commit()
+
 	if features.enabled("cr_002_district_fallback") and frappe.db.has_column("Address", "custom_area"):
 		results["cr_002_district"] = address_district.backfill(commit=True)
 	else:
 		results["cr_002_district"] = "skipped — cr_002_district_fallback is off here"
 
-	if frappe.db.has_column("Delivery Note", "custom_sales_invoice_no"):
-		results["cr_008_delivery_note_links"] = dn_links.backfill(commit=True)
+	results["cr_008_delivery_note_links"] = dn_links.backfill(commit=True)
 
 	if features.enabled("cr_004_print_heading"):
 		results["cr_004_print_headings"] = print_heading.backfill_headings(commit=True)
