@@ -86,6 +86,12 @@ table.katc-items td.ctr { text-align: center; }
     <td class="lbl">Tax Id:</td><td>{{ doc.tax_id or "" }}</td>
     <td class="lbl">Date:</td><td>{{ yht_date(doc.transaction_date) }}</td>
   </tr>
+{#- CR-011: only rendered when filled — an empty row reads as a missing value. -#}
+{%- if doc.get("custom_attention") %}
+  <tr>
+    <td class="lbl">Attention:</td><td colspan="3">{{ doc.get("custom_attention") }}</td>
+  </tr>
+{%- endif %}
 </tbody></table>
 
 <table class="katc-items">

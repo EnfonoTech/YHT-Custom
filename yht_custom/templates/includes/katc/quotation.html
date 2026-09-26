@@ -88,6 +88,13 @@ table.katc-items td.ctr { text-align: center; }
     <td class="lbl">Contact:</td><td>{{ doc.contact_display or "" }}</td>
     <td class="lbl">Payment Terms Template</td><td>{{ doc.payment_terms_template or "" }}</td>
   </tr>
+{#- CR-011: only rendered when filled. An empty Attention row on a customer-facing
+    quotation reads as a missing value rather than "not applicable". -#}
+{%- if doc.get("custom_attention") %}
+  <tr>
+    <td class="lbl">Attention:</td><td colspan="3">{{ doc.get("custom_attention") }}</td>
+  </tr>
+{%- endif %}
 </tbody></table>
 
 <table class="katc-items">
@@ -144,6 +151,11 @@ table.katc-items td.ctr { text-align: center; }
     Print 1 does not, so it hangs off its own flag rather than the Arabic one. -#}
 <table class="katc-sign" style="margin-top:10px"><tbody><tr>
   <td style="vertical-align:top">
+{#- `katc_show_bank` is set by BOTH quotation shims since 2026-09-23. It used to be
+    the Arabic variant only, because the incumbent's `quote Print 1` artefact carried
+    no bank block and `quote print 2 with arabic.pdf` did (gotcha 78). CR-010 from the
+    client meeting reverses that for the plain format: they asked for bank details on
+    the quotation print. The artefact no longer decides this one — the client does. -#}
 {%- if katc_show_bank %}
 {%- set bank = yht_bank_details() -%}
 {%- set seller_vat = yht_company_vat(doc) -%}
@@ -163,8 +175,16 @@ table.katc-items td.ctr { text-align: center; }
 {%- endif %}
   </td>
   <td style="text-align:right; vertical-align:top">
-    CONTACT : {{ yht_sales_person(doc) }}<br>
-    Contact No: {{ creator.mobile }}<br>
+{#- CR-009: the CUSTOMER's assigned salesperson, not the creator. `mobile` is that
+    same person's number and is usually "" on this site — 1 of 26 Sales Persons has
+    a reachable one — so the line is rendered only when there is a number, and the
+    creator's number is NOT substituted: one person's name beside another's phone
+    number is worse than no number. -#}
+{%- set sp = yht_sales_person(doc) %}
+    CONTACT : {{ sp.name }}<br>
+{%- if sp.mobile %}
+    Contact No: <span dir="ltr">{{ sp.mobile }}</span><br>
+{%- endif %}
     E-mail: {{ yht_katc_email() }}
   </td>
 </tr></tbody></table>

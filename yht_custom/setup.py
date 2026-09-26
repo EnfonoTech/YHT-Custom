@@ -31,6 +31,8 @@ from yht_custom.sales_assist import setup_sales_assist_columns
 from yht_custom.field_layout import apply_field_moves
 from yht_custom.workspace_shortcuts import setup_new_shortcuts
 from yht_custom.return_flow import setup_credit_note_settles_original
+from yht_custom.attention_field import ensure_attention_field
+from yht_custom.link_sort import setup_link_sort_order
 
 #: What a Branch User may touch. Per the MoM document set — Quotation, Sales
 #: Order, Delivery Note, Sales Invoice, Purchase Receipt, Purchase Invoice,
@@ -238,6 +240,11 @@ PROVISIONING_STEPS = (
 	"setup_site_defaults",
 	"setup_report_roles",
 	"setup_branch_payment_modes",
+	# --- client meeting 2026-09-23 quick wins (CR-011 · CR-016) --------------
+	# Separate entries on purpose: an Attention anchor that cannot be resolved
+	# on one doctype must not take the Customer sort down with it.
+	"ensure_attention_field",
+	"setup_link_sort_order",
 	"repair_mirrored_perm_flags",
 	"run_dashboard_reports_inline",
 	"setup_hr",
@@ -383,6 +390,8 @@ def _imported(name):
 		"setup_sales_assist_columns": setup_sales_assist_columns,
 		"setup_new_shortcuts": setup_new_shortcuts,
 		"apply_field_moves": apply_field_moves,
+		"ensure_attention_field": ensure_attention_field,
+		"setup_link_sort_order": setup_link_sort_order,
 	}[name]
 
 
