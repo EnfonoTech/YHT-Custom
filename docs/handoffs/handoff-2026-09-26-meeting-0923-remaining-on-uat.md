@@ -144,7 +144,7 @@ Every one of these survived writing and reading the code, and died on the first 
 | CR-020 | done | Stock · Sales Statements · Receivables & Collection · Ledgers · Purchase · Data & Go-Live |
 | CR-021 | done | `KATC Purchase Order`, a sibling of the Sales Order format |
 | CR-018 | done | **OQ-6 answered.** The ask is the SEARCH POPUP under the Item Code cell, not the column — see below |
-| CR-019 | **blocked** | OQ-7 still open; a yes/no on the reading below closes it without a screen share |
+| CR-019 | done | **OQ-7 answered.** A DOUBLE click on the Rate cell was opening the dialog — see below |
 
 ---
 
@@ -179,25 +179,32 @@ A stylesheet cannot read `site_config.json`, so the rule is scoped to
 from the boot payload — on `app_ready`, because `frappe.boot` is empty when a desk
 bundle first evaluates.
 
-### CR-019 — the reading that would close it without a screen share
+### CR-019 was not two UI paths either
 
-The two rate paths on this site are almost certainly:
+The CR describes "two ways to change a line's rate… clicking the rate cell
+directly, and a separate button", and it was blocked because nobody could find a
+click handler on the Rate cell. There isn't one. The meeting recording shows the
+actual gesture, and my own first reading of it — Rate cell versus Price Assist
+button, with the fix being `rate_lock.js` made read-only for every row — was
+**wrong**, and would have taken away the only way to price a hand-added line.
 
-1. typing straight into the **Rate** cell of the item grid, and
-2. the **Price Assist** button in the grid footer (`public/js/price_assist.js`),
-   which suggests a rate and shows the history behind it.
+What is really there is at `public/js/price_assist.js`, under BUTTON PLACEMENT: a
+**capture-phase listener on `document`** that opens the Price Assist dialog on a
+**DOUBLE click** of any grid `[data-fieldname="rate"]` cell, within 600 ms.
 
-If that is right, "keep only the button" means making the Rate cell read-only.
-⚠️ **`rate_lock.js` already does that, but only for rows FETCHED from a Sales
-Order or Delivery Note** — deliberately per-row, because an invoice routinely
-mixes fetched rows with hand-added ones. Extending it to every row means a
-hand-added line can only be priced through Price Assist, and Price Assist suggests
-from history, which a brand-new item has none of. That is the "removes the only
-way to price a line" risk the CR was blocked on, and it is still real.
+**A double click on a number is how anybody selects it to retype it.** An operator
+reaching for a 190.00 to change it gets a modal, and has to dismiss it before
+typing. That is the whole complaint, and "keep only the button" is exactly the
+right instruction.
 
-So the question for the client is narrower than a screen share: *are those the two
-paths, and should the Rate cell be read-only on hand-added rows too, or only on
-fetched ones (which is today's behaviour)?*
+Removed, behind `cr_019_no_rate_doubleclick`. Untouched: the `Price Assist` and
+`Show Price History` footer buttons, and the quiet inline hint on `rate` — a
+`frappe.show_alert` toast that warns when the rate is off the last rate to that
+customer, which blocks nothing.
+
+⚠️ The feature check runs BEFORE the handler's `closest()` call, deliberately.
+That listener fires on **every click in the desk**; with the switch on it now does
+strictly less work per click than it did before.
 
 ## Promoting to production
 
