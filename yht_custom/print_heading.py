@@ -198,14 +198,20 @@ def yht_print_heading(doc, as_kind: str | None = None) -> dict:
 		if legacy:
 			return {"en": legacy[0], "ar": legacy[1], "heading": ""}
 
-	chosen = ""
-	if hasattr(doc, "get"):
-		chosen = cstr(doc.get("select_print_heading")).strip() or cstr(doc.get(FIELDNAME)).strip()
-	# `as_kind` is the TEMPLATE's own answer and outranks the doctype default, but
-	# not the operator's choice: a Sales Order deliberately set to print as a
-	# Quotation must still do so when rendered through the proforma template.
-	if not chosen:
-		chosen = as_kind or default_heading(doc)
+	# 🔴 `as_kind` OUTRANKS EVERYTHING, INCLUDING `select_print_heading`, AND THAT
+	# ORDER WAS WRONG ONCE. It is the TEMPLATE naming itself: `proforma_invoice.html`
+	# is reached only by choosing the Proforma print format, which is a more
+	# specific statement than any value stored on the document. With the stored
+	# field winning, the backfill that stamped "Sales Quotation" onto 2,726
+	# quotations made every Proforma print say QUOTATION — caught on UAT.
+	if as_kind:
+		chosen = as_kind
+	else:
+		chosen = ""
+		if hasattr(doc, "get"):
+			chosen = cstr(doc.get("select_print_heading")).strip() or cstr(doc.get(FIELDNAME)).strip()
+		if not chosen:
+			chosen = default_heading(doc)
 
 	return {"en": english(chosen), "ar": ARABIC.get(chosen, ""), "heading": chosen}
 

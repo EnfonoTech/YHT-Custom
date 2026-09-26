@@ -66,6 +66,19 @@ DISTRICT_SUFFIX = re.compile(r"\b(DIST|DIST\.|DISTRICT)\s*$", re.I)
 #: test below is worthless unless they all collapse to one string.
 CITY_ALIASES = (("KHUBAR", "KHOBAR"), ("KHOBER", "KHOBAR"), ("ALKOBAR", "ALKHOBAR"))
 
+#: A `county` holding one of these is the city, whatever the row's own `city`
+#: column happens to say. Needed because `city` is dirty too: address
+#: `CU0341-Billing` carries county "Dammam" and city " Industrial City", so the
+#: row-local comparison alone stored "Dammam" as the district. No Saudi district
+#: is named after one of these cities, so the rule is safe in the direction it
+#: fires — it can only ever move a value OUT of the district bucket.
+MAJOR_CITIES = (
+	"RIYADH", "JEDDAH", "DAMMAM", "ALKHOBAR", "DHAHRAN", "JUBAIL", "ALJUBAIL",
+	"MAKKAH", "MECCA", "MADINAH", "MEDINA", "TAIF", "ABHA", "TABUK", "BURAIDAH",
+	"HAIL", "NAJRAN", "JAZAN", "YANBU", "QATIF", "ALQATIF", "ALAHSA", "HOFUF",
+	"ALHASA", "KHAMISMUSHAIT", "SAUDIARABIA", "EASTERNPROVINCE",
+)
+
 BUCKETS = ("district", "city_only", "street", "junk", "empty")
 
 
@@ -120,6 +133,9 @@ def classify(county: str, city: str) -> tuple:
 	if any(marker in upper for marker in NOT_A_DISTRICT):
 		return "street", ""
 
+	if squashed in {_squash(c) for c in MAJOR_CITIES}:
+		return "city_only", ""
+
 	city_squashed = _squash(city)
 	if city_squashed:
 		if squashed == city_squashed:
@@ -161,6 +177,48 @@ def survey() -> dict:
 			examples[bucket].append({"address": row.name, "county": row.county, "city": row.city, "district": value})
 
 	summary = {"with_county": len(_rows()), "counts": counts, "examples": examples}
+	print(frappe.as_json(summary, indent=1))
+	return summary
+
+
+def recheck(commit: bool = False) -> dict:
+	"""Undo a district this module itself derived and would no longer derive.
+
+	🔴 WHY THIS EXISTS. The first run on UAT copied 241 values, and the
+	`MAJOR_CITIES` rule that came after it reclassifies some of them — address
+	`CU0341-Billing` carries county "Dammam" and city " Industrial City", so the
+	row-local comparison alone had stored "Dammam" as the district. Without this
+	the correction would only ever apply to addresses nobody had backfilled yet,
+	and the wrong values would sit there permanently looking hand-entered.
+
+	🔴 AND IT ONLY EVER CLEARS A VALUE THAT MATCHES WHAT `classify` PRODUCED. If
+	someone has since typed a real district, `custom_area` no longer equals the
+	derived string and the row is left alone. A human's entry is never undone by a
+	rule change.
+	"""
+	cleared, kept = 0, 0
+
+	for row in _rows():
+		current = cstr(row.custom_area).strip()
+		if not current:
+			continue
+		bucket, value = classify(row.county, row.city)
+		if bucket == "district" and value == current:
+			kept += 1
+			continue
+		# Not something this rule would write today — but is it something it wrote
+		# YESTERDAY? Only then is it ours to clear.
+		_previous_bucket, previous_value = "", _tidy(row.county)
+		if current not in (previous_value, _drop_prefix(previous_value, len(_squash(row.city)))):
+			continue
+		if commit:
+			frappe.db.set_value("Address", row.name, "custom_area", "", update_modified=False)
+		cleared += 1
+
+	if commit:
+		frappe.db.commit()
+
+	summary = {"committed": bool(commit), "cleared": cleared, "still_valid": kept}
 	print(frappe.as_json(summary, indent=1))
 	return summary
 

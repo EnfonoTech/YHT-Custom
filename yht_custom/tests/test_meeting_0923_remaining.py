@@ -124,6 +124,12 @@ class TestCr002TheDistrict(FrappeTestCase):
 	def test_the_literal_string_null_is_junk(self):
 		self.assertEqual(classify("NULL", "DAMMAM"), ("junk", ""))
 
+	def test_a_major_city_is_never_a_district_however_dirty_the_city_column_is(self):
+		"""`CU0341-Billing` carries county "Dammam" and city " Industrial City",
+		so the row-local comparison alone stored Dammam as the district."""
+		self.assertEqual(classify("Dammam", " Industrial City"), ("city_only", ""))
+		self.assertEqual(classify("RIYADH", ""), ("city_only", ""))
+
 	def test_a_street_is_not_a_district(self):
 		self.assertEqual(classify("PRINCE TALAL STREET", "AL KHOBAR"), ("street", ""))
 
@@ -151,6 +157,22 @@ class TestCr003TheAddressFirstTab(FrappeTestCase):
 
 	def test_the_declared_order_exists(self):
 		self.assertIn("Address", FIELD_ORDER)
+
+	def test_the_tab_break_is_ours_rather_than_a_hand_edit(self):
+		"""It existed on the live site only, added through Customize Form, so the
+		item could not be verified anywhere else until this module created it."""
+		from yht_custom.field_layout import STRUCTURAL_FIELDS
+
+		self.assertEqual(STRUCTURAL_FIELDS["Address"][0]["fieldtype"], "Tab Break")
+		self.assertIsNotNone(frappe.get_meta("Address").get_field("custom_more_details"))
+
+	def test_the_live_form_actually_splits_there(self):
+		"""The assertion the CR is about: nothing mandatory behind the tab."""
+		order = [f.fieldname for f in frappe.get_meta("Address").fields]
+		tab = order.index("custom_more_details")
+		for fieldname in ("pincode", "city", "country", "address_type", "custom_short_address"):
+			with self.subTest(field=fieldname):
+				self.assertLess(order.index(fieldname), tab)
 
 	def test_every_mandatory_field_is_ahead_of_the_tab_break(self):
 		order = FIELD_ORDER["Address"]
@@ -290,11 +312,12 @@ class TestCr007EssentialsFirst(FrappeTestCase):
 		self.assertIn(("po_no", "tax_id"), FIELD_MOVES["Sales Order"])
 		self.assertIn(("po_date", "po_no"), FIELD_MOVES["Sales Order"])
 
-	def test_the_delivery_note_needed_nothing(self):
-		"""Measured: po_no / po_date already sit immediately after tax_id there."""
+	def test_the_delivery_note_customer_po_is_on_the_front_page(self):
+		"""Production had this through a hand edit and UAT did not, so it is
+		declared: CR-008 and CR-015 both anchor on `po_date`."""
+		self.assertIn(("po_no", "tax_id"), FIELD_MOVES["Delivery Note"])
 		order = [f.fieldname for f in frappe.get_meta("Delivery Note").fields]
 		self.assertLess(order.index("po_no"), order.index("items"))
-		self.assertNotIn("Delivery Note", FIELD_MOVES)
 
 	def test_the_quotation_pairs_all_name_fields_it_has(self):
 		meta = frappe.get_meta("Quotation")
@@ -453,11 +476,16 @@ class TestCr015TheRemarksBox(FrappeTestCase):
 		)
 		self.assertEqual(sorted(fields), ["custom_other_remarks"])
 
-	def test_the_move_is_replayed_into_the_stored_field_order(self):
-		"""Delivery Note's stored order names every field, so `insert_after` alone
-		is ignored — `meta.sort_fields` returns early."""
-		pairs = dict(CUSTOM_FIELD_MOVES["Delivery Note"])
-		self.assertEqual(pairs["custom_other_remarks"], "custom_sales_invoice_no")
+	def test_it_is_positioned_by_its_own_anchor_not_by_a_replayed_move(self):
+		"""`custom_other_remarks` is re-applied by our own `fixtures` hook, so
+		`_apply_custom_field_moves` refuses to touch it — `other_remarks.ANCHORS`
+		is the lever that actually wins, and listing it in both logs a skip on
+		every migrate for nothing."""
+		self.assertNotIn("custom_other_remarks", dict(CUSTOM_FIELD_MOVES["Delivery Note"]))
+
+	def test_it_lands_on_the_front_page(self):
+		order = [f.fieldname for f in frappe.get_meta("Delivery Note").fields]
+		self.assertLess(order.index("custom_other_remarks"), order.index("items"))
 
 
 class TestCr020TheReportGroups(FrappeTestCase):
@@ -524,6 +552,14 @@ class TestTheLivePrintDoesNotChangeUntilTheSwitchIsOn(FrappeTestCase):
 		out = yht_print_heading(doc)
 		self.assertEqual(out["en"], LEGACY_TITLES["Quotation"][0])
 		self.assertEqual(out["ar"], "", "the old markup was ONE div, not a pair")
+
+	def test_a_stored_heading_cannot_override_the_template_that_is_printing(self):
+		"""Caught on UAT: the backfill stamped "Sales Quotation" onto 2,726
+		quotations and every Proforma print then said QUOTATION."""
+		frappe.conf.yht_features = ["all"]
+		doc = frappe.new_doc("Quotation")
+		doc.select_print_heading = "Sales Quotation"
+		self.assertEqual(yht_print_heading(doc, "Proforma Invoice")["en"], "PROFORMA INVOICE")
 
 	def test_the_proforma_is_told_what_it_is_by_the_template(self):
 		"""`proforma_invoice.html` renders a QUOTATION document, so the doctype

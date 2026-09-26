@@ -51,6 +51,9 @@ def execute():
 	frappe.db.commit()
 
 	if features.enabled("cr_002_district_fallback") and frappe.db.has_column("Address", "custom_area"):
+		# Recheck FIRST: a value this module derived under an older rule has to be
+		# released before the current rule can decline to write it again.
+		results["cr_002_recheck"] = address_district.recheck(commit=True)
 		results["cr_002_district"] = address_district.backfill(commit=True)
 	else:
 		results["cr_002_district"] = "skipped — cr_002_district_fallback is off here"

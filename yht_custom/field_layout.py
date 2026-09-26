@@ -78,6 +78,14 @@ FIELD_MOVES = {
 		("po_no", "tax_id"),
 		("po_date", "po_no"),
 	],
+	# Production already had these on the front page through a hand edit; UAT did
+	# not, and CR-008 / CR-015 anchor on `po_date`. Declaring it makes both sites
+	# converge on the same layout instead of one of them depending on an edit
+	# nobody wrote down.
+	"Delivery Note": [
+		("po_no", "tax_id"),
+		("po_date", "po_no"),
+	],
 	"Quotation": [
 		("party_name", "column_break_7"),
 		("customer_name", "party_name"),
@@ -120,6 +128,23 @@ FIELD_MOVES = {
 #: mandatory block, and refusing to write anything at all would mean one stray
 #: field disables the whole item. The permutation guard in `apply_field_moves`
 #: still holds: nothing is ever dropped.
+#: Fields this module has to CREATE before it can order them — CR-003.
+#:
+#: The `More Details` Tab Break existed on the live site only, added through
+#: Customize Form by another developer, so UAT had nothing to split on and the
+#: whole item was unverifiable there. Owning the field is what makes the layout
+#: reproducible on any site.
+STRUCTURAL_FIELDS = {
+	"Address": [
+		{
+			"fieldname": "custom_more_details",
+			"label": "More Details",
+			"fieldtype": "Tab Break",
+			"insert_after": "links",
+		}
+	]
+}
+
 FIELD_ORDER = {
 	"Address": [
 		# --- first tab: everything a new address needs ----------------------
@@ -224,10 +249,13 @@ CUSTOM_FIELD_MOVES = {
 	# `meta.sort_fields` returns early in that case and never consults
 	# `insert_after` again. Driving both levers is what `_apply_custom_field_moves`
 	# plus the replay in `apply_field_moves` exists for.
+	# `custom_other_remarks` is deliberately NOT here: it is re-applied by our own
+	# `fixtures` hook, so `_apply_custom_field_moves` refuses to move it and logs a
+	# skip on every migrate. `other_remarks.ANCHORS` positions it instead, which is
+	# the mechanism that actually wins.
 	"Delivery Note": [
 		("custom_sales_order_no", "po_date"),
 		("custom_sales_invoice_no", "custom_sales_order_no"),
-		("custom_other_remarks", "custom_sales_invoice_no"),
 	],
 }
 
@@ -402,6 +430,29 @@ def _write_order(doctype: str, ps_name, order: list) -> None:
 	frappe.clear_cache(doctype=doctype)
 
 
+def _ensure_structural_fields(skipped: list) -> int:
+	"""Create the Tab Breaks and Column Breaks `FIELD_ORDER` positions.
+
+	Idempotent: `create_custom_fields` skips a field that already exists, so a site
+	where another developer added the same fieldname by hand keeps THEIR record and
+	only the ordering below applies.
+	"""
+	from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
+
+	created = 0
+	for doctype, fields in STRUCTURAL_FIELDS.items():
+		if not frappe.db.exists("DocType", doctype):
+			skipped.append(f"{doctype}: no such doctype")
+			continue
+		missing = [f for f in fields if not frappe.get_meta(doctype).get_field(f["fieldname"])]
+		if not missing:
+			continue
+		create_custom_fields({doctype: missing}, ignore_validate=True)
+		frappe.clear_cache(doctype=doctype)
+		created += len(missing)
+	return created
+
+
 def _apply_field_order(skipped: list) -> int:
 	"""CR-003 — write the whole order for the doctypes that declare one.
 
@@ -428,6 +479,15 @@ def _apply_field_order(skipped: list) -> int:
 			continue
 
 		ps_name, order = _read_order(doctype)
+		# 🔴 SEEDED FROM THE FULL META, NOT FROM `_read_order`'s STANDARD-ONLY LIST.
+		# `_read_order` deliberately omits custom fields when it has to seed, because
+		# a pairwise move must not fight `insert_after`. A DECLARED order is the
+		# opposite case — it is the "name every field" mechanism the module docstring
+		# describes — so on a site with no stored order yet it has to see the custom
+		# fields too, or every one of them reports as absent and nothing moves.
+		# Measured on yht-test: all thirteen Address custom fields were skipped.
+		if not ps_name:
+			order = [f.fieldname for f in frappe.get_meta(doctype).fields]
 		present = [f for f in desired if f in order]
 		trailing = [f for f in order if f not in desired]
 
@@ -454,6 +514,7 @@ def apply_field_moves() -> dict:
 	"""Idempotent. Only ever REORDERS — never adds or drops a fieldname."""
 	moved, already, skipped = 0, 0, []
 
+	moved += _ensure_structural_fields(skipped)
 	moved += _apply_custom_field_moves(skipped)
 	moved += _apply_field_order(skipped)
 
