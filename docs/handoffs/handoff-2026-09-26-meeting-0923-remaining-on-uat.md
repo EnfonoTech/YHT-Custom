@@ -143,9 +143,61 @@ Every one of these survived writing and reading the code, and died on the first 
 | CR-015 | done | The one Other Remarks box, on the front page |
 | CR-020 | done | Stock · Sales Statements · Receivables & Collection · Ledgers · Purchase · Data & Go-Live |
 | CR-021 | done | `KATC Purchase Order`, a sibling of the Sales Order format |
-| CR-018, CR-019 | **blocked** | OQ-6 / OQ-7 need one live example or a screen recording |
+| CR-018 | done | **OQ-6 answered.** The ask is the SEARCH POPUP under the Item Code cell, not the column — see below |
+| CR-019 | **blocked** | OQ-7 still open; a yes/no on the reading below closes it without a screen share |
 
 ---
+
+### CR-018 was not what it was written down as
+
+The CR says "item description column: widen, but narrow specifically during
+search/query", and it was recorded as blocked because nobody could work out which
+UI moment "when querying" meant. The client's screenshot settles it: it is the
+**awesomplete popup** that opens under the Item Code cell while you type, not the
+grid column at all.
+
+**And the column is not what sizes that popup.**
+`frappe/public/scss/common/awesomeplete.scss` gives
+`.awesomplete > [role="listbox"]` `width: 100%` **and** `min-width: 250px`, so it
+is 250px wide on every grid cell narrower than that. Widening the Item Code
+column — the change the CR as written asked for — would have moved nothing.
+
+520px, sized on the data: measured across every Item on `yht-khobhar`, `item_name`
+is 41 characters at the median, 54 at p90, 63 at p99, 75 at its longest, and 1,119
+items are over 45. `Item.search_fields` is
+`item_name,description,item_group,customer_code`, so four values stack in every
+row — the description still wraps, which is the point of the request.
+
+Desktop only: `grid.scss` sets `.form-grid-container { overflow-x: clip }` below
+the `md` breakpoint and `overflow-x: unset !important` above it, so on a phone a
+520px popup would be cut off by the container rather than overflow it. Falling off
+the right edge is already handled upstream — `link.js` measures the dropdown
+against the viewport on every open and flips it to `.awesomplete-align-right`.
+
+A stylesheet cannot read `site_config.json`, so the rule is scoped to
+`body.yht-wide-grid-search` and `public/js/grid_search_width.js` writes that class
+from the boot payload — on `app_ready`, because `frappe.boot` is empty when a desk
+bundle first evaluates.
+
+### CR-019 — the reading that would close it without a screen share
+
+The two rate paths on this site are almost certainly:
+
+1. typing straight into the **Rate** cell of the item grid, and
+2. the **Price Assist** button in the grid footer (`public/js/price_assist.js`),
+   which suggests a rate and shows the history behind it.
+
+If that is right, "keep only the button" means making the Rate cell read-only.
+⚠️ **`rate_lock.js` already does that, but only for rows FETCHED from a Sales
+Order or Delivery Note** — deliberately per-row, because an invoice routinely
+mixes fetched rows with hand-added ones. Extending it to every row means a
+hand-added line can only be priced through Price Assist, and Price Assist suggests
+from history, which a brand-new item has none of. That is the "removes the only
+way to price a line" risk the CR was blocked on, and it is still real.
+
+So the question for the client is narrower than a screen share: *are those the two
+paths, and should the Rate cell be read-only on hand-added rows too, or only on
+fetched ones (which is today's behaviour)?*
 
 ## Promoting to production
 
