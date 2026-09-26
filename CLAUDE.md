@@ -846,6 +846,59 @@ accountant: SI→`CN`, DN→`DRN`, PI→`DBN`, PR→`PRN`.
     ⚠️ `prepare_header_footer` only defaults `margin-top` to 15mm when there is **no** `#header-html`
     — with one present the margin comes from the format's own CSS, so a tall header needs its own.
 
+106. 🔴 **"DEPLOY TO UAT FIRST" IS NOT EXPRESSIBLE ON THIS BENCH WITHOUT A PER-SITE SWITCH.**
+    `yht-khobhar.enfonoerp.com` and `yht-test` share ONE `apps/yht_custom`; a template is read from
+    disk per render and a `doc_events` handler is registered once for both. `yht_custom/features.py`
+    reads `yht_features` out of the SITE's own `site_config.json` (`frappe.conf`), so `["all"]` on
+    `yht-test` and the key absent on the live site. **Never put it in `common_site_config.json`** —
+    that file is shared. `enabled()` raises on a name not in `KNOWN`, because a flag that silently
+    reads False for a typo is indistinguishable from one that is off on purpose. Most of what this app
+    ships needs no switch — Property Setters, Custom Fields, Print Format and Letter Head records are
+    site-level and arrive with that site's `migrate`. Only three things travel on the pull alone:
+    Python on a shared event, JS under `/assets`, and **a change to a template an EXISTING print
+    format already renders** — that third is the one that gets missed, so the jinja helper returns the
+    previous hardcoded output while the switch is off (`print_heading.LEGACY_TITLES`).
+
+107. 🔴 **HASH THE CLIENT'S PRINTS BEFORE YOU PULL, AND AGAIN AFTER.**
+    `sha256(frappe.get_print(dt, name, fmt))[:16]` for each client-facing format. On 2026-09-26 this
+    caught two formats that had moved with every switch off: `&rlm;` instead of a literal U+200F, and
+    `{%- if %}` swallowing the newline between the two title divs. Both render identically, so the
+    output was equivalent and the bytes were not — and "renders the same" is an assumption until
+    something renders it. Identical shas are the only evidence a live print did not change.
+
+108. 🔴 **`["in", ["", None]]` NEVER MATCHES NULL.** Frappe renders it `IN ('', NULL)`, `IN` compares
+    with `=`, and `x = NULL` is NULL. A print-heading backfill filtered that way filled **18** rows
+    where **11,253** were blank, and reported success. Use `["is", "not set"]`, which becomes
+    `ifnull(field, '') = ''`. Its neighbour: **patches run BEFORE `after_migrate`**, so a patch writing
+    into a field or record that a provisioning step creates has nothing to write into on the first
+    migrate — call the idempotent setup function from the patch itself.
+
+109. 🔴 **A DEPLOY SCRIPT MUST HARD-GATE ON THE RESULTING SHA.** The box's remote is `upstream`, and
+    `remote.upstream.fetch` is pinned to `+refs/heads/main:...` — so `git fetch origin` fails, and
+    `git fetch upstream` alone does not bring a feature branch either. On 2026-09-26 a script did the
+    first, the fetch and checkout both failed, and it went on to restart workers, migrate and print a
+    green site-health table for code that was never pulled. Assert `git rev-parse --short HEAD` equals
+    the expected commit **and** that a file you just added exists on disk, before anything else runs.
+    Branches need `git fetch upstream "+refs/heads/*:refs/remotes/upstream/*"`.
+
+110. ⚠️ **`select_print_heading` IS STANDARD, IS ALREADY `allow_on_submit`, AND THE CLIENT WAS ALREADY
+    USING IT.** Present on Quotation, Sales Order, Sales Invoice, Delivery Note, Purchase Invoice and
+    Purchase Order; measured on production 2026-09-26, 1,906 of 1,964 Delivery Notes and 2,369 of
+    3,614 Purchase Invoices carried one. `allow_on_submit` is exactly what makes a field bulk-editable
+    from the list view, so "bulk-editable print heading" needed **no new field and no new tool** — the
+    prints simply ignored it and hardcoded their titles. Check what a doctype already ships before
+    building the thing it ships.
+
+111. 🔴 **A DECLARED `field_order` MUST BE BUILT FROM LIVE META, NOT FROM THE STORED PROPERTY SETTER,
+    AND ONLY ONE MECHANISM MAY ORDER A DOCTYPE.** `field_layout._read_order` deliberately seeds from
+    STANDARD fields only so a pairwise move cannot fight `insert_after` — so a full declared order
+    built on that base reported all thirteen Address custom fields "absent" and did nothing, twice.
+    `meta.fields` is the stored order with custom fields already spliced in by
+    `_update_field_order_based_on_insert_after`, which makes it the only list describing the form as it
+    renders. Separately, `FIELD_ORDER` and `FIELD_MOVES` ran in sequence on the same list: the declared
+    order put District between Address Line 2 and Postal Code, and the pairs hoisted Postal Code · City
+    · Country back above it, every migrate. A test asserts the two dicts never name the same doctype.
+
 ## Deploy
 
 Repo: **`git@github-yht:EnfonoTech/YHT-Custom.git`** (private). The box has a dedicated read-only deploy key at
