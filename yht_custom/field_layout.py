@@ -478,16 +478,24 @@ def _apply_field_order(skipped: list) -> int:
 			skipped.append(f"{doctype}: no such doctype")
 			continue
 
-		ps_name, order = _read_order(doctype)
-		# 🔴 SEEDED FROM THE FULL META, NOT FROM `_read_order`'s STANDARD-ONLY LIST.
-		# `_read_order` deliberately omits custom fields when it has to seed, because
-		# a pairwise move must not fight `insert_after`. A DECLARED order is the
-		# opposite case — it is the "name every field" mechanism the module docstring
-		# describes — so on a site with no stored order yet it has to see the custom
-		# fields too, or every one of them reports as absent and nothing moves.
-		# Measured on yht-test: all thirteen Address custom fields were skipped.
-		if not ps_name:
-			order = [f.fieldname for f in frappe.get_meta(doctype).fields]
+		# 🔴 THE BASE IS LIVE META, NEVER THE STORED PROPERTY SETTER. `_read_order`
+		# returns the stored value when there is one, and on this site there IS one
+		# — written by the PAIRWISE mechanism, which deliberately seeds from
+		# STANDARD fields only so it cannot fight `insert_after`. Nineteen names,
+		# none of them custom. Against that base every one of Address's thirteen
+		# custom fields reported as absent and nothing moved, twice, including
+		# after the Tab Break itself had been created.
+		#
+		# `meta.fields` is already the stored order with the custom fields spliced
+		# in by `_update_field_order_based_on_insert_after`, so it is the only list
+		# that describes the form as it actually renders — and permuting it is
+		# exactly what a DECLARED order means.
+		ps_name = frappe.db.get_value(
+			"Property Setter",
+			{"doc_type": doctype, "property": "field_order", "doctype_or_field": "DocType"},
+			"name",
+		)
+		order = [f.fieldname for f in frappe.get_meta(doctype).fields]
 		present = [f for f in desired if f in order]
 		trailing = [f for f in order if f not in desired]
 
