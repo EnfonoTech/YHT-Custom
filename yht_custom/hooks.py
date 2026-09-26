@@ -27,6 +27,9 @@ app_include_css = "/assets/yht_custom/css/yht_custom.css?v=7"
 # which matters because builds are limited to the maintenance window.
 doctype_js = {
 	"Item": "public/js/item_code_from_group.js",
+	# CR-001 — the two ad-hoc Address Client Scripts, ported. Inert until
+	# `cr_001_spl_address` is switched on for the site; see `features`.
+	"Address": "public/js/address.js",
 	# The client's incumbent print buttons (Print PDF / Print Without LH, plus
 	# Print Arabic with LH on Quotation). ONE file under four doctypes — it guards
 	# its own registration so the handlers cannot stack up across a session.
@@ -111,7 +114,10 @@ permission_query_conditions = {
 # in the system, including Version, Error Log and Activity Log rows, for hooks
 # that only ever apply to these twelve.
 _BRANCH_DEFAULT_EVENTS = {
-	"before_validate": "yht_custom.branch_defaults.apply_branch_defaults",
+	"before_validate": [
+		"yht_custom.branch_defaults.apply_branch_defaults",
+		"yht_custom.branch_defaults.apply_branch_warehouse",
+	],
 	"before_insert": "yht_custom.branch_defaults.set_naming_series_from_branch",
 	# The boundary that makes the ignore_user_permissions Property Setters safe.
 	# Runs on validate so it catches the desk, REST, imports and Server Scripts.
@@ -130,6 +136,8 @@ doc_events = {
 	"Item": {"before_insert": "yht_custom.item_naming.set_item_code_from_group"},
 	# The duplicate-VAT rule is enforced on validate as well as in the dialog —
 	# otherwise the Customer form itself is the way around it.
+	# CR-014 — shape check on the Unified Number, and only when it is touched.
+	"Company": {"validate": "yht_custom.unified_number.validate"},
 	"Customer": {"validate": "yht_custom.api.customer.enforce_vat_duplicate_rule"},
 	"Supplier": {"validate": "yht_custom.api.supplier.enforce_vat_duplicate_rule"},
 }
@@ -166,16 +174,25 @@ _FLOW_EVENTS = {
 		# Item 5: a rate fetched from a Sales Order or Delivery Note is not
 		# editable here. The JS makes the cell read-only; this is the boundary.
 		"validate": "yht_custom.rate_lock.enforce_fetched_rate",
+		# CR-008 — both ends ask `dn_links` the same question, so cancel needs no
+		# separate rule. Same shape as `delivery_backlink`.
+		"on_submit": "yht_custom.dn_links.refresh_from_invoice",
+		"on_cancel": "yht_custom.dn_links.refresh_from_invoice",
 	},
 	"Delivery Note": {
 		"before_validate": _RETURN_NEGATE,
-		"validate": "yht_custom.sales_flow.validate_delivery_note",
+		# CR-008 — the Sales Order number is knowable at save time; the invoice
+		# number is not, and is refreshed from the invoice's own submit/cancel.
+		"validate": ["yht_custom.sales_flow.validate_delivery_note", "yht_custom.dn_links.set_order_numbers"],
 		"on_update_after_submit": "yht_custom.sales_flow.lock_submitted_delivery_note",
 	},
 	"Purchase Receipt": {"before_validate": _RETURN_NEGATE},
 	"Purchase Invoice": {
 		"before_validate": [
 			"yht_custom.sales_flow.enforce_purchase_receipt_route",
+			# CR-012 — FIRST of the expense pair. `before_validate` below reads the
+			# flag this derives from the naming series, so the order is load-bearing.
+			"yht_custom.expense_invoice.derive_expense_flag",
 			"yht_custom.expense_invoice.before_validate",
 			_RETURN_LINK,
 			_RETURN_ROUTE,
@@ -233,7 +250,25 @@ def _merge_events(base: dict, extra: dict) -> dict:
 	return base
 
 
+# --- CR-004 / CR-005 -----------------------------------------------------
+# `select_print_heading` is filled on save when blank, so the bulk edit the
+# client asked for is a CORRECTION rather than data entry on 1,900 notes. The
+# six doctypes are `print_heading.DEFAULTS`, repeated literally because hooks.py
+# is read before the app is importable; a test asserts they agree.
+_PRINT_HEADING_EVENTS = {
+	doctype: {"before_save": "yht_custom.print_heading.set_print_heading"}
+	for doctype in (
+		"Quotation",
+		"Sales Order",
+		"Sales Invoice",
+		"Delivery Note",
+		"Purchase Invoice",
+		"Purchase Order",
+	)
+}
+
 doc_events = _merge_events(doc_events, _FLOW_EVENTS)
+doc_events = _merge_events(doc_events, _PRINT_HEADING_EVENTS)
 
 # --- fiscal year ---------------------------------------------------------
 # Derived on validate from each doctype's own date. The doctype list is repeated
@@ -404,6 +439,11 @@ jinja = {
 		"yht_custom.print_helpers.yht_creator_contact",
 		"yht_custom.print_helpers.yht_zatca_qr",
 		"yht_custom.print_helpers.yht_bank_details",
+		# CR-004 — the title block and the Arabic switch. Both are read by every
+		# KATC template, so the same "500s every website page until the workers
+		# reload" warning above applies to them.
+		"yht_custom.print_heading.yht_print_heading",
+		"yht_custom.print_heading.yht_print_lang",
 	],
 }
 

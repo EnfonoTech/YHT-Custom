@@ -87,7 +87,15 @@ ANCHORS = {
 	# `remark` beside it is system-generated; `user_remark` is the one a person
 	# types, so the new note sits with that.
 	"Journal Entry": ("user_remark", "amended_from"),
-	"Delivery Note": ("instructions", "amended_from"),
+	# 🔴 CR-015 MOVED THIS OFF `instructions`. The client's ask was "we already
+	# have a default remarks field… just keep it on the front page", and on
+	# Delivery Note there is no `remarks` field at all in ERPNext v15 — this IS
+	# the one they mean, and `instructions` put it in the Terms tab. The two
+	# CR-008 fields are the anchor because they are the last of the front-page
+	# customer block; `field_layout.CUSTOM_FIELD_MOVES["Delivery Note"]` replays
+	# the same three positions into the stored `field_order`, which is what
+	# actually decides on a doctype whose order names every field.
+	"Delivery Note": ("custom_sales_invoice_no", "po_date", "instructions", "amended_from"),
 	"Sales Order": ("amended_from",),
 	"Quotation": ("amended_from",),
 	"Material Request": ("amended_from",),

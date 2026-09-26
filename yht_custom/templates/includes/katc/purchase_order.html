@@ -1,10 +1,23 @@
-{#- SHARED TEMPLATE. The Print Format records are two-line shims that set flags and
-    include this file, so a variant is a FLAG rather than a hand-synced copy of the
-    whole layout. The previous pair carried a comment reading "KATC Quotation and
-    KATC Quotation Arabic must stay identical outside the katc-ar-col cells — edit
-    BOTH, or the check fails"; that trap is what this removes.
-    Flags: katc_show_arabic (adds the Item Name in Arabic column),
-           katc_show_bank   (adds the VAT # / BANK DETAILS block). -#}
+{#- CR-021 — Purchase Order print.
+
+    Client's words about the one that exists: it "doesn't show the transaction".
+    Measured 2026-09-26, the site's only Purchase Order format is `Yhtckathoom`,
+    a Print Format Builder record owned by another developer; 283 purchase
+    orders exist and none carries a print heading.
+
+    🔴 THIS IS A SIBLING OF `sales_order.html`, NOT A NEW DESIGN, and the frame
+    above is copied from it deliberately: the style block, the `id="header-html"`
+    letterhead and the breakable outer cell are the three things that took two
+    client-visible regressions to get right (blank first page, letterhead painted
+    over the rows). A second opinion on any of them here would be a third.
+
+    The client explicitly deprioritised this item behind the selling documents —
+    "first quotation, then sales order… then this" — so it lands last and follows
+    CR-004's heading architecture rather than inventing a fourth one. -#}
+{#- SHARED TEMPLATE — see quotation.html. The letterhead is driven by the BUTTON
+    (letterhead= / no_letterhead=1), not by a separate format: the spacer used to be
+    unconditional here, which is why there was no with-letterhead Sales Order at all.
+    Flag: katc_show_arabic. -#}
 {#- CR-004 — ONE FORMAT, THE VARIANT CHOSEN AT PRINT TIME.
     `katc_show_arabic` is still honoured when a shim sets it, so the existing
     "… Arabic" Print Format records keep working, but it now ALSO follows the
@@ -82,48 +95,49 @@ table.katc-items td.ctr { text-align: center; }
 {% if letter_head and 'katc-lh' in letter_head %}<div id="header-html" class="katc-head">{{ letter_head }}</div>{% elif no_letterhead %}<div class="katc-spacer" style="height: {{ yht_katc_spacer_pt() }}pt"></div>{% endif %}
 <table class="katc-doc">
   <tbody><tr><td>
-{#- `net_total` only reflects the additional discount when it was applied ON the
-    net total; with `apply_discount_on = "Grand Total"` it is still the PRE-discount
-    figure, and "Total after Discount" would print the same number as "Total". -#}
+
 {%- set net_after_discount = (doc.total - (doc.discount_amount or 0)) if doc.apply_discount_on == "Grand Total" else doc.net_total -%}
 <div class="katc-title">{{ katc_heading.en }}</div>
 {%- if katc_heading.ar %}<div class="katc-title-ar">&rlm;{{ katc_heading.ar }}&rlm;</div>{% endif %}
 
 <table class="katc-meta"><tbody>
   <tr>
-    <td class="lbl">Quotation No</td><td>{{ doc.name }}</td>
+    <td class="lbl">Supplier Name:</td><td>{{ doc.supplier_name or doc.supplier or "" }}</td>
+    <td class="lbl">Purchase Order No:</td><td>{{ doc.name }}</td>
+  </tr>
+  <tr>
+    <td class="lbl">Required By:</td><td>{{ yht_date(doc.schedule_date) }}</td>
     <td class="lbl">Date:</td><td>{{ yht_date(doc.transaction_date) }}</td>
   </tr>
   <tr>
-    <td class="lbl">Customer Name :</td><td>{{ doc.customer_name or doc.party_name or "" }}</td>
-    <td class="lbl">Valid Till:</td><td>{{ yht_date(doc.valid_till) }}</td>
-  </tr>
-  <tr>
+{#- `yht_party_vat` reads the party master when the document's own `tax_id` is
+    empty, which it is on everything imported — the same gap the tax invoice hit. -#}
+    <td class="lbl">Tax Id:</td><td>{{ yht_party_vat(doc, "supplier") }}</td>
     <td class="lbl">Contact:</td><td>{{ doc.contact_display or "" }}</td>
-    <td class="lbl">Payment Terms Template</td><td>{{ doc.payment_terms_template or "" }}</td>
   </tr>
-{#- CR-011: only rendered when filled. An empty Attention row on a customer-facing
-    quotation reads as a missing value rather than "not applicable". -#}
 {%- if doc.get("custom_attention_person") %}
   <tr>
     <td class="lbl">Attention:</td><td colspan="3">{{ doc.get("custom_attention_person") }}</td>
+  </tr>
+{%- endif %}
+{%- if doc.get("address_display") %}
+  <tr>
+    <td class="lbl">Supplier Address:</td><td colspan="3">{{ doc.address_display }}</td>
   </tr>
 {%- endif %}
 </tbody></table>
 
 <table class="katc-items">
   <thead><tr>
-{#- 🔴 EVERY column carries an explicit width, and the two sets sum to 100%. Auto
-    layout gives a column as much room as its widest content wants and then lets the
-    text spill past the drawn boundary — which is how the Arabic ran over the Quantity
-    figures. Pinning all of them leaves no freedom to spill into. -#}
+{#- Every column pinned and the two sets summing to 100%, for the reason given in
+    `sales_order.html`: auto layout lets long text spill past the drawn boundary. -#}
 {%- if katc_show_arabic %}
     <th style="width:5%">Sr</th>
-    <th style="width:24%">Item Name</th>
-    <th class="katc-ar-col" style="width:34%">Item Name in Arabic</th>
+    <th style="width:22%">Item Name</th>
+    <th class="katc-ar-col" style="width:31%">Item Name in Arabic</th>
     <th style="width:13%">Quantity</th>
-    <th style="width:12%">Rate</th>
-    <th style="width:12%">Amount</th>
+    <th style="width:13%">Rate</th>
+    <th style="width:16%">Amount</th>
 {%- else %}
     <th style="width:6%">Sr</th>
     <th>Item Name</th>
@@ -145,63 +159,23 @@ table.katc-items td.ctr { text-align: center; }
   </tbody>
 </table>
 
-<table style="width:100%"><tbody><tr>
-  <td style="width:48%; vertical-align:top; font-size:8.5pt"><b>In Words:</b> {{ doc.in_words or "" }}</td>
-  <td style="width:52%; vertical-align:top">
-    <table class="katc-totals" style="width:100%"><tbody>
-      <tr><td class="lbl">Total</td><td class="num">{{ yht_money(doc.total, cur) }}</td></tr>
-      <tr><td class="lbl">Discount :</td><td class="num">- {{ yht_money(doc.discount_amount or 0, cur) }}</td></tr>
-      <tr><td class="lbl">Total after Discount:</td><td class="num">{{ yht_money(net_after_discount, cur) }}</td></tr>
-      <tr><td class="lbl">Total Tax:</td><td class="num">{{ yht_money(doc.total_taxes_and_charges, cur) }}</td></tr>
-      <tr class="katc-grand"><td class="lbl">Grand Total</td><td class="num">{{ yht_money(doc.rounded_total or doc.grand_total, cur) }}</td></tr>
-    </tbody></table>
-  </td>
-</tr></tbody></table>
+<table class="katc-totals"><tbody>
+  <tr><td class="lbl">Total</td><td class="num">{{ yht_money(doc.total, cur) }}</td></tr>
+  <tr><td class="lbl">Discount :</td><td class="num">- {{ yht_money(doc.discount_amount or 0, cur) }}</td></tr>
+  <tr><td class="lbl">Total after Discount:</td><td class="num">{{ yht_money(net_after_discount, cur) }}</td></tr>
+  <tr><td class="lbl">Total VAT:</td><td class="num">{{ yht_money(doc.total_taxes_and_charges, cur) }}</td></tr>
+  <tr class="katc-grand"><td class="lbl">Grand Total:</td><td class="num">{{ yht_money(doc.rounded_total or doc.grand_total, cur) }}</td></tr>
+</tbody></table>
 
-<div class="katc-terms">{{ doc.terms or "" }}</div>
+<div class="katc-words" style="text-align:left"><b>In Words:</b> {{ doc.in_words or "" }}</div>
+<div class="katc-terms"><b>Terms and Conditions:</b><br>{{ doc.terms or "" }}</div>
 
-{%- set creator = yht_creator_contact(doc) %}
-{#- The Arabic artefact carries Print 2's VAT / bank block on its last page while
-    Print 1 does not, so it hangs off its own flag rather than the Arabic one. -#}
-<table class="katc-sign" style="margin-top:10px"><tbody><tr>
-  <td style="vertical-align:top">
-{#- `katc_show_bank` is set by BOTH quotation shims since 2026-09-23. It used to be
-    the Arabic variant only, because the incumbent's `quote Print 1` artefact carried
-    no bank block and `quote print 2 with arabic.pdf` did (gotcha 78). CR-010 from the
-    client meeting reverses that for the plain format: they asked for bank details on
-    the quotation print. The artefact no longer decides this one — the client does. -#}
-{%- if katc_show_bank %}
-{%- set bank = yht_bank_details() -%}
-{%- set seller_vat = yht_company_vat(doc) -%}
-{%- if seller_vat or bank.iban or bank.account_no %}
-<div class="katc-bank">
-{%- if seller_vat %}
-  VAT # <span dir="ltr">{{ seller_vat }}</span><br>
-{%- endif %}
-{%- if bank.iban or bank.account_no %}
-  BANK DETAILS :<br>
-  BANK NAME : {{ bank.bank }}<br>
-  IBAN : <span dir="ltr">{{ bank.iban }}</span><br>
-  A/C # <span dir="ltr">{{ bank.account_no }}</span>
-{%- endif %}
-</div>
-{%- endif -%}
-{%- endif %}
-  </td>
-  <td style="text-align:right; vertical-align:top">
-{#- CR-009: the CUSTOMER's assigned salesperson, not the creator. `mobile` is that
-    same person's number and is usually "" on this site — 1 of 26 Sales Persons has
-    a reachable one — so the line is rendered only when there is a number, and the
-    creator's number is NOT substituted: one person's name beside another's phone
-    number is worse than no number. -#}
-{%- set sp = yht_sales_person(doc) %}
-    CONTACT : {{ sp.name }}<br>
-{%- if sp.mobile %}
-    Contact No: <span dir="ltr">{{ sp.mobile }}</span><br>
-{%- endif %}
-    E-mail: {{ yht_katc_email() }}
-  </td>
-</tr></tbody></table>
+<table class="katc-sign"><tbody>
+  <tr>
+    <td>Prepared By<div class="katc-rule"></div></td>
+    <td>Approved By<div class="katc-rule"></div></td>
+  </tr>
+</tbody></table>
   </td></tr></tbody>
 </table>
 <div id="footer-html">Page <span class="page"></span> of <span class="topage"></span></div>

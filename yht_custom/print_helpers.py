@@ -357,8 +357,9 @@ _NATIONAL_ADDRESS_MAP = (
 )
 
 #: Read alongside the map above so `_derive_building_and_street` can fall back to
-#: the fields this client's data ACTUALLY uses.
-_ADDRESS_EXTRA_FIELDS = ("address_line2",)
+#: the fields this client's data ACTUALLY uses, and so `_derive_district` can see
+#: the legacy `county` column and the row's own `city`.
+_ADDRESS_EXTRA_FIELDS = ("address_line2", "county")
 
 
 def _derive_building_and_street(result: dict, row: dict) -> None:
@@ -401,6 +402,44 @@ def _derive_building_and_street(result: dict, row: dict) -> None:
 		result["street"] = line1
 
 
+def _derive_district(result: dict, row: dict) -> None:
+	"""Fill an empty district from the legacy `county` column — CR-002.
+
+	`custom_area` is authoritative and is never overwritten here: `ksa_compliance`
+	reads it for `buyer_district`, and the client's own SPL paste-parser writes it.
+	But it was populated on **19 of 630** addresses on 2026-09-26, against **340**
+	for `county`, so on nearly every historical document the district cell prints
+	empty while the value sits one column away.
+
+	`address_district.classify` is what decides — the same rule the backfill uses,
+	called here so a document printed before the backfill has run shows the same
+	district it will show afterwards. A `county` holding the city again, a street
+	or the literal string "NULL" classifies out and the cell stays blank, because
+	a wrong district on a tax invoice is worse than an empty one.
+	"""
+	if result.get("district"):
+		return
+
+	from yht_custom.features import enabled
+
+	# Behind `cr_002_district_fallback`. This changes what prints on a TAX INVOICE
+	# on a bench that also serves the client's live site — "deployed" and "in
+	# effect" have to be two separate events even when the change is an
+	# improvement.
+	if not enabled("cr_002_district_fallback"):
+		return
+
+	county = cstr(row.get("county")).strip()
+	if not county:
+		return
+
+	from yht_custom.address_district import classify
+
+	bucket, value = classify(county, cstr(row.get("city")))
+	if bucket == "district":
+		result["district"] = value
+
+
 def yht_national_address(doc, address_field: str = "customer_address") -> dict:
 	"""Saudi national address for the linked `Address`, as seven string keys.
 
@@ -411,12 +450,12 @@ def yht_national_address(doc, address_field: str = "customer_address") -> dict:
 	ONE read per document, not one per field and certainly not one per row.
 
 	⚠️ THE "578 OF 578 HAVE NO DISTRICT" FIGURE WAS MEASURED AGAINST THE WRONG
-	FIELD. It counted `custom_area`, which our own provisioning created and which
-	is populated on **0 of 577** addresses. The district this client actually
-	types lives in `county`, populated on **320**. `county` is not clean — some
-	rows carry a city there, some a region — so it is deliberately NOT mapped
-	here yet; that needs the client to say which is authoritative. Recorded so
-	the next person does not repeat the measurement.
+	FIELD. It counted `custom_area`, which our own provisioning created; `county`
+	is where the legacy import put the district. RESOLVED 2026-09-26 (CR-002):
+	`custom_area` is authoritative — `ksa_compliance` hardcodes it as
+	`buyer_district` and the client's own SPL parser writes it — and `county` is
+	now read as a FALLBACK through `address_district.classify`, which drops the
+	rows where `county` holds the city again, a street, or "NULL".
 
 	A missing or deleted Address returns all-empty rather than raising. Nothing
 	about a print may depend on the buyer having a complete address — that is the
@@ -450,6 +489,7 @@ def yht_national_address(doc, address_field: str = "customer_address") -> dict:
 	for key, fieldname in available:
 		result[key] = cstr(row.get(fieldname)).strip()
 	_derive_building_and_street(result, row)
+	_derive_district(result, row)
 	return result
 
 

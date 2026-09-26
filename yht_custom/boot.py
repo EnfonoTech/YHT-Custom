@@ -5,7 +5,7 @@
 
 import frappe
 
-from yht_custom import list_defaults
+from yht_custom import features, list_defaults
 
 #: Roles that get the trimmed desk. Anything holding an admin role is exempt.
 RESTRICTED_ROLES = ("Branch User", "Stock User")
@@ -37,6 +37,18 @@ def boot_session(bootinfo):
 	except Exception:
 		bootinfo.yht_current_fiscal_year = ""
 		frappe.log_error(frappe.get_traceback(), "YHT boot: current fiscal year")
+
+	# 🔴 SAME PLACE, SAME REASON. `features.active()` is how desk JS finds out
+	# which site it is on — this bench serves the live site and UAT off ONE
+	# `apps/yht_custom`, so a script file cannot know on its own. Above the early
+	# returns because a feature is a property of the SITE, not of the user, and
+	# wrapped for the same reason the line above it is: nothing on the boot path
+	# may be the reason `/login` 500s.
+	try:
+		bootinfo.yht_features = features.active()
+	except Exception:
+		bootinfo.yht_features = []
+		frappe.log_error(frappe.get_traceback(), "YHT boot: feature switches")
 
 	user = frappe.session.user
 	if user in ("Administrator", "Guest"):
