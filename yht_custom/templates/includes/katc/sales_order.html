@@ -87,9 +87,9 @@ table.katc-items td.ctr { text-align: center; }
     <td class="lbl">Date:</td><td>{{ yht_date(doc.transaction_date) }}</td>
   </tr>
 {#- CR-011: only rendered when filled — an empty row reads as a missing value. -#}
-{%- if doc.get("custom_attention") %}
+{%- if doc.get("custom_attention_person") %}
   <tr>
-    <td class="lbl">Attention:</td><td colspan="3">{{ doc.get("custom_attention") }}</td>
+    <td class="lbl">Attention:</td><td colspan="3">{{ doc.get("custom_attention_person") }}</td>
   </tr>
 {%- endif %}
 </tbody></table>

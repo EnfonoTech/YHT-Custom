@@ -7,6 +7,24 @@ The client's ask, in his own words: *"just a text field is enough there... a
 company has many purchase staff"* — a free-text note naming the person at the
 customer the document is addressed to, printed on the document.
 
+🔴 **THE FIELDNAME IS `custom_attention_person`, NOT `custom_attention`, AND THAT
+IS NOT COSMETIC.** `custom_attention` is a LEGACY ORPHAN COLUMN on five tables —
+Quotation, Sales Order, Sales Invoice, Delivery Note and Purchase Order — left
+behind when the incumbent's field was purged (gotcha 22: deleting a Custom Field
+drops neither column nor data). On Quotation it still holds **71 rows of real
+client text**, up to 547 characters, and it is NOT a contact name: it carries
+terms like *"Delivery: 4-6 working weeks from the date of receipt of P.O"*.
+
+Claiming that fieldname did two things, both live on production for a few minutes
+before this rename: `create_custom_fields` tried to ALTER Quotation's `text`
+column down to `varchar(140)` and MySQL refused — *"Data too long ... at row
+2823"* — which is the only reason the data survived; and the print rendered that
+legacy paragraph under an **"Attention:"** label on customer-facing quotations.
+
+Checking `tabCustom Field` for the name was NOT enough. Check
+`information_schema.columns` too — a purged field leaves the column behind, and
+`select *` means it still reads.
+
 **A plain Data field, deliberately — not a Link to Contact.** A Link would look
 tidier and is the wrong answer here: the whole point is the person is often NOT a
 Contact record (a name heard on the phone, a buyer at the customer's site), and a
@@ -23,7 +41,7 @@ import frappe
 
 DOCTYPES = ("Quotation", "Sales Order", "Sales Invoice", "Delivery Note")
 
-FIELDNAME = "custom_attention"
+FIELDNAME = "custom_attention_person"
 LABEL = "Attention"
 
 #: Where the field should sit, most-preferred first. Resolved against live meta

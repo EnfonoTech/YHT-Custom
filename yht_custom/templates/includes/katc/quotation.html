@@ -90,9 +90,9 @@ table.katc-items td.ctr { text-align: center; }
   </tr>
 {#- CR-011: only rendered when filled. An empty Attention row on a customer-facing
     quotation reads as a missing value rather than "not applicable". -#}
-{%- if doc.get("custom_attention") %}
+{%- if doc.get("custom_attention_person") %}
   <tr>
-    <td class="lbl">Attention:</td><td colspan="3">{{ doc.get("custom_attention") }}</td>
+    <td class="lbl">Attention:</td><td colspan="3">{{ doc.get("custom_attention_person") }}</td>
   </tr>
 {%- endif %}
 </tbody></table>

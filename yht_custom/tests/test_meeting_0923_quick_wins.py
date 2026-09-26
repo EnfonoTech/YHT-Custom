@@ -126,6 +126,8 @@ class TestAttentionField(FrappeTestCase):
 		)
 		body = open(path, encoding="utf-8").read()
 		self.assertIn(ATTENTION_FIELD, body)
+		# 🔴 The legacy orphan column must never be read again — it holds terms text.
+		self.assertNotIn('doc.get("custom_attention")', body)
 		self.assertIn(f'{{%- if doc.get("{ATTENTION_FIELD}") %}}', body)
 
 
