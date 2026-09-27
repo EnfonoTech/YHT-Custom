@@ -60,7 +60,17 @@ SUPERSEDED = {
 #: ⚠️ `KATHOOM KHOBAR INV FORMAT NEW` is NOT here. It is the byte-faithful
 #: reproduction of the incumbent's invoice and is deliberate. Neither are the two
 #: ZATCA formats, which are the compliance app's.
-LEGACY_NOISE = ("YHT Quotation", "YHT Sales Order", "YHT Delivery Note", "Sales Order PD v2")
+LEGACY_NOISE = (
+	"YHT Quotation",
+	"YHT Sales Order",
+	"YHT Delivery Note",
+	"Sales Order PD v2",
+	# Standard ERPNext formats for flows this client does not run: they sell from
+	# stock through Delivery Notes and have no point of sale. Both were in the
+	# picker purely as noise.
+	"Drop Shipping Format",
+	"Point of Sale",
+)
 
 #: doctype → the one format its print dialog should open on.
 DEFAULTS = {
