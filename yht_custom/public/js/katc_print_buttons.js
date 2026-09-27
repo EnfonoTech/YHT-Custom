@@ -150,6 +150,18 @@ function katc_add_buttons(frm) {
 	if (!frm.doc || frm.is_new()) {
 		return;
 	}
+	// 🔴 NEVER SHOW A BUTTON THE USER CANNOT USE. `download_pdf` enforces
+	// `validate_print_permission` server-side, so a button the caller lacks `print`
+	// on does not leak anything — it just fails in their face after they click it.
+	//
+	// Found when CR-021 put these buttons on Purchase Order: measured on yht-test,
+	// `Branch User` holds read = 1 and print = 0 there, so every branch operator
+	// would have seen two buttons that error. The permission is right — purchasing
+	// is not their job — so the buttons yield, not the permission.
+	if (!frappe.model.can_print(frm.doc.doctype)) {
+		return;
+	}
+
 	katc_buttons_for(frm.doc.doctype).forEach((spec) => {
 		// Top level, no group argument — the incumbent's buttons sit on the toolbar.
 		frm.add_custom_button(spec.label, () => katc_download(frm, spec));

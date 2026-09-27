@@ -168,6 +168,11 @@ INCUMBENT_FORMATS = (
 #: thing it guards against.
 BUTTON_DOCTYPES = ("Delivery Note", "Sales Invoice", "Sales Order", "Quotation", "Purchase Order")
 
+#: The subset a `Branch User` may actually print. Purchase Order is deliberately
+#: NOT here: measured on yht-test they hold read = 1 and print = 0 on it, which is
+#: correct — purchasing is not a branch operator's job.
+BRANCH_PRINTABLE = ("Delivery Note", "Sales Invoice", "Sales Order", "Quotation")
+
 #: New jinja helpers this change adds. Every one must be registered AND resolve —
 #: an unresolved jinja path 500s every website page, /login included (gotcha 25).
 NEW_JINJA_METHODS = (
@@ -2327,12 +2332,22 @@ class TestDegenerateDocuments(FrappeTestCase):
 class TestPrintPermissions(FrappeTestCase):
 	"""Edge Cases — the print boundary is `validate_print_permission`, not the URL."""
 
-	def test_branch_user_holds_print_on_all_four_doctypes(self):
+	def test_branch_user_holds_print_on_the_selling_documents(self):
+		"""The four a branch operator actually issues."""
 		perms = {p["parent"]: p for p in setup.BRANCH_USER_PERMISSIONS}
-		for doctype in BUTTON_DOCTYPES:
+		for doctype in BRANCH_PRINTABLE:
 			with self.subTest(doctype=doctype):
 				self.assertIn(doctype, perms)
 				self.assertTrue(perms[doctype].get("print"), f"Branch User cannot print {doctype}")
+
+	def test_a_button_doctype_the_branch_user_cannot_print_is_guarded_in_js(self):
+		"""🔴 CR-021 put these buttons on Purchase Order, where `Branch User` holds
+		read = 1 and print = 0 — so every branch operator would have seen two
+		buttons that error on click. Purchasing is not their job, so the permission
+		is right and the buttons yield to it."""
+		unprintable = set(BUTTON_DOCTYPES) - set(BRANCH_PRINTABLE)
+		self.assertTrue(unprintable, "nothing to guard — re-check this test's premise")
+		self.assertIn("frappe.model.can_print(frm.doc.doctype)", js_source())
 
 	def test_download_pdf_still_validates_before_rendering(self):
 		"""`download_pdf` is `@frappe.whitelist(allow_guest=True)`; the boundary is
