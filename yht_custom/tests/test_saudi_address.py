@@ -174,3 +174,95 @@ class TestAddressGapReport(FrappeTestCase):
 		self.assertGreaterEqual(summary["addresses"], summary["saudi"])
 		for key in ("missing_district", "missing_building_number", "missing_postal_code"):
 			self.assertGreaterEqual(summary[key], 0)
+
+
+class TestTheSplAddressFlowEndToEnd(FrappeTestCase):
+	"""CR-001 acceptance #5 — exercise the new code path, not just the validators.
+
+	The parser itself is JavaScript and cannot run here. What CAN be asserted, and
+	is what actually breaks in production, is the CONTRACT between it and the
+	server: every field the parser writes must exist on Address, the value it puts
+	in the district slot must be the one ZATCA reads, and an Address built from a
+	real SPL line must save.
+
+	The SPL line below is the shape `public/js/address.js` documents:
+
+	    RQAA2929, 6823 Prince Sultan Road, 2929, Al Olaya, Riyadh, Riyadh, 12345
+	"""
+
+	SPL_LINE = "RQAA2929, 6823 Prince Sultan Road, 2929, Al Olaya, Riyadh, Riyadh, 12345"
+
+	def _parsed(self):
+		"""What `yht.address.parse` produces for SPL_LINE, in Python."""
+		import re
+
+		parts = [p.strip() for p in self.SPL_LINE.split(",")]
+		match = re.match(r"^(\d{4})\s+(.*)$", parts[1])
+		return {
+			"custom_short_address": parts[0].upper(),
+			"address_title": parts[0].upper(),
+			"custom_building_number": match.group(1) if match else "",
+			"address_line1": match.group(2).strip() if match else parts[1],
+			"custom_additional_number": parts[2],
+			"custom_area": parts[3],
+			"city": parts[4],
+			"state": parts[5],
+			"pincode": parts[6],
+		}
+
+	def test_the_js_and_this_test_agree_on_the_field_list(self):
+		"""A rename on either side must break something. Without this the test
+		below would keep passing against a parser that writes somewhere else."""
+		import os
+
+		with open(
+			os.path.join(frappe.get_app_path("yht_custom"), "public", "js", "address.js"),
+			encoding="utf-8",
+		) as handle:
+			js = handle.read()
+		for fieldname in self._parsed():
+			with self.subTest(field=fieldname):
+				self.assertIn(f"{fieldname}:", js, f"address.js no longer writes {fieldname}")
+
+	def test_every_field_the_parser_writes_exists_on_address(self):
+		meta = frappe.get_meta("Address")
+		for fieldname in self._parsed():
+			with self.subTest(field=fieldname):
+				self.assertIsNotNone(meta.get_field(fieldname), f"{fieldname} is not on Address")
+
+	def test_the_district_lands_where_zatca_reads_it(self):
+		"""`ksa_compliance` hardcodes `custom_area` as `buyer_district`. This is the
+		whole reason CR-002 resolved the way it did."""
+		self.assertEqual(self._parsed()["custom_area"], "Al Olaya")
+
+	def test_an_address_built_from_a_real_spl_line_saves_and_reads_back(self):
+		values = self._parsed()
+		doc = frappe.get_doc(
+			dict(doctype="Address", address_type="Billing", country="Saudi Arabia", **values)
+		)
+		doc.insert(ignore_permissions=True)
+		self.addCleanup(frappe.delete_doc, "Address", doc.name, force=1, ignore_permissions=True)
+
+		saved = frappe.get_doc("Address", doc.name)
+		self.assertEqual(saved.custom_area, "Al Olaya")
+		self.assertEqual(saved.custom_building_number, "6823")
+		self.assertEqual(saved.address_line1, "Prince Sultan Road")
+		self.assertEqual(saved.pincode, "12345")
+		# `before_insert` makes the Short Code the title — item 5.9, still true.
+		self.assertEqual(saved.address_title, "RQAA2929")
+
+	def test_the_print_helper_returns_that_district_for_the_saved_address(self):
+		"""End of the chain: what a tax invoice would actually print."""
+		from yht_custom.print_helpers import yht_national_address
+
+		values = self._parsed()
+		doc = frappe.get_doc(
+			dict(doctype="Address", address_type="Billing", country="Saudi Arabia", **values)
+		)
+		doc.insert(ignore_permissions=True)
+		self.addCleanup(frappe.delete_doc, "Address", doc.name, force=1, ignore_permissions=True)
+
+		out = yht_national_address(frappe._dict(customer_address=doc.name))
+		self.assertEqual(out["district"], "Al Olaya")
+		self.assertEqual(out["building"], "6823")
+		self.assertEqual(out["street"], "Prince Sultan Road")

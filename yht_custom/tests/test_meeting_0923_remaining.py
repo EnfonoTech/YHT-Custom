@@ -328,6 +328,27 @@ class TestCr006TheBranchWarehouse(FrappeTestCase):
 	def test_it_is_behind_a_switch(self):
 		self.assertIn('features.enabled("cr_006_branch_warehouse")', _read("branch_defaults.py"))
 
+	def test_the_picker_is_scoped_and_not_only_the_saved_value(self):
+		"""Acceptance #2, and the first version missed it. Correcting the value on
+		`before_validate` alone leaves the dropdown offering every warehouse on the
+		site and then silently replacing the operator's choice on save."""
+		js = _read("public", "js", "branch_warehouse.js")
+		self.assertIn('frm.set_query("set_warehouse"', js)
+		self.assertIn('frm.set_query("warehouse", "items"', js)
+		self.assertIn("branch_warehouse.js", _read("hooks.py"))
+
+	def test_the_list_reaches_the_form_through_boot(self):
+		"""`set_query` is registered while the form is built and has no moment to
+		fetch, so the list has to be in the boot payload."""
+		self.assertIn("yht_branch_warehouses", _read("boot.py"))
+		self.assertIn("frappe.boot.yht_branch_warehouses", _read("public", "js", "branch_warehouse.js"))
+
+	def test_an_empty_list_means_do_not_filter(self):
+		"""A bypass user, or a user on no branch, keeps the full picker — the same
+		rule `_branch_series_rows` follows rather than guessing a branch."""
+		js = _read("public", "js", "branch_warehouse.js")
+		self.assertIn("if (!yht.branch_warehouse.list().length) return;", js)
+
 
 class TestCr007EssentialsFirst(FrappeTestCase):
 	def test_the_sales_order_purchase_order_number_moves_up(self):
@@ -456,6 +477,40 @@ class TestCr013TheListColumns(FrappeTestCase):
 
 	def test_it_is_behind_a_switch_because_the_doctype_is_a_guess(self):
 		self.assertIn('features.enabled("cr_013_list_columns")', _read("list_columns.py"))
+
+	def test_columns_go_through_list_view_settings_not_in_list_view(self):
+		"""The acceptance criterion says "via standard List View Settings, not a
+		hidden hack". `in_list_view` is a SCHEMA flag that also drives the link
+		search preview, quick entry and the report view — bending it to pick list
+		columns changes three other screens as a side effect."""
+		source = _read("list_columns.py")
+		code = "\n".join(
+			line for line in source.splitlines()
+			if not line.strip().startswith(("#", "🔴", "`")) 
+		)
+		self.assertIn("List View Settings", source)
+		self.assertNotIn('"in_list_view", "1"', code)
+
+	def test_the_stale_property_setters_are_cleaned_up(self):
+		"""A Property Setter is a row, not a line of code: the first version's
+		rows keep working after the code changed unless something deletes them."""
+		from yht_custom.list_columns import drop_stale_in_list_view_setters
+
+		self.assertTrue(callable(drop_stale_in_list_view_setters))
+		self.assertIn("drop_stale_in_list_view_setters", _read("patches", "backfill_meeting_0923_data.py"))
+
+	def test_no_in_list_view_setter_survives_for_the_columns_we_chose(self):
+		"""Checked against the database, not the source."""
+		from yht_custom.list_columns import LIST_COLUMNS
+
+		for doctype, (_title, columns) in LIST_COLUMNS.items():
+			stale = frappe.get_all(
+				"Property Setter",
+				filters={"doc_type": doctype, "property": "in_list_view", "field_name": ["in", list(columns)]},
+				pluck="name",
+			)
+			with self.subTest(doctype=doctype):
+				self.assertEqual(stale, [])
 
 
 class TestCr014TheUnifiedNumber(FrappeTestCase):
@@ -615,6 +670,14 @@ class TestCr019TheRateDoubleClick(FrappeTestCase):
 		js = self._js()
 		self.assertIn('grid.add_custom_button(__("Price Assist")', js)
 		self.assertIn("yht_custom.price.hint(frm, locals[cdt][cdn])", js)
+
+	def test_the_dialog_stops_advertising_the_gesture_that_was_removed(self):
+		"""The "Which line?" dialog told operators to double-click the Rate. With
+		the shortcut gone that is an instruction to do something that no longer
+		works — found by re-reading the acceptance criterion, not by a failure."""
+		js = self._js()
+		tip = js[js.index("Which line?") :]
+		self.assertIn("rate_shortcut_disabled()", tip[: tip.index("primary_action_label")])
 
 	def test_the_switch_is_declared_and_the_bundle_cache_busted(self):
 		js = self._js()

@@ -21,6 +21,7 @@ app_include_js = [
 	"/assets/yht_custom/js/payment_assist.js?v=3",
 	"/assets/yht_custom/js/rate_lock.js?v=2",
 	"/assets/yht_custom/js/grid_search_width.js?v=1",
+	"/assets/yht_custom/js/branch_warehouse.js?v=1",
 ]
 app_include_css = "/assets/yht_custom/css/yht_custom.css?v=8"
 

@@ -32,13 +32,29 @@ nothing changes for them until they say which lists they meant.
 
 A list column is per-user once the user has touched it; this only changes the
 DEFAULT, which is what a user who has never dragged a column sees.
+
+🔴 COLUMNS GO IN `List View Settings`, NOT IN `in_list_view` PROPERTY SETTERS.
+The acceptance criterion says "apply list-view column changes via standard List
+View Settings, not a hidden hack", and the first version of this module missed
+it — it wrote `in_list_view` on each DocField instead. That is a hidden hack in
+the exact sense meant: `in_list_view` is a SCHEMA flag that also drives the link
+search preview, the quick-entry dialog and the report view, so bending it to
+choose list columns changes three other screens as a side effect.
+
+`List View Settings` is the doctype frappe itself writes when a user drags a
+column, and its `fields` column holds the JSON list. Rows already existed here
+for Item, Sales Order and Purchase Receipt before this module touched anything,
+which is what confirms it is the live mechanism on this site.
+
+`title_field` stays a Property Setter — it is not a column setting. It is what
+removes the Title column, which is the other half of the request.
 """
 
 import frappe
 
 from yht_custom import features
 
-#: doctype → (title_field, the fields that carry `in_list_view`, in order).
+#: doctype → (title_field, the default list columns, in order).
 #:
 #: Four entries and no more: `list_view.js` shows at most four columns beside the
 #: subject before it starts dropping them, and the whole complaint is that the
@@ -48,12 +64,10 @@ LIST_COLUMNS = {
 	"Sales Invoice": ("customer_name", ("posting_date", "status", "grand_total")),
 }
 
-#: Fields that carry `in_list_view` today and would compete for the same room.
-#: Cleared rather than left, because a column the client did not ask for is
-#: exactly what pushed the customer name out.
+#: Kept for the tests that assert the Title column is the one being displaced.
 CLEAR_IN_LIST_VIEW = {
-	"Delivery Note": ("title", "customer", "set_warehouse", "po_no"),
-	"Sales Invoice": ("title", "customer", "due_date", "po_no", "outstanding_amount"),
+	"Delivery Note": ("title",),
+	"Sales Invoice": ("title",),
 }
 
 
@@ -80,17 +94,62 @@ def setup_list_columns() -> dict:
 			continue
 		_set_property(doctype, None, "title_field", title_field, "Data", for_doctype=True)
 
-		for fieldname in CLEAR_IN_LIST_VIEW.get(doctype, ()):
-			if meta.get_field(fieldname):
-				_set_property(doctype, fieldname, "in_list_view", "0", "Check")
-
-		shown = []
-		for fieldname in columns:
-			if meta.get_field(fieldname):
-				_set_property(doctype, fieldname, "in_list_view", "1", "Check")
-				shown.append(fieldname)
+		shown = [f for f in columns if meta.get_field(f)]
+		_write_list_view_settings(doctype, shown)
 
 		frappe.clear_cache(doctype=doctype)
 		applied[doctype] = {"title_field": title_field, "columns": shown}
 
 	return applied
+
+
+def _write_list_view_settings(doctype: str, fieldnames: list) -> None:
+	"""Store the default columns the way the desk itself stores them.
+
+	`List View Settings` is named after the doctype and its `fields` column is a
+	JSON list of `{fieldname, label}`. Compared before writing: this runs inside
+	`after_migrate` on every deploy, and rewriting the row each time would flood
+	the Version table and reset the list under anyone who has it open.
+	"""
+	import json
+
+	meta = frappe.get_meta(doctype)
+	wanted = json.dumps(
+		[{"fieldname": f, "label": meta.get_label(f) or f} for f in fieldnames]
+	)
+
+	if frappe.db.exists("List View Settings", doctype):
+		if frappe.db.get_value("List View Settings", doctype, "fields") != wanted:
+			frappe.db.set_value("List View Settings", doctype, "fields", wanted)
+		return
+
+	frappe.get_doc(
+		{"doctype": "List View Settings", "name": doctype, "fields": wanted}
+	).insert(ignore_permissions=True)
+
+
+def drop_stale_in_list_view_setters() -> dict:
+	"""Undo the first version of this module.
+
+	It wrote `in_list_view` Property Setters on each DocField. Those outlive a code
+	change — a Property Setter is a row, not a line of code — so the wrong
+	mechanism keeps working until something deletes it, and the list would then be
+	driven by two mechanisms that disagree.
+
+	Only the rows this module could have written are touched: the doctypes it names
+	and the fieldnames it named.
+	"""
+	touched = []
+	for doctype, (_title, columns) in LIST_COLUMNS.items():
+		names = set(columns) | set(CLEAR_IN_LIST_VIEW.get(doctype, ()))
+		names |= {"customer", "set_warehouse", "po_no", "due_date", "outstanding_amount"}
+		for row in frappe.get_all(
+			"Property Setter",
+			filters={"doc_type": doctype, "property": "in_list_view", "field_name": ["in", list(names)]},
+			pluck="name",
+		):
+			frappe.delete_doc("Property Setter", row, force=1, ignore_permissions=True)
+			touched.append(row)
+		if touched:
+			frappe.clear_cache(doctype=doctype)
+	return {"deleted": touched}

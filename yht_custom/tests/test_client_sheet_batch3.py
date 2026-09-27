@@ -1673,6 +1673,23 @@ class TestItem29AddressForm(FrappeTestCase):
 			missing, f"these standard fields fell out of the form entirely: {sorted(missing)}"
 		)
 
+		# CR-003 — the same stored order now also decides which side of the
+		# `More Details` tab each field falls on, so the boundary is asserted here
+		# beside the column split rather than only in the newer test file.
+		self.assertIn("custom_more_details", order, "the More Details tab break is not in field_order")
+		tab = order.index("custom_more_details")
+		self.assertLess(
+			order.index("column_break0"), tab, "the second column ended up behind the tab"
+		)
+		for mandatory in ("custom_short_address", "custom_additional_number", "pincode", "city", "country"):
+			with self.subTest(field=mandatory):
+				self.assertIn(mandatory, order)
+				self.assertLess(
+					order.index(mandatory),
+					tab,
+					f"{mandatory} is mandatory on this site and sits behind the More Details tab",
+				)
+
 	def test_the_english_column_reads_in_the_client_s_order(self):
 		order = [df.fieldname for df in frappe.get_meta("Address").fields]
 		positions = [order.index(f) for f in ADDRESS_LEFT_STANDARD if f in order]

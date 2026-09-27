@@ -60,6 +60,15 @@ def execute():
 
 	results["cr_008_delivery_note_links"] = dn_links.backfill(commit=True)
 
+	# CR-013 — the first version of `list_columns` chose list columns with
+	# `in_list_view` Property Setters. Those are rows, not code, so they keep
+	# working after the code changed; delete them or the list is driven by two
+	# mechanisms at once. Safe to re-run: deleting what is already gone is a no-op.
+	from yht_custom import list_columns
+
+	results["cr_013_stale_setters"] = list_columns.drop_stale_in_list_view_setters()
+	frappe.db.commit()
+
 	if features.enabled("cr_004_print_heading"):
 		results["cr_004_print_headings"] = print_heading.backfill_headings(commit=True)
 	else:

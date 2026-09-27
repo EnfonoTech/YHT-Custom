@@ -460,10 +460,18 @@ yht_custom.price.pick_row = function (frm, then) {
 				default: `${rows[rows.length - 1].idx}: ${rows[rows.length - 1].item_code}`,
 			},
 			{
+				// 🔴 THE TIP MUST NOT ADVERTISE A GESTURE THAT IS GONE. CR-019 removed
+				// the double-click shortcut, and this line went on telling operators to
+				// use it — found by re-reading the acceptance criterion ("confirm the
+				// remaining button covers every case"), not by anything failing.
 				fieldtype: "HTML",
-				options: `<p class="text-muted" style="margin-top:6px">${__(
-					"Tip: double-click the Rate of any line to jump straight there."
-				)}</p>`,
+				options: yht_custom.price.rate_shortcut_disabled()
+					? `<p class="text-muted" style="margin-top:6px">${__(
+							"Tip: open a line with the pencil first and this dialog is skipped."
+					  )}</p>`
+					: `<p class="text-muted" style="margin-top:6px">${__(
+							"Tip: double-click the Rate of any line to jump straight there."
+					  )}</p>`,
 			},
 		],
 		primary_action_label: __("Show"),

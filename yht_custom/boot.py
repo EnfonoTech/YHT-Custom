@@ -50,6 +50,22 @@ def boot_session(bootinfo):
 		bootinfo.yht_features = []
 		frappe.log_error(frappe.get_traceback(), "YHT boot: feature switches")
 
+	# 🔴 CR-006 ACCEPTANCE #2 — "confirm the warehouse PICKER is scoped to the
+	# branch, not just the saved value". The `before_validate` handler corrects the
+	# value AFTER the operator has chosen; on its own that means the dropdown still
+	# offers every warehouse on the site and the correction looks like the form
+	# fighting them. The picker needs the list client-side, and `set_query` runs
+	# while the form is being built — so it comes from boot, like the switches.
+	#
+	# Empty for a bypass user or a user on no branch, which is the same "do not
+	# guess" rule `branch_defaults._branch_series_rows` follows; `branch_defaults.js`
+	# then applies no filter at all.
+	try:
+		bootinfo.yht_branch_warehouses = _branch_warehouses_for_boot()
+	except Exception:
+		bootinfo.yht_branch_warehouses = []
+		frappe.log_error(frappe.get_traceback(), "YHT boot: branch warehouses")
+
 	user = frappe.session.user
 	if user in ("Administrator", "Guest"):
 		return
@@ -66,6 +82,23 @@ def boot_session(bootinfo):
 	bootinfo.yht_branch_restricted = True
 
 	_pin_default_company(bootinfo, user)
+
+
+def _branch_warehouses_for_boot() -> list:
+	"""The warehouses this user's branch configures, or `[]`.
+
+	`[]` means "offer everything", not "offer nothing" — see `branch_defaults.js`.
+	"""
+	from yht_custom import branch_defaults, features
+
+	if not features.enabled("cr_006_branch_warehouse"):
+		return []
+	if branch_defaults._is_bypass():
+		return []
+	config = branch_defaults._user_branch_config()
+	if not config:
+		return []
+	return branch_defaults._branch_warehouses(config)
 
 
 def _pin_default_company(bootinfo, user):
