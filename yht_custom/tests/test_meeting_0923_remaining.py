@@ -420,11 +420,28 @@ class TestCr020TheBranchUserCanStillReachTheReports(FrappeTestCase):
 		missing = [r for r in links if not frappe.db.exists("Report", r)]
 		self.assertEqual(missing, [], "a link to a report that does not exist breaks the whole page")
 
-	def test_the_regroup_did_not_narrow_who_can_see_it(self):
+	def test_the_existing_role_gate_survived_the_regroup(self):
+		"""🔴 THE GATE IS SUPPOSED TO BE THERE. The criterion says "confirm the
+		existing branch-user permission gate on this event is unaffected" — the
+		fault mode is losing it, not having it. This test asserted `roles == []`
+		first, which is the inverse of the requirement and would have passed only
+		if `setup_report_groups` had stripped the gate.
+
+		Measured: the workspace carries Branch User, Branch Manager, Accounts
+		Manager, Accounts User, Sales Manager and Stock Manager, and regrouping
+		the links left all six alone."""
 		ws = frappe.get_doc("Workspace", "KATC Reports")
 		self.assertTrue(ws.public, "the workspace stopped being public")
-		roles = [r.role for r in (ws.get("roles") or [])]
-		self.assertEqual(roles, [], f"a role gate appeared on the workspace: {roles}")
+		roles = {r.role for r in (ws.get("roles") or [])}
+		self.assertIn("Branch User", roles, f"the branch-user gate is gone: {sorted(roles)}")
+		self.assertGreaterEqual(len(roles), 6, f"the gate narrowed to {sorted(roles)}")
+
+	def test_the_regroup_touches_links_and_nothing_else(self):
+		"""Why the gate survives: the step rewrites `doc.links` only."""
+		source = _read("report_groups.py")
+		self.assertIn("doc.links = []", source)
+		self.assertNotIn("doc.roles", source)
+		self.assertNotIn("doc.public", source)
 
 
 class TestCr007EssentialsFirst(FrappeTestCase):
