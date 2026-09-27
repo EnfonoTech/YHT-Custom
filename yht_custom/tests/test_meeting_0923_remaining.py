@@ -306,6 +306,92 @@ class TestCr004AndCr005ThePrintHeading(FrappeTestCase):
 		self.assertIn("if cstr(doc.get(\"select_print_heading\")).strip():", _read("print_heading.py"))
 
 
+class TestCr004TheFormatListIsOnePerDoctype(FrappeTestCase):
+	"""The half of CR-004 that is about the LIST, not the mechanism."""
+
+	def test_the_base_format_is_a_router_not_a_layout(self):
+		record = json.loads(
+			_read("yht_custom", "print_format", "katc_quotation", "katc_quotation.json")
+		)
+		html = record["html"]
+		self.assertIn("katc/quotation.html", html)
+		self.assertIn("katc/proforma_invoice.html", html)
+		self.assertIn("Proforma Invoice", html)
+
+	def test_every_superseded_format_is_disabled_not_deleted(self):
+		"""A delete would take the print of anyone who saved it as a personal
+		default; `disabled` is one column and one click to reverse."""
+		from yht_custom.print_consolidation import SUPERSEDED
+
+		for name in SUPERSEDED:
+			if not frappe.db.exists("Print Format", name):
+				continue
+			with self.subTest(fmt=name):
+				self.assertEqual(frappe.db.get_value("Print Format", name, "disabled"), 1)
+
+	def test_one_katc_format_per_selling_doctype(self):
+		from yht_custom.print_consolidation import live_formats
+
+		live = live_formats()
+		for doctype in ("Quotation", "Sales Order", "Delivery Note"):
+			katc = [f for f in live[doctype] if f.startswith("KATC")]
+			with self.subTest(doctype=doctype):
+				self.assertEqual(len(katc), 1, f"{doctype} offers {katc}")
+
+	def test_the_deliberate_formats_were_not_swept_up(self):
+		"""The legacy reproduction and the compliance app's formats stay."""
+		from yht_custom.print_consolidation import LEGACY_NOISE, SUPERSEDED
+
+		protected = {"KATHOOM KHOBAR INV FORMAT NEW", "ZATCA Phase 1 Print Format", "ZATCA Phase 2 Print Format"}
+		self.assertEqual(protected & (set(SUPERSEDED) | set(LEGACY_NOISE)), set())
+
+	def test_there_are_two_buttons_and_they_name_the_same_format(self):
+		js = _read("public", "js", "katc_print_buttons.js")
+		self.assertIn('label: __("Print")', js)
+		self.assertIn('label: __("Print Without LH")', js)
+		self.assertIn("KATC_BUTTONS_CONSOLIDATED", js)
+		# the old table survives for sites where the switch is off
+		self.assertIn("KATC_BUTTONS_LEGACY", js)
+
+	def test_the_page_direction_is_pinned(self):
+		"""🔴 Arabic now comes from the dialog's Language selector, which makes
+		frappe render the whole page dir=rtl. Unpinned, the item table mirrors and
+		the pinned column widths land on the wrong cells. The old Arabic format
+		rendered with lang=en, so this could not happen before."""
+		for template in ("quotation.html", "sales_order.html", "proforma_invoice.html", "purchase_order.html"):
+			with self.subTest(template=template):
+				self.assertIn(
+					".print-format { direction: ltr; }",
+					_read("templates", "includes", "katc", template),
+				)
+
+	def test_the_item_note_is_a_line_not_a_column(self):
+		"""Acceptance #4. A seventh column would need a third width set per
+		template — the sets must sum to 100%, which is what stopped the Arabic
+		spilling over the Quantity figures."""
+		from yht_custom.print_heading import ITEM_NOTE_FIELD
+
+		for doctype in ("Quotation", "Sales Order", "Delivery Note"):
+			with self.subTest(doctype=doctype):
+				field = frappe.get_meta(doctype).get_field(ITEM_NOTE_FIELD)
+				self.assertIsNotNone(field)
+				self.assertTrue(field.allow_on_submit)
+				self.assertFalse(field.default, "the note must be off by default")
+		body = _read("templates", "includes", "katc", "quotation.html")
+		self.assertIn("katc-note", body)
+		self.assertIn('doc.get("custom_print_item_note")', body)
+
+	def test_the_note_stays_quiet_when_it_repeats_the_item_name(self):
+		from yht_custom.print_heading import yht_item_note
+
+		self.assertEqual(yht_item_note(frappe._dict(item_name="BOLT", description="BOLT")), "")
+		self.assertEqual(yht_item_note(frappe._dict(item_name="BOLT", description="")), "")
+		self.assertEqual(
+			yht_item_note(frappe._dict(item_name="BOLT", description="<p>M8, zinc plated</p>")),
+			"M8, zinc plated",
+		)
+
+
 class TestCr006TheBranchWarehouse(FrappeTestCase):
 	def test_quotation_is_in_scope_but_payment_entry_is_not(self):
 		self.assertIn("Quotation", WAREHOUSE_DOCTYPES)
