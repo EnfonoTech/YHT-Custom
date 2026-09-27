@@ -330,6 +330,13 @@ class TestCr004TheFormatListIsOnePerDoctype(FrappeTestCase):
 				self.assertEqual(frappe.db.get_value("Print Format", name, "disabled"), 1)
 
 	def test_one_katc_format_per_selling_doctype(self):
+		"""One KATC format each — which is the half of the list this project owns.
+
+		⚠️ NOT one format FULL STOP. `YHT Quotation`, `YHT Sales Order` and
+		`YHT Delivery Note` are this app's own and are what
+		`setup.DEFAULT_PRINT_FORMATS` points each doctype at, so they stay. Which
+		of the two pairs is authoritative is the client's decision — see
+		`print_consolidation.LEGACY_NOISE`."""
 		from yht_custom.print_consolidation import live_formats
 
 		live = live_formats()
@@ -338,12 +345,57 @@ class TestCr004TheFormatListIsOnePerDoctype(FrappeTestCase):
 			with self.subTest(doctype=doctype):
 				self.assertEqual(len(katc), 1, f"{doctype} offers {katc}")
 
-	def test_the_deliberate_formats_were_not_swept_up(self):
-		"""The legacy reproduction and the compliance app's formats stay."""
+	def test_the_apps_own_YHT_formats_were_not_disabled(self):
+		"""🔴 They were, briefly, on the premise that they were pre-project
+		leftovers. They are not: they are shipped under module Yht Custom and
+		`setup.DEFAULT_PRINT_FORMATS` makes them each doctype's default on every
+		migrate, so disabling them left those doctypes defaulting to a format
+		nobody could pick."""
+		from yht_custom.setup import DEFAULT_PRINT_FORMATS
+
+		for doctype, fmt in DEFAULT_PRINT_FORMATS.items():
+			if not frappe.db.exists("Print Format", fmt):
+				continue
+			with self.subTest(fmt=fmt):
+				self.assertFalse(
+					frappe.db.get_value("Print Format", fmt, "disabled"),
+					f"{fmt} is this doctype's default and must stay in the picker",
+				)
+
+	def test_the_consolidation_does_not_touch_any_default(self):
+		"""`setup.DEFAULT_PRINT_FORMATS` is the single owner of
+		`default_print_format`, and Sales Invoice must have none at all until ZATCA
+		onboarding."""
+		source = _read("print_consolidation.py")
+		code = "\n".join(l for l in source.splitlines() if not l.strip().startswith("#"))
+		self.assertNotIn("_set_property", code)
+		self.assertNotIn('"default_print_format"', code)
+		self.assertFalse(frappe.db.get_value("DocType", "Sales Invoice", "default_print_format"))
+
+	def test_a_retired_format_can_be_put_back_in_one_step(self):
+		""""Disabled, never deleted" is only a promise if reversing it is documented."""
+		from yht_custom.print_consolidation import restore
+
+		self.assertTrue(callable(restore))
+
+	def test_only_this_projects_own_variants_are_retired(self):
+		"""Nothing gets disabled that this project did not create. The legacy
+		reproduction, the compliance app's formats and the app's own YHT set are
+		all deliberate."""
 		from yht_custom.print_consolidation import LEGACY_NOISE, SUPERSEDED
 
-		protected = {"KATHOOM KHOBAR INV FORMAT NEW", "ZATCA Phase 1 Print Format", "ZATCA Phase 2 Print Format"}
-		self.assertEqual(protected & (set(SUPERSEDED) | set(LEGACY_NOISE)), set())
+		retired = set(SUPERSEDED) | set(LEGACY_NOISE)
+		protected = {
+			"KATHOOM KHOBAR INV FORMAT NEW",
+			"ZATCA Phase 1 Print Format",
+			"ZATCA Phase 2 Print Format",
+			"YHT Quotation",
+			"YHT Sales Order",
+			"YHT Delivery Note",
+			"Sales Invoice Print",
+		}
+		self.assertEqual(protected & retired, set())
+		self.assertTrue(all(name.startswith("KATC ") for name in retired))
 
 	def test_there_are_two_buttons_and_they_name_the_same_format(self):
 		js = _read("public", "js", "katc_print_buttons.js")

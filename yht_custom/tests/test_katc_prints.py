@@ -693,10 +693,21 @@ class TestKatcFormatsInstalled(FrappeTestCase):
 				)
 				self.assertTrue(row, f"{print_format} is not installed")
 				self.assertEqual(row.doc_type, doctype)
-				self.assertFalse(row.disabled)
 				self.assertEqual(row.print_format_type, "Jinja")
 				self.assertEqual(row.standard, "Yes")
 				self.assertEqual(row.module, "Yht Custom")
+				# 🔴 INSTALLED IS NOT THE SAME AS ENABLED SINCE CR-004. Six KATC
+				# variants are deliberately retired — `disabled = 1`, never deleted,
+				# so any of them is one column away from coming back. All ten must
+				# still INSTALL correctly, which is what this check is for.
+				from yht_custom.print_consolidation import SUPERSEDED
+
+				if print_format in SUPERSEDED and frappe.conf.get("yht_features"):
+					self.assertTrue(
+						row.disabled, f"{print_format} was superseded but is still in the picker"
+					)
+				else:
+					self.assertFalse(row.disabled)
 
 	def test_every_format_renders_a_real_document(self):
 		# check 11
@@ -2462,9 +2473,17 @@ class TestSharedTemplates(FrappeTestCase):
 				# The RAW record, not format_source — that helper resolves the include.
 				html = frappe.db.get_value("Print Format", print_format, "html") or ""
 				self.assertIn("{% include", html, f"{print_format} is not a shim")
-				self.assertLess(
-					len(html), 260, f"{print_format} still carries a copy of the layout"
-				)
+				# 🔴 THE TEST IS "NO COPY OF THE LAYOUT", NOT "SHORT". It was a length
+				# limit, which CR-004 broke for the wrong reason: `KATC Quotation` and
+				# `KATC Sales Order` are now ROUTERS — they pick between the quotation
+				# and proforma templates — and carry the comment explaining why. A
+				# length cap would have forced that explanation out of the file.
+				# Markup is what must not be here.
+				body = re.sub(r"\{#-.*?-#\}", "", html, flags=re.S)
+				for markup in ("<table", "<style", "<div class=\"katc-"):
+					self.assertNotIn(
+						markup, body, f"{print_format} carries layout markup, not just includes"
+					)
 
 	def test_every_included_template_ships(self):
 		import os
