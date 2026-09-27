@@ -366,10 +366,21 @@ class TestCr004TheFormatListIsOnePerDoctype(FrappeTestCase):
 		"""`setup.DEFAULT_PRINT_FORMATS` is the single owner of
 		`default_print_format`, and Sales Invoice must have none at all until ZATCA
 		onboarding."""
-		source = _read("print_consolidation.py")
-		code = "\n".join(l for l in source.splitlines() if not l.strip().startswith("#"))
-		self.assertNotIn("_set_property", code)
-		self.assertNotIn('"default_print_format"', code)
+		# 🔴 ASSERT THE EFFECTIVE VALUES, NOT THE SOURCE. The first version of this
+		# test grepped the module for the string `default_print_format` and failed
+		# on `drop_stale_default_print_format_setters`, which names the property in
+		# order to DELETE it. A source grep cannot tell writing from cleaning up.
+		from yht_custom.setup import DEFAULT_PRINT_FORMATS
+
+		for doctype, fmt in DEFAULT_PRINT_FORMATS.items():
+			if not frappe.db.exists("Print Format", fmt):
+				continue
+			with self.subTest(doctype=doctype):
+				self.assertEqual(
+					frappe.get_meta(doctype).default_print_format,
+					fmt,
+					f"{doctype}'s default is no longer the one setup.DEFAULT_PRINT_FORMATS sets",
+				)
 		# 🔴 READ THE EFFECTIVE VALUE, NOT THE ROW. A Property Setter overrides the
 		# DocType row, and an earlier version of this module wrote one pinning Sales
 		# Invoice to KATC Tax Invoice while the row stayed NULL — so every check

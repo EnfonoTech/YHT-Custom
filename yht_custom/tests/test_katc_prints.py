@@ -161,7 +161,12 @@ INCUMBENT_FORMATS = (
 	("YHT Journal Entry", "Journal Entry"),
 )
 
-BUTTON_DOCTYPES = ("Delivery Note", "Sales Invoice", "Sales Order", "Quotation")
+#: 🔴 FIVE SINCE CR-021. The Purchase Order print joined the two-button set when
+#: CR-004's consolidation landed, which is exactly what "follows the same
+#: tick/heading architecture once that lands" meant. The check below is still
+#: "exactly these" — a sixth doctype picking up the buttons by accident is the
+#: thing it guards against.
+BUTTON_DOCTYPES = ("Delivery Note", "Sales Invoice", "Sales Order", "Quotation", "Purchase Order")
 
 #: New jinja helpers this change adds. Every one must be registered AND resolve —
 #: an unresolved jinja path 500s every website page, /login included (gotcha 25).
@@ -1807,7 +1812,7 @@ class TestPrintedTaxColumn(FrappeTestCase):
 class TestButtonsAndWiring(FrappeTestCase):
 	"""Checks 44-48."""
 
-	def test_the_button_js_is_registered_for_exactly_the_four_doctypes(self):
+	def test_the_button_js_is_registered_for_exactly_these_doctypes(self):
 		# check 44
 		registered = frappe.get_hooks("doctype_js") or {}
 		carrying = set()
@@ -1818,7 +1823,7 @@ class TestButtonsAndWiring(FrappeTestCase):
 		self.assertEqual(
 			carrying,
 			set(BUTTON_DOCTYPES),
-			"katc_print_buttons.js must be registered under doctype_js for exactly the four doctypes",
+			"katc_print_buttons.js must be registered under doctype_js for exactly these doctypes",
 		)
 
 	def test_every_jinja_method_resolves(self):
