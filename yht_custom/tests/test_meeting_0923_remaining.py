@@ -350,6 +350,83 @@ class TestCr006TheBranchWarehouse(FrappeTestCase):
 		self.assertIn("if (!yht.branch_warehouse.list().length) return;", js)
 
 
+class TestCr006TheWarehouseRulesBehave(FrappeTestCase):
+	"""Acceptance #3 — mirror the cost-center override tests, i.e. exercise the
+	handler on a document rather than asserting it is registered."""
+
+	def setUp(self):
+		from yht_custom import branch_defaults
+
+		self.bd = branch_defaults
+		frappe.conf.yht_features = ["all"]
+		self._config = branch_defaults._user_branch_config
+		self._list = branch_defaults._branch_warehouses
+		self._bypass = branch_defaults._is_bypass
+		branch_defaults._user_branch_config = lambda user=None: "TEST-CONFIG"
+		branch_defaults._branch_warehouses = lambda config: ["Branch A - K", "Branch B - K"]
+		branch_defaults._is_bypass = lambda user=None: False
+
+	def tearDown(self):
+		self.bd._user_branch_config = self._config
+		self.bd._branch_warehouses = self._list
+		self.bd._is_bypass = self._bypass
+		frappe.conf.pop("yht_features", None)
+
+	def _note(self, header, row):
+		doc = frappe.new_doc("Delivery Note")
+		doc.set_warehouse = header
+		doc.append("items", {"item_code": None, "warehouse": row, "qty": 1})
+		return doc
+
+	def test_a_blank_warehouse_is_filled_with_the_branchs_first(self):
+		doc = self._note("", "")
+		self.bd.apply_branch_warehouse(doc)
+		self.assertEqual(doc.set_warehouse, "Branch A - K")
+		self.assertEqual(doc.items[0].warehouse, "Branch A - K")
+
+	def test_a_warehouse_that_is_not_the_branchs_is_corrected(self):
+		doc = self._note("Somebody Else - X", "Somebody Else - X")
+		self.bd.apply_branch_warehouse(doc)
+		self.assertEqual(doc.set_warehouse, "Branch A - K")
+		self.assertEqual(doc.items[0].warehouse, "Branch A - K")
+
+	def test_one_of_the_branchs_OWN_other_warehouses_is_left_alone(self):
+		"""The rule that separates this from the cost-center handler it copies: a
+		branch legitimately has several warehouses and a transfer between two of
+		them must survive."""
+		doc = self._note("Branch B - K", "Branch B - K")
+		self.bd.apply_branch_warehouse(doc)
+		self.assertEqual(doc.set_warehouse, "Branch B - K")
+		self.assertEqual(doc.items[0].warehouse, "Branch B - K")
+
+	def test_nothing_happens_with_the_switch_off(self):
+		frappe.conf.pop("yht_features", None)
+		doc = self._note("Somebody Else - X", "Somebody Else - X")
+		self.bd.apply_branch_warehouse(doc)
+		self.assertEqual(doc.set_warehouse, "Somebody Else - X")
+
+
+class TestCr020TheBranchUserCanStillReachTheReports(FrappeTestCase):
+	"""Acceptance: "confirm the existing branch-user single-permission gate on this
+	event is unaffected"."""
+
+	def test_every_report_in_the_workspace_resolves(self):
+		links = [
+			l.link_to
+			for l in frappe.get_doc("Workspace", "KATC Reports").links
+			if l.type == "Link"
+		]
+		self.assertTrue(links)
+		missing = [r for r in links if not frappe.db.exists("Report", r)]
+		self.assertEqual(missing, [], "a link to a report that does not exist breaks the whole page")
+
+	def test_the_regroup_did_not_narrow_who_can_see_it(self):
+		ws = frappe.get_doc("Workspace", "KATC Reports")
+		self.assertTrue(ws.public, "the workspace stopped being public")
+		roles = [r.role for r in (ws.get("roles") or [])]
+		self.assertEqual(roles, [], f"a role gate appeared on the workspace: {roles}")
+
+
 class TestCr007EssentialsFirst(FrappeTestCase):
 	def test_the_sales_order_purchase_order_number_moves_up(self):
 		self.assertIn(("po_no", "tax_id"), FIELD_MOVES["Sales Order"])
@@ -676,8 +753,9 @@ class TestCr019TheRateDoubleClick(FrappeTestCase):
 		the shortcut gone that is an instruction to do something that no longer
 		works — found by re-reading the acceptance criterion, not by a failure."""
 		js = self._js()
-		tip = js[js.index("Which line?") :]
-		self.assertIn("rate_shortcut_disabled()", tip[: tip.index("primary_action_label")])
+		start = js.index("Which line?")
+		end = js.index("primary_action_label", start)
+		self.assertIn("rate_shortcut_disabled()", js[start:end])
 
 	def test_the_switch_is_declared_and_the_bundle_cache_busted(self):
 		js = self._js()
