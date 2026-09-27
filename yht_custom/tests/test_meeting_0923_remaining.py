@@ -370,7 +370,15 @@ class TestCr004TheFormatListIsOnePerDoctype(FrappeTestCase):
 		code = "\n".join(l for l in source.splitlines() if not l.strip().startswith("#"))
 		self.assertNotIn("_set_property", code)
 		self.assertNotIn('"default_print_format"', code)
-		self.assertFalse(frappe.db.get_value("DocType", "Sales Invoice", "default_print_format"))
+		# 🔴 READ THE EFFECTIVE VALUE, NOT THE ROW. A Property Setter overrides the
+		# DocType row, and an earlier version of this module wrote one pinning Sales
+		# Invoice to KATC Tax Invoice while the row stayed NULL — so every check
+		# that read the row, this one included, reported it clean.
+		self.assertFalse(frappe.get_meta("Sales Invoice").default_print_format)
+		self.assertFalse(
+			frappe.db.exists("Property Setter", {"doc_type": "Sales Invoice", "property": "default_print_format"}),
+			"a Property Setter is overriding the Sales Invoice default",
+		)
 
 	def test_a_retired_format_can_be_put_back_in_one_step(self):
 		""""Disabled, never deleted" is only a promise if reversing it is documented."""

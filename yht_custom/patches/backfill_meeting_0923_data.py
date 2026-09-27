@@ -67,6 +67,15 @@ def execute():
 	from yht_custom import list_columns
 
 	results["cr_013_stale_setters"] = list_columns.drop_stale_in_list_view_setters()
+
+	# CR-004 — same class, worse consequence. An earlier version of
+	# `print_consolidation` wrote `default_print_format` Property Setters, which
+	# OVERRIDE the DocType row that `setup.DEFAULT_PRINT_FORMATS` owns. One of them
+	# pinned Sales Invoice to a non-ZATCA format while every check that read the row
+	# reported it clean.
+	from yht_custom import print_consolidation
+
+	results["cr_004_stale_defaults"] = print_consolidation.drop_stale_default_print_format_setters()
 	frappe.db.commit()
 
 	if features.enabled("cr_004_print_heading"):

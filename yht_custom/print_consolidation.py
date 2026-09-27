@@ -140,3 +140,44 @@ def report() -> dict:
 	summary = {"live": live_formats(), "superseded": sorted(SUPERSEDED)}
 	print(frappe.as_json(summary, indent=1))
 	return summary
+
+
+def drop_stale_default_print_format_setters() -> dict:
+	"""Delete the `default_print_format` Property Setters an earlier version wrote.
+
+	🔴 A PROPERTY SETTER IS A ROW, NOT A LINE OF CODE. Removing the code that
+	wrote these leaves them working. And they do not merely duplicate
+	`setup.DEFAULT_PRINT_FORMATS` — they OVERRIDE it, because `frappe.get_meta`
+	applies Property Setters over the DocType row.
+
+	Measured on `yht-test` 2026-09-27, after the code was already reverted:
+
+	    tabDocType.default_print_format      Sales Invoice -> NULL   (looks correct)
+	    Property Setter                      Sales Invoice -> KATC Tax Invoice
+
+	So Sales Invoice was pinned to a non-ZATCA format while every check that read
+	the DocType row — including
+	`test_sales_invoice_has_no_pinned_default` — reported it clean.
+	`ksa_compliance` owns Sales Invoice printing until ZATCA onboarding; this puts
+	that back.
+
+	Scoped to the five doctypes this module ever touched, never to the property in
+	general: another app is entitled to set its own default.
+	"""
+	deleted = []
+	for row in frappe.get_all(
+		"Property Setter",
+		filters={"property": "default_print_format", "doc_type": ["in", list(DOCTYPES)]},
+		fields=["name", "doc_type", "value"],
+	):
+		frappe.delete_doc("Property Setter", row.name, force=1, ignore_permissions=True)
+		deleted.append("%s -> %s" % (row.doc_type, row.value))
+
+	for doctype in DOCTYPES:
+		frappe.clear_cache(doctype=doctype)
+	frappe.db.commit()
+
+	effective = {d: frappe.get_meta(d).default_print_format or None for d in DOCTYPES}
+	summary = {"deleted": deleted, "effective_default_now": effective}
+	print(frappe.as_json(summary, indent=1))
+	return summary
