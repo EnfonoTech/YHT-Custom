@@ -21,12 +21,12 @@
 {%- set cur = yht_currency(doc) -%}
 <style>
 .print-format { font-family: Arial, "Noto Sans", sans-serif; font-size: 9pt; color: #000; }
-/* 🔴 CR-004 — PIN THE PAGE DIRECTION. Printing with the dialog set to Arabic makes
+{#- 🔴 CR-004 — PIN THE PAGE DIRECTION. Printing with the dialog set to Arabic makes
    frappe render the whole page `dir="rtl"`, which would mirror this layout: the
    item table's columns reverse and the pinned widths land on the wrong cells.
    Before CR-004 the Arabic variant was a separate format rendered with lang=en,
    so the page never flipped and nobody found out. The Arabic CELLS set their own
-   `direction: rtl` (`.katc-ar`) and are unaffected. */
+   `direction: rtl` (`.katc-ar`) and are unaffected. -#}
 {%- if yht_feature("cr_004_print_heading") %}
 .print-format { direction: ltr; }
 {%- endif %}
