@@ -17,7 +17,7 @@ app_include_js = [
 	"/assets/yht_custom/js/branch_user_forms.js?v=1",
 	"/assets/yht_custom/js/sales_flow.js?v=10",
 	"/assets/yht_custom/js/expense_invoice.js?v=5",
-	"/assets/yht_custom/js/price_assist.js?v=7",
+	"/assets/yht_custom/js/price_assist.js?v=8",
 	"/assets/yht_custom/js/payment_assist.js?v=3",
 	"/assets/yht_custom/js/rate_lock.js?v=2",
 	"/assets/yht_custom/js/grid_search_width.js?v=1",
@@ -46,7 +46,10 @@ doctype_js = {
 	],
 	"Quotation": ["public/js/katc_print_buttons.js", "public/js/create_customer.js"],
 	"Purchase Invoice": "public/js/create_supplier.js",
-	"Purchase Order": "public/js/create_supplier.js",
+	# CR-021 — the Purchase Order print joins the two-button set once CR-004's
+	# consolidation lands; before that the table has no entry for it and nothing
+	# is added.
+	"Purchase Order": ["public/js/create_supplier.js", "public/js/katc_print_buttons.js"],
 	"Purchase Receipt": "public/js/create_supplier.js",
 }
 # 🔴 THE LIST DEFAULT HAS TO COME FROM HERE, NOT FROM `app_include_js`. erpnext's
@@ -446,6 +449,7 @@ jinja = {
 		# reload" warning above applies to them.
 		"yht_custom.print_heading.yht_print_heading",
 		"yht_custom.print_heading.yht_print_lang",
+		"yht_custom.print_heading.yht_item_note",
 	],
 }
 

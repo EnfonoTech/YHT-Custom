@@ -38,6 +38,7 @@ from yht_custom.print_heading import setup_print_headings
 from yht_custom.dn_links import setup_delivery_note_links
 from yht_custom.list_columns import setup_list_columns
 from yht_custom.report_groups import setup_report_groups
+from yht_custom.print_consolidation import setup_print_consolidation
 
 #: What a Branch User may touch. Per the MoM document set — Quotation, Sales
 #: Order, Delivery Note, Sales Invoice, Purchase Receipt, Purchase Invoice,
@@ -250,6 +251,9 @@ PROVISIONING_STEPS = (
 	"setup_delivery_note_links",   # CR-008
 	"setup_list_columns",          # CR-013 (behind a feature switch)
 	"setup_report_groups",         # CR-020
+	# Must follow setup_print_headings: it points each doctype's default at a
+	# format, and refuses to point at one that is disabled.
+	"setup_print_consolidation",   # CR-004
 	"setup_site_defaults",
 	"setup_report_roles",
 	"setup_branch_payment_modes",
@@ -410,6 +414,7 @@ def _imported(name):
 		"setup_delivery_note_links": setup_delivery_note_links,
 		"setup_list_columns": setup_list_columns,
 		"setup_report_groups": setup_report_groups,
+		"setup_print_consolidation": setup_print_consolidation,
 	}[name]
 
 

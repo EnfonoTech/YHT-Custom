@@ -47,6 +47,7 @@ table.katc-items th { background: #f2f2f2; text-align: center; font-size: 8pt; }
 table.katc-items td.num { text-align: right; }
 table.katc-items td.ctr { text-align: center; }
 .katc-ar { direction: rtl; text-align: right; word-wrap: break-word; }
+.katc-note { font-size: 7.6pt; color: #444; margin-top: 1px; }
 {#- The Arabic item name has its own column on the Arabic prints, matching
     `quote print 2 with arabic.pdf`. ⚠️ IT MUST WRAP: names run to 66 characters on this
     site and 71% are past 18, so the column is sized generously and every other column
@@ -143,7 +144,7 @@ table.katc-items td.ctr { text-align: center; }
 {%- for row in doc.items %}
     <tr>
       <td class="ctr">{{ loop.index }}</td>
-      <td>{{ row.item_name or row.item_code or "" }}</td>{% if katc_show_arabic %}<td class="katc-ar-col katc-ar">{%- for line in yht_item_ar_lines(row) %}{{ line }}{%- if not loop.last %}<br>{% endif %}{%- endfor %}</td>{% endif %}
+      <td>{{ row.item_name or row.item_code or "" }}{%- set katc_note = yht_item_note(row) %}{% if doc.get("custom_print_item_note") and katc_note %}<div class="katc-note">{{ katc_note }}</div>{% endif %}</td>{% if katc_show_arabic %}<td class="katc-ar-col katc-ar">{%- for line in yht_item_ar_lines(row) %}{{ line }}{%- if not loop.last %}<br>{% endif %}{%- endfor %}</td>{% endif %}
       <td class="ctr">{{ row.qty }} {{ row.uom or row.stock_uom or "" }}</td>
       <td class="num">{{ yht_money(row.rate, cur) }}</td>
       <td class="num">{{ yht_money(row.amount, cur) }}</td>

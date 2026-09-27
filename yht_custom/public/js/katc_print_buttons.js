@@ -47,7 +47,29 @@ const KATC_LETTER_HEAD = "KATC Letterhead";
 // when one is passed and a measured spacer when `no_letterhead` is set. Before this,
 // Sales Order had no with-letterhead plain print at all, because its spacer was
 // unconditional.
-const KATC_BUTTONS = {
+// 🔴 CR-004 — TWO BUTTONS, ONE FORMAT PER DOCTYPE.
+//
+// Before this there were four on Quotation and Sales Order — Print PDF, Print with
+// Arabic, Proforma Invoice, Print Without LH — each naming its own Print Format
+// record. That IS the thing the client asked to stop: "don't make a separate print
+// format for each one, give it as a tick option".
+//
+// The other two axes moved to where the desk already puts them:
+//
+//   Arabic     the print dialog's Language selector. `yht_print_lang()` reads
+//              `frappe.local.lang` inside the shared template.
+//   Proforma   `Print As` on the document; `KATC Quotation` / `KATC Sales Order`
+//              route to the proforma template when it says so.
+//
+// So the buttons keep only the axis a button is genuinely better at: the one-click
+// with-or-without-letterhead pair the client uses all day. Anything else is two
+// clicks away in the print dialog, which is where a tick option belongs.
+//
+// ⚠️ THE OLD TABLE IS STILL HERE, under the switch. This file is served to the
+// client's live site the moment it is pulled, and `KATC Quotation Arabic` and the
+// rest are only disabled on a site that has run the migrate — so where the switch
+// is off, the four buttons must keep naming formats that still exist.
+const KATC_BUTTONS_LEGACY = {
 	"Delivery Note": [
 		{ label: __("Print PDF"), format: "KATC Delivery Note", no_letterhead: 0, letterhead: KATC_LETTER_HEAD },
 		{ label: __("Print Without LH"), format: "KATC Delivery Note", no_letterhead: 1 },
@@ -69,6 +91,36 @@ const KATC_BUTTONS = {
 		{ label: __("Print Without LH"), format: "KATC Quotation No LH", no_letterhead: 1 },
 	],
 };
+
+//: doctype → its ONE format. Purchase Order joins the list here (CR-021), which is
+//: what "follows the CR-004 architecture once it lands" meant.
+const KATC_FORMAT = {
+	"Delivery Note": "KATC Delivery Note",
+	"Sales Invoice": "KATC Tax Invoice",
+	"Sales Order": "KATC Sales Order",
+	Quotation: "KATC Quotation",
+	"Purchase Order": "KATC Purchase Order",
+};
+
+const KATC_BUTTONS_CONSOLIDATED = {};
+Object.keys(KATC_FORMAT).forEach((doctype) => {
+	KATC_BUTTONS_CONSOLIDATED[doctype] = [
+		{ label: __("Print"), format: KATC_FORMAT[doctype], no_letterhead: 0, letterhead: KATC_LETTER_HEAD },
+		{ label: __("Print Without LH"), format: KATC_FORMAT[doctype], no_letterhead: 1 },
+	];
+});
+
+function katc_consolidated() {
+	return (
+		((frappe.boot && frappe.boot.yht_features) || []).indexOf("cr_004_print_heading") !== -1
+	);
+}
+
+function katc_buttons_for(doctype) {
+	const table = katc_consolidated() ? KATC_BUTTONS_CONSOLIDATED : KATC_BUTTONS_LEGACY;
+	return table[doctype] || [];
+}
+
 
 function katc_download(frm, spec) {
 	const args = {
@@ -98,7 +150,7 @@ function katc_add_buttons(frm) {
 	if (!frm.doc || frm.is_new()) {
 		return;
 	}
-	(KATC_BUTTONS[frm.doc.doctype] || []).forEach((spec) => {
+	katc_buttons_for(frm.doc.doctype).forEach((spec) => {
 		// Top level, no group argument — the incumbent's buttons sit on the toolbar.
 		frm.add_custom_button(spec.label, () => katc_download(frm, spec));
 	});
@@ -109,7 +161,7 @@ function katc_add_buttons(frm) {
 // the buttons would duplicate for anyone who opened more than one of the four.
 if (!yht_custom.katc_prints.bound) {
 	yht_custom.katc_prints.bound = true;
-	Object.keys(KATC_BUTTONS).forEach((doctype) => {
+	Object.keys(Object.assign({}, KATC_BUTTONS_LEGACY, KATC_BUTTONS_CONSOLIDATED)).forEach((doctype) => {
 		frappe.ui.form.on(doctype, {
 			refresh(frm) {
 				katc_add_buttons(frm);

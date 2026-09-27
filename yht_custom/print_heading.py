@@ -123,6 +123,18 @@ PRINT_AS = {
 
 FIELDNAME = "custom_print_as"
 
+#: CR-004 acceptance #4 — "some teams need an extra item-column note; it must be
+#: independently toggleable without becoming its own format."
+#:
+#: 🔴 A SECOND LINE IN THE ITEM CELL, NOT A SEVENTH COLUMN. Every KATC item table
+#: pins each column's width and the set must sum to 100% — the comment above each
+#: one says so, and it is what stopped the Arabic spilling over the Quantity
+#: figures. A new column would need a third width set per template and re-verified
+#: page counts for a toggle that is off by default. The note renders under the item
+#: name, which is the same idiom the Delivery Note and Tax Invoice already use for
+#: the Arabic name, and cannot disturb the widths at all.
+ITEM_NOTE_FIELD = "custom_print_item_note"
+
 
 # ------------------------------------------------------------------ resolution
 
@@ -225,6 +237,25 @@ def yht_print_heading(doc, as_kind: str | None = None) -> dict:
 	return {"en": english(chosen), "ar": ARABIC.get(chosen, ""), "heading": chosen}
 
 
+def yht_item_note(row) -> str:
+	"""The line's own description, when it says something the item name does not.
+
+	Returns `""` unless the note adds information: ERPNext copies `item_name` into
+	`description` on most rows, and printing the same words twice under themselves
+	is worse than printing nothing. HTML is stripped — `description` is a Text
+	Editor field and a pasted `<div>` would reach the page as markup.
+	"""
+	from frappe.utils import strip_html
+
+	if not row:
+		return ""
+	note = cstr(strip_html(cstr(row.get("description")))).strip()
+	name = cstr(row.get("item_name")).strip()
+	if not note or note == name or note == cstr(row.get("item_code")).strip():
+		return ""
+	return note
+
+
 def yht_print_lang() -> str:
 	"""`"ar"` when the print dialog asked for Arabic, else `"en"`.
 
@@ -264,6 +295,22 @@ def setup_print_headings() -> dict:
 			)
 			created.append(heading)
 
+	note_fields = {}
+	for doctype in DEFAULTS:
+		if frappe.db.exists("DocType", doctype):
+			note_fields[doctype] = [
+				{
+					"fieldname": ITEM_NOTE_FIELD,
+					"label": "Print Item Notes",
+					"fieldtype": "Check",
+					"insert_after": "select_print_heading",
+					"allow_on_submit": 1,
+					"description": "Print each line's description under the item name. Off by default.",
+				}
+			]
+	if note_fields:
+		create_custom_fields(note_fields, ignore_validate=True)
+
 	fields = {}
 	for doctype, options in PRINT_AS.items():
 		if not frappe.db.exists("DocType", doctype):
@@ -300,7 +347,7 @@ def setup_print_headings() -> dict:
 		if frappe.db.exists("DocType", doctype):
 			_set_property(doctype, "select_print_heading", "in_standard_filter", "1", "Check")
 
-	return {"headings_created": created, "print_as": sorted(fields)}
+	return {"headings_created": created, "print_as": sorted(fields), "item_note": sorted(note_fields)}
 
 
 def backfill_headings(commit: bool = False) -> dict:
