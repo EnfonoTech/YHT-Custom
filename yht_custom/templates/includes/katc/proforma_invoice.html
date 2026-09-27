@@ -23,7 +23,9 @@
    Before CR-004 the Arabic variant was a separate format rendered with lang=en,
    so the page never flipped and nobody found out. The Arabic CELLS set their own
    `direction: rtl` (`.katc-ar`) and are unaffected. */
+{%- if yht_feature("cr_004_print_heading") %}
 .print-format { direction: ltr; }
+{%- endif %}
 table.katc-doc { width: 100%; border-collapse: collapse; }
 table.katc-doc > thead > tr > td { padding: 0; border: 0; }
 /* The outer cell MUST be allowed to break. A table cell defaults to

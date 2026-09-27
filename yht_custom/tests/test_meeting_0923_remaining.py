@@ -424,6 +424,33 @@ class TestCr004TheFormatListIsOnePerDoctype(FrappeTestCase):
 		# the old table survives for sites where the switch is off
 		self.assertIn("KATC_BUTTONS_LEGACY", js)
 
+	def test_every_template_addition_is_behind_the_switch(self):
+		"""🔴 A TEMPLATE IS SHARED DISK, SO EVEN ITS CSS IS A PRODUCTION CHANGE.
+		CR-004 added three things to these templates — the direction pin, the
+		`.katc-note` rule and the item-note span. All three are inert while the
+		switch is off, and all three still moved the rendered BYTES on the client's
+		live site the moment the branch was pulled. Four formats' hashes changed,
+		which the before/after check caught and which this now prevents."""
+		for template in ("quotation.html", "sales_order.html", "purchase_order.html", "proforma_invoice.html"):
+			source = _read("templates", "includes", "katc", template)
+			for addition in (".print-format { direction: ltr; }", ".katc-note {", "custom_print_item_note"):
+				if addition not in source:
+					continue
+				before = source[: source.index(addition)]
+				with self.subTest(template=template, addition=addition):
+					self.assertIn(
+						'yht_feature("cr_004_print_heading")',
+						before[-400:],
+						f"{addition} in {template} is not behind the switch",
+					)
+
+	def test_the_switch_helper_never_raises_inside_a_template(self):
+		"""A print that 500s because a switch name is wrong is worse than one that
+		renders the pre-CR-004 page."""
+		from yht_custom.print_heading import yht_feature
+
+		self.assertFalse(yht_feature("cr_999_not_a_real_switch"))
+
 	def test_the_page_direction_is_pinned(self):
 		"""🔴 Arabic now comes from the dialog's Language selector, which makes
 		frappe render the whole page dir=rtl. Unpinned, the item table mirrors and

@@ -450,6 +450,7 @@ jinja = {
 		"yht_custom.print_heading.yht_print_heading",
 		"yht_custom.print_heading.yht_print_lang",
 		"yht_custom.print_heading.yht_item_note",
+		"yht_custom.print_heading.yht_feature",
 	],
 }
 

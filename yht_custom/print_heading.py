@@ -256,6 +256,28 @@ def yht_item_note(row) -> str:
 	return note
 
 
+def yht_feature(name: str) -> bool:
+	"""Is a feature switch on for this site? For use inside a print template.
+
+	🔴 A TEMPLATE IS SHARED DISK, SO EVEN ITS CSS IS A PRODUCTION CHANGE. The
+	CR-004 work added three things to the KATC templates — a `direction: ltr`
+	pin, a `.katc-note` rule and the item-note span — all of which only do
+	anything when this feature is on. All three still changed the rendered BYTES
+	on the client's live site the moment the branch was pulled, and the
+	before/after hash check caught four formats moving.
+
+	Guarding them in Python would not have helped: the markup is in the template,
+	so the template has to be able to ask.
+
+	Never raises — a print that 500s because a switch name is wrong is worse than
+	one that renders the pre-CR-004 page.
+	"""
+	try:
+		return features.enabled(name)
+	except Exception:
+		return False
+
+
 def yht_print_lang() -> str:
 	"""`"ar"` when the print dialog asked for Arabic, else `"en"`.
 
