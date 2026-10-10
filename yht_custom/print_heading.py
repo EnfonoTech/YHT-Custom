@@ -116,7 +116,11 @@ DEFAULTS = {
 #: Sales Order already carries this field and 1,296 documents use it; Quotation and
 #: Purchase Order get the same shape rather than a second mechanism.
 PRINT_AS = {
-	"Sales Order": ("Sales Order", "Quotation", "Proforma Invoice"),
+	# Row 12 (2026-10-08): "Delivery Note" lets a branch hand the customer a
+	# delivery document straight off the Sales Order — stock reserved, nothing
+	# moved, no draft Delivery Note waiting for a PO. The KATC Sales Order router
+	# switches to delivery columns for it; the Print Heading record already exists.
+	"Sales Order": ("Sales Order", "Quotation", "Proforma Invoice", "Delivery Note"),
 	"Quotation": ("Sales Quotation", "Proforma Invoice"),
 	"Purchase Order": ("Purchase Order", "Purchase Enquiry"),
 }

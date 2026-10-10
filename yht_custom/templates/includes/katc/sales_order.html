@@ -14,7 +14,11 @@
     of CR-005. It was hardcoded here, which is why the field the client was
     ALREADY filling on 1,906 Delivery Notes never reached the page. -#}
 {%- set katc_show_arabic = katc_show_arabic or (yht_print_lang() == "ar") -%}
-{%- set katc_heading = yht_print_heading(doc) -%}
+{#- Row 12 (2026-10-08): set by the KATC Sales Order router when Print As says
+    "Delivery Note". Undefined on every other path — the proforma router, a test
+    rendering this include directly — so it is normalised to a plain boolean. -#}
+{%- set katc_as_delivery = katc_as_delivery is defined and katc_as_delivery -%}
+{%- set katc_heading = yht_print_heading(doc, "Delivery Note") if katc_as_delivery else yht_print_heading(doc) -%}
 {%- set cur = yht_currency(doc) -%}
 <style>
 .print-format { font-family: Arial, "Noto Sans", sans-serif; font-size: 9pt; color: #000; }
@@ -132,7 +136,16 @@ table.katc-items td.ctr { text-align: center; }
     layout gives a column as much room as its widest content wants and then lets the
     text spill past the drawn boundary — which is how the Arabic ran over the Quantity
     figures. Pinning all of them leaves no freedom to spill into. -#}
-{%- if katc_show_arabic %}
+{%- if katc_as_delivery and katc_show_arabic %}
+    <th style="width:6%">Sr</th>
+    <th style="width:38%">Item Name</th>
+    <th class="katc-ar-col" style="width:38%">Item Name in Arabic</th>
+    <th style="width:18%">Quantity</th>
+{%- elif katc_as_delivery %}
+    <th style="width:8%">Sr</th>
+    <th>Item Name</th>
+    <th style="width:20%">Quantity</th>
+{%- elif katc_show_arabic %}
     <th style="width:5%">Sr</th>
     <th style="width:24%">Item Name</th>
     <th class="katc-ar-col" style="width:34%">Item Name in Arabic</th>
@@ -153,14 +166,14 @@ table.katc-items td.ctr { text-align: center; }
       <td class="ctr">{{ loop.index }}</td>
       <td>{{ row.item_name or row.item_code or "" }}{%- if yht_feature("cr_004_print_heading") %}{%- set katc_note = yht_item_note(row) %}{% if doc.get("custom_print_item_note") and katc_note %}<div class="katc-note">{{ katc_note }}</div>{% endif %}{% endif %}</td>{% if katc_show_arabic %}<td class="katc-ar-col katc-ar">{%- for line in yht_item_ar_lines(row) %}{{ line }}{%- if not loop.last %}<br>{% endif %}{%- endfor %}</td>{% endif %}
       <td class="ctr">{{ row.qty }} {{ row.uom or row.stock_uom or "" }}</td>
-      <td class="num">{{ yht_money(row.rate, cur) }}</td>
-      <td class="num">{{ yht_money(row.amount, cur) }}</td>
+      {% if not katc_as_delivery %}<td class="num">{{ yht_money(row.rate, cur) }}</td>
+      <td class="num">{{ yht_money(row.amount, cur) }}</td>{% endif %}
     </tr>
 {%- endfor %}
   </tbody>
 </table>
 
-<table class="katc-totals"><tbody>
+{% if not katc_as_delivery %}<table class="katc-totals"><tbody>
   <tr><td class="lbl">Total</td><td class="num">{{ yht_money(doc.total, cur) }}</td></tr>
   <tr><td class="lbl">Discount :</td><td class="num">- {{ yht_money(doc.discount_amount or 0, cur) }}</td></tr>
   <tr><td class="lbl">Total after Discount:</td><td class="num">{{ yht_money(net_after_discount, cur) }}</td></tr>
@@ -168,7 +181,7 @@ table.katc-items td.ctr { text-align: center; }
   <tr class="katc-grand"><td class="lbl">Grand Total:</td><td class="num">{{ yht_money(doc.rounded_total or doc.grand_total, cur) }}</td></tr>
 </tbody></table>
 
-<div class="katc-words" style="text-align:left"><b>In Words:</b> {{ doc.in_words or "" }}</div>
+<div class="katc-words" style="text-align:left"><b>In Words:</b> {{ doc.in_words or "" }}</div>{% endif %}
 <div class="katc-terms"><b>Terms and Conditions:</b><br>{{ doc.terms or "" }}</div>
   </td></tr></tbody>
 </table>
