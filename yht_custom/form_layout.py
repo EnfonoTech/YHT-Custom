@@ -824,3 +824,70 @@ def _set_property(doctype, fieldname, prop, value, property_type, for_doctype=Fa
 		args["doctype_or_field"] = "DocType"
 
 	frappe.make_property_setter(args, validate_fields_for_doctype=False)
+
+
+# --- client meeting 2026-10-08, Batch A ---------------------------------------
+
+#: Row 27 — "standard filter options in all list views". Measured before adding
+#: anything: `is_return` is already in the filter row on Sales Invoice, Delivery
+#: Note, Purchase Invoice and Purchase Receipt (item 36, `setup_return_split_filter`
+#: above), and `Payment Entry.payment_type` ships `in_standard_filter = 1`
+#: upstream — Pay / Receive / Internal Transfer was already there. The one gap on
+#: the client's list was the Expense flag on Purchase Invoice.
+LIST_FILTER_FIELDS = {
+	"Purchase Invoice": ("custom_is_expense_invoice",),
+}
+
+
+def setup_list_filters() -> dict:
+	"""Row 27 — put the listed Checks in the list view's filter row. Idempotent."""
+	applied = {}
+	for doctype, fieldnames in LIST_FILTER_FIELDS.items():
+		if not frappe.db.exists("DocType", doctype):
+			continue
+		meta = frappe.get_meta(doctype)
+		for fieldname in fieldnames:
+			if not meta.get_field(fieldname):
+				frappe.log_error(
+					message=f"{doctype}.{fieldname} is missing; list filter not applied",
+					title="yht_custom: list filters",
+				)
+				continue
+			_set_property(doctype, fieldname, "in_standard_filter", "1", "Check")
+			applied.setdefault(doctype, []).append(fieldname)
+	return applied
+
+
+#: Row 24 — "Payment Entry: collapse the prepayment invoice details and move them
+#: up". The details are the three tax sections item 33 already gates on the
+#: prepayment tick (`PE_TAX_GATED_SECTIONS`); upstream puts them at the bottom of
+#: the form, below Writeoff. Collapsing is a `collapsible` setter — but two of the
+#: three ship with NO label, and a collapsible section with no label has no header
+#: to click on, so each of those gets one. Moving them up is
+#: `field_layout.FIELD_ORDER["Payment Entry"]`.
+PE_PREPAYMENT_SECTION_LABELS = {
+	"taxes_and_charges_section": "",  # upstream's own "Taxes and Charges" stays
+	"section_break_56": "Prepayment Tax Lines",
+	"section_break_60": "Prepayment Tax Totals",
+}
+
+
+def setup_prepayment_block() -> dict:
+	"""Row 24 — collapsible, labelled prepayment tax sections. Idempotent."""
+	if not frappe.db.exists("DocType", "Payment Entry"):
+		return {}
+	meta = frappe.get_meta("Payment Entry")
+	applied = {}
+	for fieldname, label in PE_PREPAYMENT_SECTION_LABELS.items():
+		field = meta.get_field(fieldname)
+		if not field or field.fieldtype != "Section Break":
+			frappe.log_error(
+				message=f"Payment Entry.{fieldname} is not a Section Break here; row 24 skipped it",
+				title="yht_custom: prepayment block",
+			)
+			continue
+		_set_property("Payment Entry", fieldname, "collapsible", "1", "Check")
+		if label and not (field.label or "").strip():
+			_set_property("Payment Entry", fieldname, "label", label, "Data")
+		applied[fieldname] = label or field.label
+	return applied

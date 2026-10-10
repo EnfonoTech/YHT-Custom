@@ -74,3 +74,50 @@ def setup_link_sort_order() -> dict[str, str]:
 		applied[doctype] = f"{sort_field} {sort_order}"
 
 	return applied
+
+
+#: Row 8 of the 2026-10-08 sheet — "customers: name first, code secondary".
+#:
+#: Customer was ALREADY ordered by name (LINK_SORT above). What the client is
+#: looking at is the dropdown row itself: the picker prints the document NAME
+#: (the customer code) in bold and the title field underneath, unless the
+#: doctype says `show_title_field_in_link`, in which case the two swap. That is
+#: a DocType-level property, the same lever Customize Form exposes as "Show
+#: Title in Link Fields"; `title_field` on Customer is `customer_name` upstream.
+#: `customer_name` stays searchable because the link search always includes the
+#: title field — nothing about matching changes, only what is printed on top.
+LINK_TITLE_DISPLAY = ("Customer",)
+
+
+def setup_link_title_display() -> dict[str, str]:
+	"""Show the title field, not the code, on the first line of the picker. Idempotent."""
+	applied: dict[str, str] = {}
+
+	for doctype in LINK_TITLE_DISPLAY:
+		if not frappe.db.exists("DocType", doctype):
+			continue
+		meta = frappe.get_meta(doctype)
+		title_field = (meta.title_field or "").strip()
+		if not title_field or not meta.get_field(title_field):
+			# With no title field the picker would print the name twice; and a
+			# title field that is not a DocField is the exact failure CR-013 hit.
+			frappe.log_error(
+				message=f"{doctype}.title_field is {title_field!r}; show_title_field_in_link not applied",
+				title="YHT link title display",
+			)
+			continue
+
+		frappe.make_property_setter(
+			{
+				"doctype": doctype,
+				"doctype_or_field": "DocType",
+				"property": "show_title_field_in_link",
+				"value": "1",
+				"property_type": "Check",
+			},
+			is_system_generated=False,
+		)
+		frappe.clear_cache(doctype=doctype)
+		applied[doctype] = title_field
+
+	return applied

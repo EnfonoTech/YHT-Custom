@@ -18,6 +18,8 @@ from yht_custom.form_layout import (
 	setup_payment_entry_tax_block,
 	setup_return_split_filter,
 	setup_update_stock_default,
+	setup_prepayment_block,
+	setup_list_filters,
 )
 from yht_custom.other_remarks import ensure_other_remarks_fields
 from yht_custom.site_defaults import setup_site_defaults
@@ -32,7 +34,7 @@ from yht_custom.field_layout import apply_field_moves
 from yht_custom.workspace_shortcuts import setup_new_shortcuts
 from yht_custom.return_flow import setup_credit_note_settles_original
 from yht_custom.attention_field import ensure_attention_field
-from yht_custom.link_sort import setup_link_sort_order
+from yht_custom.link_sort import setup_link_sort_order, setup_link_title_display
 from yht_custom.unified_number import setup_unified_number
 from yht_custom.print_heading import setup_print_headings
 from yht_custom.dn_links import setup_delivery_note_links
@@ -262,6 +264,12 @@ PROVISIONING_STEPS = (
 	# on one doctype must not take the Customer sort down with it.
 	"ensure_attention_field",
 	"setup_link_sort_order",
+	# --- client meeting 2026-10-08, Batch A (rows 8 · 24 · 27) ---------------
+	# Property Setters only; each arrives with the site's own migrate, so none
+	# of these needs a feature switch. Separate entries for the usual reason.
+	"setup_link_title_display",    # row 8
+	"setup_prepayment_block",      # row 24
+	"setup_list_filters",          # row 27
 	"repair_mirrored_perm_flags",
 	"run_dashboard_reports_inline",
 	"setup_hr",
@@ -409,6 +417,9 @@ def _imported(name):
 		"apply_field_moves": apply_field_moves,
 		"ensure_attention_field": ensure_attention_field,
 		"setup_link_sort_order": setup_link_sort_order,
+		"setup_link_title_display": setup_link_title_display,
+		"setup_prepayment_block": setup_prepayment_block,
+		"setup_list_filters": setup_list_filters,
 		"setup_unified_number": setup_unified_number,
 		"setup_print_headings": setup_print_headings,
 		"setup_delivery_note_links": setup_delivery_note_links,

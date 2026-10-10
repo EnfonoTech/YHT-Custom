@@ -205,7 +205,41 @@ FIELD_ORDER = {
 		"email_id",
 		"phone",
 		"fax",
-	]
+	],
+	# Row 24 (2026-10-08) — the prepayment tax block, straight under the tick that
+	# reveals it. Declared as a PREFIX only: `_apply_field_order` keeps every field
+	# it does not name in its existing order behind these, so the rest of the form
+	# — whatever any app has added to it — is untouched and nothing is dropped.
+	# (It does log the trailing fields as "moved to the end" on every migrate;
+	# that line is noise here, not a fault.) The three sections keep their item-33
+	# `depends_on`, so on a non-prepayment entry the block is simply absent.
+	"Payment Entry": [
+		"type_of_payment",
+		"naming_series",
+		"payment_type",
+		"payment_order_status",
+		"custom_prepayment_invoice",
+		"custom_prepayment_invoice_description",
+		"column_break_5",
+		"posting_date",
+		"custom_fiscal_year",
+		"custom_posting_time",
+		"company",
+		"mode_of_payment",
+		# --- the prepayment block, in upstream's own internal order ---------
+		"taxes_and_charges_section",
+		"purchase_taxes_and_charges_template",
+		"sales_taxes_and_charges_template",
+		"column_break_55",
+		"apply_tax_withholding_amount",
+		"tax_withholding_category",
+		"section_break_56",
+		"taxes",
+		"section_break_60",
+		"base_total_taxes_and_charges",
+		"column_break_61",
+		"total_taxes_and_charges",
+	],
 }
 
 #: doctype → [(CUSTOM fieldname, the field it must sit immediately after)].
