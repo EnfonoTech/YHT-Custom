@@ -131,10 +131,26 @@ def _invoices_for(note: str) -> str:
 
 
 def set_order_numbers(doc, method=None):
-	"""`Delivery Note.validate` — the order number, which is knowable now."""
-	if not doc.meta.has_field("custom_sales_order_no"):
-		return
-	doc.custom_sales_order_no = _orders_for(doc)
+	"""`Delivery Note.validate` — the order number, which is knowable now.
+
+	And, since 2026-10-10, the invoice number in the SI-first flow (sheet row 23,
+	2026-10-08: "SI first then DN: link not shown in both"). Reproduced on UAT:
+	a note raised from a submitted invoice carried `against_sales_invoice` on
+	every row and the invoice carried the note, yet this field stayed empty —
+	`refresh_from_invoice` is the only writer, and the invoice's submit, the
+	event it runs on, happened before the note existed. The note's own rows
+	already hold the number, so it is read here, at save, and MERGED with
+	whatever the invoice side wrote: a DN-first note being re-saved must not
+	lose the invoices `refresh_from_invoice` found.
+	"""
+	if doc.meta.has_field("custom_sales_order_no"):
+		doc.custom_sales_order_no = _orders_for(doc)
+	if doc.meta.has_field("custom_sales_invoice_no"):
+		existing = [v for v in cstr(doc.get("custom_sales_invoice_no")).split(",") if v.strip() != "…"]
+		own = [row.get("against_sales_invoice") for row in doc.get("items") or []]
+		merged = _joined(existing + own)
+		if merged != cstr(doc.get("custom_sales_invoice_no")):
+			doc.custom_sales_invoice_no = merged
 
 
 def refresh_from_invoice(doc, method=None):

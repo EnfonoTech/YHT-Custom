@@ -76,9 +76,9 @@ class TestItemSearch(FrappeTestCase):
 		uom = frappe.get_all("UOM", pluck="name", limit=1)[0]
 		self.codes = []
 		for code, name, description in (
-			("_T-R07-ELBOW-025", "ELBOW 90 DEG 1 INCH SS", "Stainless steel elbow, ninety degrees, one inch"),
-			("_T-R07-ELBOW-008", "ELBOW 90 DEG 1/4 INCH SS", "Stainless steel elbow, ninety degrees, quarter inch"),
-			("_T-R07-TEE-025", "TEE EQUAL 1 INCH SS", "Stainless steel equal tee, one inch"),
+			("_T-R07-ELBOW-025", "ZQXTEST ELBOW 90 DEG 1 INCH SS", "Stainless steel elbow, ninety degrees, one inch"),
+			("_T-R07-ELBOW-008", "ZQXTEST ELBOW 90 DEG 1/4 INCH SS", "Stainless steel elbow, ninety degrees, quarter inch"),
+			("_T-R07-TEE-025", "ZQXTEST TEE EQUAL 1 INCH SS", "Stainless steel equal tee, one inch"),
 		):
 			# `FrappeTestCase` rolls back once per CLASS (gotcha 50), so a fixture
 			# inserted in `setUp` is still there for the next test method.
@@ -100,22 +100,24 @@ class TestItemSearch(FrappeTestCase):
 		return [row[0] for row in item_query("Item", txt, None, 0, 50, filters or {})]
 
 	def test_every_word_must_match_in_any_order(self):
-		found = [n for n in self._names("elbow ss 1 inch") if n.startswith("_T-R07")]
+		"""ZQXTEST is the fixture's own token: 4,000 real items also contain
+		"elbow", "ss" and "1", and a page of 50 would never reach `_T-…`."""
+		found = [n for n in self._names("zqxtest elbow ss 1 inch") if n.startswith("_T-R07")]
 		self.assertEqual(found, ["_T-R07-ELBOW-008", "_T-R07-ELBOW-025"])
 		# Same words, different order — same answer.
-		self.assertEqual([n for n in self._names("1 inch ss elbow") if n.startswith("_T-R07")], found)
+		self.assertEqual([n for n in self._names("1 inch ss elbow zqxtest") if n.startswith("_T-R07")], found)
 		# A word that matches nothing on the row excludes it, however many others hit.
-		self.assertEqual([n for n in self._names("elbow ss tee") if n.startswith("_T-R07")], [])
+		self.assertEqual([n for n in self._names("zqxtest elbow ss tee") if n.startswith("_T-R07")], [])
 
 	def test_a_word_may_live_in_the_description_only(self):
-		found = [n for n in self._names("ninety quarter") if n.startswith("_T-R07")]
+		found = [n for n in self._names("zqxtest ninety quarter") if n.startswith("_T-R07")]
 		self.assertEqual(found, ["_T-R07-ELBOW-008"])
 
 	def test_the_order_is_the_item_code_not_idx(self):
 		"""Row 7's root cause. idx is set so that upstream's `idx desc` would reverse them."""
 		frappe.db.set_value("Item", "_T-R07-ELBOW-008", "idx", 1, update_modified=False)
 		frappe.db.set_value("Item", "_T-R07-ELBOW-025", "idx", 999, update_modified=False)
-		found = [n for n in self._names("elbow") if n.startswith("_T-R07")]
+		found = [n for n in self._names("zqxtest elbow") if n.startswith("_T-R07")]
 		self.assertEqual(found, ["_T-R07-ELBOW-008", "_T-R07-ELBOW-025"])
 
 	def test_a_code_prefix_floats_that_code_to_the_top(self):
@@ -128,7 +130,7 @@ class TestItemSearch(FrappeTestCase):
 		if len(other) < 2:
 			self.skipTest("one item group only")
 		wrong_group = [g for g in other if g != frappe.db.get_value("Item", "_T-R07-TEE-025", "item_group")][0]
-		self.assertEqual([n for n in self._names("tee", {"item_group": wrong_group}) if n.startswith("_T-R07")], [])
+		self.assertEqual([n for n in self._names("zqxtest tee", {"item_group": wrong_group}) if n.startswith("_T-R07")], [])
 
 	def test_switch_off_is_upstream_byte_for_byte(self):
 		from erpnext.controllers.queries import item_query as upstream
@@ -291,6 +293,43 @@ class TestAutoTranslateIsOff(FrappeTestCase):
 
 		_disable_arabic_auto_translate()
 		self.assertEqual(int(frappe.db.get_single_value("Arabic Translation Key", "disable_auto_translate")), 1)
+
+
+# --------------------------------------------------------------------- row 23
+
+
+class TestInvoiceFirstDeliveryNoteCarriesTheInvoiceNumber(FrappeTestCase):
+	"""Row 23 — reproduced on UAT 2026-10-10: against_sales_invoice on every row,
+	the invoice naming the note, and `custom_sales_invoice_no` still empty."""
+
+	def test_a_note_mapped_from_an_invoice_names_it_at_validate(self):
+		from erpnext.accounts.doctype.sales_invoice.sales_invoice import make_delivery_note
+
+		from yht_custom.dn_links import set_order_numbers
+
+		name = frappe.db.sql(
+			"""select si.name from `tabSales Invoice` si
+			   where si.docstatus = 1 and si.is_return = 0 and ifnull(si.update_stock, 0) = 0
+			     and not exists (select 1 from `tabSales Invoice Item` i
+			                     where i.parent = si.name and ifnull(i.delivery_note, '') != '')
+			   order by si.modified desc limit 1""",
+			pluck="name",
+		)
+		if not name:
+			self.skipTest("no invoice-first candidate on this site")
+		dn = make_delivery_note(name[0])
+		self.assertTrue(dn.items and all(r.against_sales_invoice == name[0] for r in dn.items))
+		set_order_numbers(dn)
+		self.assertEqual(dn.custom_sales_invoice_no, name[0])
+
+	def test_a_resave_keeps_what_the_invoice_side_wrote(self):
+		from yht_custom.dn_links import set_order_numbers
+
+		dn = frappe.new_doc("Delivery Note")
+		dn.custom_sales_invoice_no = "KSIN-00-0001"
+		dn.append("items", {"item_code": "x", "qty": 1, "against_sales_invoice": "KSIN-00-0002"})
+		set_order_numbers(dn)
+		self.assertEqual(dn.custom_sales_invoice_no, "KSIN-00-0001, KSIN-00-0002")
 
 
 # --------------------------------------------------------------------- row 24
