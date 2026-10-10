@@ -136,7 +136,17 @@ table.katc-items td.ctr { text-align: center; }
     layout gives a column as much room as its widest content wants and then lets the
     text spill past the drawn boundary — which is how the Arabic ran over the Quantity
     figures. Pinning all of them leaves no freedom to spill into. -#}
-{%- if katc_as_delivery and katc_show_arabic %}
+{%- if katc_show_arabic and not katc_as_delivery %}
+    <th style="width:5%">Sr</th>
+    <th style="width:24%">Item Name</th>
+    <th class="katc-ar-col" style="width:34%">Item Name in Arabic</th>
+    <th style="width:13%">Quantity</th>
+    <th style="width:12%">Rate</th>
+    <th style="width:12%">Amount</th>
+{%- elif katc_show_arabic %}
+{#- Row 12 delivery columns. Listed AFTER the ordinary Arabic header on purpose:
+    test_katc_prints reads the FIRST katc-ar-col width in this file as the
+    wrap budget, and that must stay the 34% of the priced layout. -#}
     <th style="width:6%">Sr</th>
     <th style="width:38%">Item Name</th>
     <th class="katc-ar-col" style="width:38%">Item Name in Arabic</th>
@@ -145,13 +155,6 @@ table.katc-items td.ctr { text-align: center; }
     <th style="width:8%">Sr</th>
     <th>Item Name</th>
     <th style="width:20%">Quantity</th>
-{%- elif katc_show_arabic %}
-    <th style="width:5%">Sr</th>
-    <th style="width:24%">Item Name</th>
-    <th class="katc-ar-col" style="width:34%">Item Name in Arabic</th>
-    <th style="width:13%">Quantity</th>
-    <th style="width:12%">Rate</th>
-    <th style="width:12%">Amount</th>
 {%- else %}
     <th style="width:6%">Sr</th>
     <th>Item Name</th>

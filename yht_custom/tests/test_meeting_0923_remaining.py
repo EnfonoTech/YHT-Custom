@@ -756,18 +756,19 @@ class TestCr013TheListColumns(FrappeTestCase):
 	def test_it_is_behind_a_switch_because_the_doctype_is_a_guess(self):
 		self.assertIn('features.enabled("cr_013_list_columns")', _read("list_columns.py"))
 
-	def test_columns_go_through_list_view_settings_not_in_list_view(self):
-		"""The acceptance criterion says "via standard List View Settings, not a
-		hidden hack". `in_list_view` is a SCHEMA flag that also drives the link
-		search preview, quick entry and the report view — bending it to pick list
-		columns changes three other screens as a side effect."""
+	def test_columns_drive_both_levers(self):
+		"""Corrected 2026-10-10, measured headless on yht-test as Administrator.
+
+		`list_view.js` builds candidate columns from `in_list_view` docfields and
+		`reorder_listview_fields` can only reorder and drop those candidates, never
+		add one — the settings-row-only version rendered Customer Name · Grand
+		Total · ID with Date and Status gone. The Status column answers to the
+		settings entry `status_field` (the indicator), not to the `status` field.
+		"""
 		source = _read("list_columns.py")
-		code = "\n".join(
-			line for line in source.splitlines()
-			if not line.strip().startswith(("#", "🔴", "`")) 
-		)
 		self.assertIn("List View Settings", source)
-		self.assertNotIn('"in_list_view", "1"', code)
+		self.assertIn('"in_list_view", "1"', source)
+		self.assertIn('"fieldname": "status_field"', source)
 
 	def test_the_stale_property_setters_are_cleaned_up(self):
 		"""A Property Setter is a row, not a line of code: the first version's
@@ -777,18 +778,28 @@ class TestCr013TheListColumns(FrappeTestCase):
 		self.assertTrue(callable(drop_stale_in_list_view_setters))
 		self.assertIn("drop_stale_in_list_view_setters", _read("patches", "backfill_meeting_0923_data.py"))
 
-	def test_no_in_list_view_setter_survives_for_the_columns_we_chose(self):
-		"""Checked against the database, not the source."""
-		from yht_custom.list_columns import LIST_COLUMNS
+	def test_the_column_fields_are_in_list_view_after_setup(self):
+		"""Checked against the database, not the source. Behind the switch, so
+		this only asserts where the step actually ran."""
+		from yht_custom import features
+		from yht_custom.list_columns import LIST_COLUMNS, STATUS_INDICATOR, setup_list_columns
 
+		if not features.enabled("cr_013_list_columns"):
+			self.skipTest("cr_013_list_columns is off on this site")
+		setup_list_columns()
 		for doctype, (_title, columns) in LIST_COLUMNS.items():
-			stale = frappe.get_all(
-				"Property Setter",
-				filters={"doc_type": doctype, "property": "in_list_view", "field_name": ["in", list(columns)]},
-				pluck="name",
-			)
-			with self.subTest(doctype=doctype):
-				self.assertEqual(stale, [])
+			frappe.clear_cache(doctype=doctype)
+			meta = frappe.get_meta(doctype)
+			for fieldname in columns:
+				if fieldname == STATUS_INDICATOR:
+					continue
+				with self.subTest(doctype=doctype, field=fieldname):
+					self.assertEqual(int(meta.get_field(fieldname).in_list_view or 0), 1)
+			import json
+
+			stored = json.loads(frappe.db.get_value("List View Settings", doctype, "fields"))
+			with self.subTest(doctype=doctype, settings="status indicator"):
+				self.assertIn({"type": "Status", "label": "Status", "fieldname": "status_field"}, stored)
 
 
 class TestCr014TheUnifiedNumber(FrappeTestCase):

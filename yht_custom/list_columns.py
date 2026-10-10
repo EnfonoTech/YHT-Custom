@@ -33,21 +33,25 @@ nothing changes for them until they say which lists they meant.
 A list column is per-user once the user has touched it; this only changes the
 DEFAULT, which is what a user who has never dragged a column sees.
 
-🔴 COLUMNS GO IN `List View Settings`, NOT IN `in_list_view` PROPERTY SETTERS.
-The acceptance criterion says "apply list-view column changes via standard List
-View Settings, not a hidden hack", and the first version of this module missed
-it — it wrote `in_list_view` on each DocField instead. That is a hidden hack in
-the exact sense meant: `in_list_view` is a SCHEMA flag that also drives the link
-search preview, the quick-entry dialog and the report view, so bending it to
-choose list columns changes three other screens as a side effect.
+🔴 BOTH LEVERS, NOT ONE — measured on `yht-test` 2026-10-10, headless, as Administrator.
+`list_view.js::setup_columns` builds its candidate columns from the docfields
+flagged `in_list_view` (plus a Status *indicator* column when the doctype has
+one), and `reorder_listview_fields` then walks `List View Settings.fields` and
+keeps the candidates it names — it can REORDER and DROP, it cannot ADD. So a
+settings row naming `posting_date` does nothing for a doctype whose
+`posting_date` is not `in_list_view`, and the Status column answers only to the
+settings entry `{"type": "Status", "fieldname": "status_field"}`, never to the
+`status` docfield. The first version of this module wrote the `in_list_view`
+setters and worked; the second removed them as "a hidden hack" and left only
+the settings row — and the lists rendered Customer Name · Grand Total · ID,
+with Date and Status gone, because Grand Total was the one field already
+`in_list_view`. That is the state a reviewer then called "not rendering".
 
-`List View Settings` is the doctype frappe itself writes when a user drags a
-column, and its `fields` column holds the JSON list. Rows already existed here
-for Item, Sales Order and Purchase Receipt before this module touched anything,
-which is what confirms it is the live mechanism on this site.
+`in_list_view` is what Customize Form's own "In List View" tick writes. It
+does also feed the link-search preview and the report view, which is accepted:
+Date and Grand Total are sensible there too.
 
-`title_field` stays a Property Setter — it is not a column setting. It is what
-removes the Title column, which is the other half of the request.
+`title_field` stays a Property Setter — it is what removes the Title column.
 """
 
 import frappe
@@ -59,9 +63,13 @@ from yht_custom import features
 #: Four entries and no more: `list_view.js` shows at most four columns beside the
 #: subject before it starts dropping them, and the whole complaint is that the
 #: customer name had no room.
+#: The Status column is the doctype's INDICATOR, not its `status` docfield — see
+#: the docstring. It is named by this token in the column tuples.
+STATUS_INDICATOR = "status"
+
 LIST_COLUMNS = {
-	"Delivery Note": ("customer_name", ("posting_date", "status", "grand_total")),
-	"Sales Invoice": ("customer_name", ("posting_date", "status", "grand_total")),
+	"Delivery Note": ("customer_name", ("posting_date", STATUS_INDICATOR, "grand_total")),
+	"Sales Invoice": ("customer_name", ("posting_date", STATUS_INDICATOR, "grand_total")),
 }
 
 #: Kept for the tests that assert the Title column is the one being displaced.
@@ -94,7 +102,17 @@ def setup_list_columns() -> dict:
 			continue
 		_set_property(doctype, None, "title_field", title_field, "Data", for_doctype=True)
 
-		shown = [f for f in columns if meta.get_field(f)]
+		shown = []
+		for fieldname in columns:
+			if fieldname == STATUS_INDICATOR:
+				shown.append(fieldname)
+				continue
+			if not meta.get_field(fieldname):
+				continue
+			# Lever one: a field is only a candidate column when it is in_list_view.
+			_set_property(doctype, fieldname, "in_list_view", "1", "Check")
+			shown.append(fieldname)
+		# Lever two: the settings row orders (and caps) the candidates.
 		_write_list_view_settings(doctype, shown)
 
 		frappe.clear_cache(doctype=doctype)
@@ -114,9 +132,14 @@ def _write_list_view_settings(doctype: str, fieldnames: list) -> None:
 	import json
 
 	meta = frappe.get_meta(doctype)
-	wanted = json.dumps(
-		[{"fieldname": f, "label": meta.get_label(f) or f} for f in fieldnames]
-	)
+	entries = []
+	for f in fieldnames:
+		if f == STATUS_INDICATOR:
+			# The indicator column, exactly as the desk writes it when a user drags it.
+			entries.append({"type": "Status", "label": "Status", "fieldname": "status_field"})
+		else:
+			entries.append({"fieldname": f, "label": meta.get_label(f) or f})
+	wanted = json.dumps(entries)
 
 	if frappe.db.exists("List View Settings", doctype):
 		if frappe.db.get_value("List View Settings", doctype, "fields") != wanted:
@@ -136,13 +159,17 @@ def drop_stale_in_list_view_setters() -> dict:
 	mechanism keeps working until something deletes it, and the list would then be
 	driven by two mechanisms that disagree.
 
-	Only the rows this module could have written are touched: the doctypes it names
-	and the fieldnames it named.
+	Only the rows the FIRST version could have written are touched, minus the
+	column fields the current version sets on purpose.
 	"""
 	touched = []
 	for doctype, (_title, columns) in LIST_COLUMNS.items():
-		names = set(columns) | set(CLEAR_IN_LIST_VIEW.get(doctype, ()))
+		# The column fields are NOT in this set any more: since 2026-10-10 the
+		# module writes their `in_list_view` itself (see the docstring), and this
+		# runs from a patch that may land on a site AFTER that write.
+		names = set(CLEAR_IN_LIST_VIEW.get(doctype, ()))
 		names |= {"customer", "set_warehouse", "po_no", "due_date", "outstanding_amount"}
+		names -= set(columns)
 		for row in frappe.get_all(
 			"Property Setter",
 			filters={"doc_type": doctype, "property": "in_list_view", "field_name": ["in", list(names)]},

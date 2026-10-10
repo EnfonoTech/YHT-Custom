@@ -558,17 +558,20 @@ def _apply_field_order(skipped: list) -> int:
 		trailing = [f for f in order if f not in desired]
 
 		missing = [f for f in desired if f not in order]
-		if missing:
-			skipped.append(f"{doctype}: declared field order names absent fields {missing}")
-		if trailing:
-			skipped.append(f"{doctype}: fields not in the declared order, moved to the end: {trailing}")
 
 		target = present + trailing
 		if target == list(order):
+			# Settled. Nothing is reported either: `apply_field_moves` on a migrated
+			# site must come back with an empty `skipped`, and a prefix order
+			# (Payment Entry) has trailing fields by design, every time.
 			continue
 		if sorted(target) != sorted(order):
 			skipped.append(f"{doctype}: refusing a field_order that is not a permutation")
 			continue
+		if missing:
+			skipped.append(f"{doctype}: declared field order names absent fields {missing}")
+		if trailing:
+			skipped.append(f"{doctype}: fields not in the declared order, moved to the end: {trailing}")
 
 		_write_order(doctype, ps_name, target)
 		written += 1
