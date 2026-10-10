@@ -60,6 +60,13 @@ KNOWN = {
 	"cr_013_list_columns": "Transaction lists open on ID/Date/Customer/Status (CR-013)",
 	"cr_018_grid_search_width": "Wider link-search dropdown inside a child-table grid cell (CR-018)",
 	"cr_019_no_rate_doubleclick": "Double-clicking a Rate cell no longer opens Price Assist (CR-019)",
+	# --- client meeting 2026-10-08 ("New Task" sheet), Batch A ------------------
+	# Rows 8, 24 and 27 are Property Setters and need no switch: they arrive with
+	# each site's own migrate. These four change code that both sites execute.
+	"oct08_r07_item_search": "Item picker: every typed word must match code/name/description; ordered by item code (rows 7 + 14)",
+	"oct08_r10_new_customer_button": "Create New Customer button only on an unsaved document (row 10)",
+	"oct08_r11_quotation_create": "Create > Sales Invoice / Delivery Note on a submitted Quotation (row 11)",
+	"oct08_r12_so_delivery_note": "A Sales Order prints as a Delivery Note when Print As says so (row 12)",
 }
 
 #: Reads as "every known switch is on". Meant for `yht-test`.

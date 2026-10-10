@@ -44,7 +44,13 @@ doctype_js = {
 		"public/js/create_customer.js",
 		"public/js/sales_return_delivery.js",
 	],
-	"Quotation": ["public/js/katc_print_buttons.js", "public/js/create_customer.js"],
+	# Row 11 (2026-10-08) — Create > Sales Invoice / Delivery Note on a submitted
+	# Quotation; the file guards itself behind `oct08_r11_quotation_create`.
+	"Quotation": [
+		"public/js/katc_print_buttons.js",
+		"public/js/create_customer.js",
+		"public/js/quotation_create.js",
+	],
 	"Purchase Invoice": "public/js/create_supplier.js",
 	# CR-021 — the Purchase Order print joins the two-button set once CR-004's
 	# consolidation lands; before that the table has no entry for it and nothing
@@ -97,6 +103,11 @@ override_whitelisted_methods = {
 	"erpnext.selling.doctype.sales_order.sales_order.make_sales_invoice": (
 		"yht_custom.sales_flow.make_sales_invoice_from_sales_order"
 	),
+	# Rows 7 + 14 (2026-10-08) — the Item picker. ERPNext names this method from
+	# its own JS on every transaction's item grid, so a `standard_queries` hook
+	# would never be consulted; overriding the whitelisted method reaches every
+	# caller. Calls straight through to ERPNext until `oct08_r07_item_search` is on.
+	"erpnext.controllers.queries.item_query": "yht_custom.item_search.item_query",
 }
 
 
