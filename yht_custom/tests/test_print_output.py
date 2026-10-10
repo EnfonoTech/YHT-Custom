@@ -79,14 +79,11 @@ class TestPrintFormatsRender(FrappeTestCase):
 		self.assertTrue(yht_currency(doc))
 
 	def test_the_defaults_point_at_our_formats(self):
-		expected = {
-			"Delivery Note": "YHT Delivery Note",
-			"Quotation": "YHT Quotation",
-			"Sales Order": "YHT Sales Order",
-			"Purchase Invoice": "YHT Purchase Invoice",
-			"Journal Entry": "YHT Journal Entry",
-		}
-		for doctype, print_format in expected.items():
+		"""The table itself is pinned in `test_katc_prints` (Sales Order → the KATC
+		router since 2026-10-10, sheet row 12); here: the site carries what it says."""
+		from yht_custom.setup import DEFAULT_PRINT_FORMATS
+
+		for doctype, print_format in DEFAULT_PRINT_FORMATS.items():
 			with self.subTest(doctype=doctype):
 				self.assertEqual(
 					frappe.db.get_value("DocType", doctype, "default_print_format"), print_format

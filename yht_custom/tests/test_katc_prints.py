@@ -2018,9 +2018,15 @@ class TestRegression(FrappeTestCase):
 				)
 
 	def test_no_katc_format_became_a_doctype_default(self):
+		"""Sales Order is the one exception since 2026-10-10: sheet row 12 needs the
+		printer icon to reach the `KATC Sales Order` router (see
+		`setup.DEFAULT_PRINT_FORMATS`). Every other doctype is still not re-defaulted."""
 		for doctype in BUTTON_DOCTYPES:
 			with self.subTest(doctype=doctype):
 				default = frappe.db.get_value("DocType", doctype, "default_print_format") or ""
+				if doctype == "Sales Order":
+					self.assertEqual(default, "KATC Sales Order")
+					continue
 				self.assertFalse(default.startswith("KATC"), f"{doctype} was re-defaulted to {default}")
 
 	def test_the_payment_assist_bank_account_contract_holds(self):

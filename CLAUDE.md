@@ -1106,7 +1106,9 @@ checked out ON the branch): rows 7+14 item search (`item_search.py`), 8 customer
 CR-013 repair (gotcha 112). Osaid's UAT round of 2026-10-10: rows 6–11, 14, 16 working; row 12 fixed on every print
 path (gotcha 120) and Sales Order now defaults to the KATC router; row 17's "Groq API key not configured" was the
 UAT copy lacking the key (copied server-side from live). Prod has the code (shared bench), every `oct08_*` switch
-off, prints byte-identical. See `docs/handoffs/handoff-20261010-*.md`.
+off, prints byte-identical. Rows 23/24/27 wait for `oct08_r23_invoice_first_dn_link` / `oct08_r24_prepayment_block` /
+`oct08_r27_list_filters` (held off live at the client's request); the live deploy list and the Q1 print-default
+consequences are in `docs/handoffs/handoff-20261010-batch-a-uat.md`.
 
 **Still outstanding:** 5.7 pricing (blocked on B9), 6.1 branded tax invoice + 6.9 ZATCA onboarding
 (blocked on CSR/OTP), 4.10 cancel rights (blocked on B8), Step 7.2–7.6 (needs the incumbent backup).
