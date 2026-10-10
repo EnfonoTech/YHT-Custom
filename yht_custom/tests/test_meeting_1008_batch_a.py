@@ -80,17 +80,20 @@ class TestItemSearch(FrappeTestCase):
 			("_T-R07-ELBOW-008", "ELBOW 90 DEG 1/4 INCH SS", "Stainless steel elbow, ninety degrees, quarter inch"),
 			("_T-R07-TEE-025", "TEE EQUAL 1 INCH SS", "Stainless steel equal tee, one inch"),
 		):
-			frappe.get_doc(
-				{
-					"doctype": "Item",
-					"item_code": code,
-					"item_name": name,
-					"description": description,
-					"item_group": group,
-					"stock_uom": uom,
-					"is_stock_item": 0,
-				}
-			).insert(ignore_permissions=True)
+			# `FrappeTestCase` rolls back once per CLASS (gotcha 50), so a fixture
+			# inserted in `setUp` is still there for the next test method.
+			if not frappe.db.exists("Item", code):
+				frappe.get_doc(
+					{
+						"doctype": "Item",
+						"item_code": code,
+						"item_name": name,
+						"description": description,
+						"item_group": group,
+						"stock_uom": uom,
+						"is_stock_item": 0,
+					}
+				).insert(ignore_permissions=True)
 			self.codes.append(code)
 
 	def _names(self, txt, filters=None):
