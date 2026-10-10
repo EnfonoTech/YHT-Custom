@@ -942,6 +942,24 @@ accountant: SI→`CN`, DN→`DRN`, PI→`DBN`, PR→`PRN`.
     nothing else, and redirect that stdout straight into a 0600 file on the Mac — never into a
     transcript.
 
+118. 🔴 **`override_whitelisted_methods` DOES NOT REACH THE LINK PICKER.** frappe 15.118 applies it in
+    exactly four places — `handler.execute_cmd` (a direct `/api/method/<name>` call), `api/v2`,
+    `model/mapper` (`open_mapped_doc` / `map_docs`) and `desk/treeview`. `link.js` POSTs
+    `frappe.desk.search.search_link` with `query=<name>`, and `search_widget` resolves that string
+    with a bare `frappe.get_attr` + `frappe.call`. Measured on `yht-test` 2026-10-10, hook registered,
+    switch on: "elbow 1" through `search_link` → 0 rows (upstream's whole-string LIKE), and the
+    dropdown showed only "Create a new Item" — the unit tests were green because they called the
+    function directly. The lever that works is client-side: `public/js/item_search.js` rewrites
+    `args.query` inside `ControlLink.prototype.set_custom_query`, the one place every Link control
+    builds its request. Keep the hook entry for direct API calls, and test the desk's path with
+    `search_link(..., query=...)`, not the function.
+119. 🔴 **A PRINT-HASH CHECK THAT PRINTS NOTHING IS A FALSE PASS.** The 2026-10-10 deploy ran the
+    before/after sha256 (gotcha 107) through a `bench console` heredoc with stderr discarded; it
+    produced two EMPTY files and `diff` said "PRINTS IDENTICAL (0 formats)". `scripts/print_hashes.py`
+    replaces it — plain `../env/bin/python` from `sites/`, last line `N <count>` — and the deploy
+    must assert the count (10 enabled `KATC *` formats on the live site) before trusting the diff.
+    Same lesson as gotcha 31: an empty result is an ERROR, never a pass.
+
 ## Deploy
 
 Repo: **`git@github-yht:EnfonoTech/YHT-Custom.git`** (private). The box has a dedicated read-only deploy key at
