@@ -22,7 +22,14 @@
     undefined falls back to the document's own answer. Behind the switch, because
     this file is shared disk and the live site must render what it rendered. -#}
 {%- set katc_as_delivery = (katc_as_delivery is defined and katc_as_delivery) or (doc.doctype == "Sales Order" and yht_feature("oct08_r12_so_delivery_note") and (doc.get("custom_print_as") or "") == "Delivery Note") -%}
-{%- set katc_heading = yht_print_heading(doc, "Delivery Note") if katc_as_delivery else yht_print_heading(doc) -%}
+{#- On a Sales Order, `Print As` IS the heading control (row 12's "checkboxes"), so it
+    outranks `select_print_heading` — which `set_print_heading` fills on every save and
+    the CR-005 backfill stamped onto every order, so it is never blank here and would
+    otherwise win every time: measured 2026-10-10, Print As = Quotation printed SALES
+    ORDER. Only with CR-004 on: with it off, `yht_print_heading` returns the legacy
+    title for whatever kind it is handed, and the live site must not move. -#}
+{%- set katc_print_as = (doc.get("custom_print_as") or "") if (doc.doctype == "Sales Order" and yht_feature("cr_004_print_heading")) else "" -%}
+{%- set katc_heading = yht_print_heading(doc, "Delivery Note") if katc_as_delivery else (yht_print_heading(doc, katc_print_as) if katc_print_as else yht_print_heading(doc)) -%}
 {%- set cur = yht_currency(doc) -%}
 <style>
 .print-format { font-family: Arial, "Noto Sans", sans-serif; font-size: 9pt; color: #000; }

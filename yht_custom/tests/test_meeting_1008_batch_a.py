@@ -406,6 +406,19 @@ class TestSalesOrderPrintsAsDeliveryNote(FrappeTestCase):
 		self.assertIn("PROFORMA INVOICE", html)
 		self.assertNotIn("DELIVERY NOTE", html)
 
+	def test_print_as_quotation_titles_the_page_quotation(self):
+		"""Measured 2026-10-10 through the printer icon: Print As = Quotation printed
+		SALES ORDER, because `select_print_heading` (auto-filled on every order) came
+		first in the title resolution. On a Sales Order, Print As is the control."""
+		if not features.enabled("cr_004_print_heading"):
+			self.skipTest("switch off on this site")
+		doc = self._submitted_sales_order()
+		doc.custom_print_as = "Quotation"
+		doc.select_print_heading = "Sales Order"
+		html = frappe.get_print("Sales Order", doc.name, "KATC Sales Order", doc=doc)
+		self.assertIn(">QUOTATION<", html)
+		self.assertNotIn("SALES ORDER", html)
+
 	def test_the_printer_icon_reaches_the_router(self):
 		"""The icon prints `meta.default_print_format`. `YHT Sales Order` is a builder
 		format that cannot read Print As — that is the path Osaid printed through."""
