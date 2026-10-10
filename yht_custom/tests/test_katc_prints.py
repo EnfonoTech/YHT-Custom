@@ -2220,8 +2220,13 @@ class TestArtefactFidelity(FrappeTestCase):
 			)
 		self.assertTrue(allowed)
 
-	def test_a_draft_document_renders_the_draft_titles(self):
-		"""Step 6 — `DRAFT DELIVERY NOTE` / `مسودة مذكرة تسليم`."""
+	def test_a_draft_document_prints_without_a_draft_title(self):
+		"""Client instruction, 2026-10-01: "if in draft stage it's showing draft in
+		print that also remove". A draft Delivery Note prints the SAME title as a
+		submitted one. Applied on the live site that morning and mirrored into the
+		format JSON (6cf0a13); until 2026-10-10 this test still asserted Step 6's
+		`DRAFT DELIVERY NOTE` / `مسودة مذكرة تسليم`, because nobody had run it since.
+		"""
 		name = artefact_or_any("Delivery Note")
 		if not name:
 			self.skipTest("no submitted Delivery Note")
@@ -2231,8 +2236,10 @@ class TestArtefactFidelity(FrappeTestCase):
 			"Delivery Note", name, print_format="KATC Delivery Note", doc=doc, no_letterhead=1
 		)
 		html = plain_arabic(html)
-		self.assertIn("DRAFT DELIVERY NOTE", html)
-		self.assertIn("مسودة مذكرة تسليم", html)
+		self.assertIn('<div class="katc-title">DELIVERY NOTE</div>', html)
+		self.assertIn("مذكرة تسليم", html)
+		self.assertNotIn("DRAFT DELIVERY NOTE", html)
+		self.assertNotIn("مسودة", html)
 
 
 # =================================================== degenerate documents
