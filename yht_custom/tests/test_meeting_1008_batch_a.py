@@ -41,6 +41,7 @@ class TestTheSwitchesAreRegistered(FrappeTestCase):
 		"oct08_r10_new_customer_button",
 		"oct08_r11_quotation_create",
 		"oct08_r12_so_delivery_note",
+		"oct08_r23_invoice_first_dn_link",
 	)
 
 	def test_every_switch_is_known(self):
@@ -354,6 +355,67 @@ class TestSalesOrderPrintsAsDeliveryNote(FrappeTestCase):
 		self.assertIn(">Rate<", html)
 		self.assertNotIn("DELIVERY NOTE", html)
 
+	# -- every path the client can print through, not only the router --------
+
+	def _shim(self, folder):
+		import json
+
+		return json.loads(_source(f"yht_custom/print_format/{folder}/{folder}.json"))["html"]
+
+	def _render_with(self, html, doc):
+		"""Render a shipped router/shim as the desk would, from an in-memory Print
+		Format: the Arabic, No LH and Proforma records are disabled on this site by
+		CR-004, and `frappe.get_print` refuses a disabled record (and commits)."""
+		from frappe.www.printview import get_rendered_template
+
+		print_format = frappe.get_doc(
+			{
+				"doctype": "Print Format",
+				"name": "_T-R12-shim",
+				"doc_type": "Sales Order",
+				"module": "Yht Custom",
+				"print_format_type": "Jinja",
+				"custom_format": 1,
+				"standard": "No",
+				"html": html,
+			}
+		)
+		return get_rendered_template(doc, print_format=print_format, no_letterhead=1)
+
+	def test_every_sales_order_format_honours_print_as_delivery_note(self):
+		"""Osaid, 2026-10-10: "the option is showing but when printing sales order as
+		a delivery note … the format is still showing sales order". The decision lived
+		in the KATC Sales Order router only; the Arabic and No LH shims (enabled on the
+		live site) and the Proforma router — the live site's DEFAULT for Sales Order —
+		never set it."""
+		if not features.enabled("oct08_r12_so_delivery_note"):
+			self.skipTest("switch off on this site")
+		doc = self._submitted_sales_order()
+		doc.custom_print_as = "Delivery Note"
+		for folder in ("katc_sales_order", "katc_sales_order_arabic", "katc_sales_order_no_lh", "katc_proforma_invoice"):
+			with self.subTest(format=folder):
+				html = self._render_with(self._shim(folder), doc)
+				self.assertIn("DELIVERY NOTE", html)
+				self.assertNotIn(">Rate<", html)
+				self.assertNotIn("Grand Total", html)
+
+	def test_the_proforma_router_still_prints_a_proforma_otherwise(self):
+		doc = self._submitted_sales_order()
+		doc.custom_print_as = "Sales Order"
+		html = self._render_with(self._shim("katc_proforma_invoice"), doc)
+		self.assertIn("PROFORMA INVOICE", html)
+		self.assertNotIn("DELIVERY NOTE", html)
+
+	def test_the_printer_icon_reaches_the_router(self):
+		"""The icon prints `meta.default_print_format`. `YHT Sales Order` is a builder
+		format that cannot read Print As — that is the path Osaid printed through."""
+		from yht_custom import setup
+
+		self.assertEqual(setup.DEFAULT_PRINT_FORMATS["Sales Order"], "KATC Sales Order")
+		setup.setup_default_print_formats()
+		frappe.clear_cache(doctype="Sales Order")
+		self.assertEqual(frappe.get_meta("Sales Order").default_print_format, "KATC Sales Order")
+
 
 # --------------------------------------------------------------------- row 16
 
@@ -405,6 +467,21 @@ class TestInvoiceFirstDeliveryNoteCarriesTheInvoiceNumber(FrappeTestCase):
 		dn.append("items", {"item_code": "x", "qty": 1, "against_sales_invoice": "KSIN-00-0002"})
 		set_order_numbers(dn)
 		self.assertEqual(dn.custom_sales_invoice_no, "KSIN-00-0001, KSIN-00-0002")
+
+	def test_the_fill_waits_for_its_switch(self):
+		"""Osaid, 2026-10-10: row 23 stays off the live site until discussed. The
+		FIELD arrives with the migrate; the fill is switched separately."""
+		from unittest import mock
+
+		from yht_custom import dn_links
+
+		dn = frappe.new_doc("Delivery Note")
+		dn.append("items", {"item_code": "x", "qty": 1, "against_sales_invoice": "KSIN-00-0002"})
+		with mock.patch.object(
+			dn_links.features, "enabled", side_effect=lambda name: name != dn_links.INVOICE_FIRST_FEATURE
+		):
+			dn_links.set_order_numbers(dn)
+		self.assertFalse(dn.custom_sales_invoice_no)
 
 
 # --------------------------------------------------------------------- row 24

@@ -1997,17 +1997,19 @@ class TestRegression(FrappeTestCase):
 		self.assertFalse(frappe.db.get_value("DocType", "Sales Invoice", "default_print_format"))
 
 	def test_the_defaults_still_point_at_the_yht_set(self):
-		# check 51
+		"""check 51 — with ONE exception since 2026-10-10: Sales Order defaults to the
+		KATC router, because sheet row 12 needs the printer icon to reach `Print As`
+		(see `setup.DEFAULT_PRINT_FORMATS`). Everything else is still not re-defaulted."""
 		self.assertEqual(
 			setup.DEFAULT_PRINT_FORMATS,
 			{
 				"Delivery Note": "YHT Delivery Note",
 				"Quotation": "YHT Quotation",
-				"Sales Order": "YHT Sales Order",
+				"Sales Order": "KATC Sales Order",
 				"Purchase Invoice": "YHT Purchase Invoice",
 				"Journal Entry": "YHT Journal Entry",
 			},
-			"DEFAULT_PRINT_FORMATS was changed — this change re-defaults nothing",
+			"DEFAULT_PRINT_FORMATS was changed — only Sales Order may differ from the YHT set",
 		)
 		for doctype, print_format in setup.DEFAULT_PRINT_FORMATS.items():
 			with self.subTest(doctype=doctype):

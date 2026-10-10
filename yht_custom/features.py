@@ -67,6 +67,10 @@ KNOWN = {
 	"oct08_r10_new_customer_button": "Create New Customer button only on an unsaved document (row 10)",
 	"oct08_r11_quotation_create": "Create > Sales Invoice / Delivery Note on a submitted Quotation (row 11)",
 	"oct08_r12_so_delivery_note": "A Sales Order prints as a Delivery Note when Print As says so (row 12)",
+	# Osaid, 2026-10-10: rows 20, 23, 24 and 27 stay off the live site until discussed.
+	# 20/24/27 are Property Setters and arrive only with a migrate; 23 is code on a
+	# shared event, so it gets a switch of its own.
+	"oct08_r23_invoice_first_dn_link": "A Delivery Note raised from a Sales Invoice carries the invoice number (row 23)",
 }
 
 #: Reads as "every known switch is on". Meant for `yht-test`.

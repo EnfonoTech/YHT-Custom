@@ -63,7 +63,8 @@ SUPERSEDED = {
 #:
 #: * the `YHT *` formats are **this app's own**, module `Yht Custom`
 #: * `setup.DEFAULT_PRINT_FORMATS` sets them as each doctype's
-#:   `default_print_format` on EVERY migrate
+#:   `default_print_format` on EVERY migrate (Sales Order excepted since
+#:   2026-10-10 — row 12 needs the printer icon to reach the KATC router)
 #:
 #: Disabling them left those doctypes defaulting to a format nobody could pick.
 #: Only the KATC variants above — which this project created, and which its own

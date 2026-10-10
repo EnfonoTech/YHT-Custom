@@ -53,6 +53,13 @@ correct at both ends.
 import frappe
 from frappe.utils import cstr
 
+from yht_custom import features
+
+#: Row 23 of the 2026-10-08 sheet. Switched separately from the field (which the
+#: migrate creates) because the client asked, on 2026-10-10, to hold this row back
+#: from the live site until it is discussed.
+INVOICE_FIRST_FEATURE = "oct08_r23_invoice_first_dn_link"
+
 FIELDS = ("custom_sales_order_no", "custom_sales_invoice_no")
 
 CUSTOM_FIELDS = [
@@ -145,7 +152,7 @@ def set_order_numbers(doc, method=None):
 	"""
 	if doc.meta.has_field("custom_sales_order_no"):
 		doc.custom_sales_order_no = _orders_for(doc)
-	if doc.meta.has_field("custom_sales_invoice_no"):
+	if doc.meta.has_field("custom_sales_invoice_no") and features.enabled(INVOICE_FIRST_FEATURE):
 		existing = [v for v in cstr(doc.get("custom_sales_invoice_no")).split(",") if v.strip() != "…"]
 		own = [row.get("against_sales_invoice") for row in doc.get("items") or []]
 		merged = _joined(existing + own)

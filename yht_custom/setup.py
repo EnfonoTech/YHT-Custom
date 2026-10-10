@@ -813,10 +813,19 @@ def ensure_module_profile():
 #: per-doctype, so one of the two has to be chosen manually; the general bill is
 #: the far more common document, and the expense format stays one click away in
 #: the print dialog.
+#:
+#: 🔴 SALES ORDER DEFAULTS TO THE KATC ROUTER SINCE 2026-10-10 (sheet row 12). The
+#: printer icon prints `meta.default_print_format`, and `YHT Sales Order` is a builder
+#: format that cannot read `Print As` — Osaid set Print As = Delivery Note, pressed
+#: print, and got a Sales Order. `KATC Sales Order` routes to the quotation, proforma
+#: or delivery layout from that field. The client had already made a KATC format
+#: (the Proforma) their live default by hand on 2026-09-24; after the CR-004 migrate
+#: disables that record, this is what replaces it. Quotation and Delivery Note stay
+#: on the YHT set until the client answers which pair is authoritative.
 DEFAULT_PRINT_FORMATS = {
 	"Delivery Note": "YHT Delivery Note",
 	"Quotation": "YHT Quotation",
-	"Sales Order": "YHT Sales Order",
+	"Sales Order": "KATC Sales Order",
 	"Purchase Invoice": "YHT Purchase Invoice",
 	"Journal Entry": "YHT Journal Entry",
 }

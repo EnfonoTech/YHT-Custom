@@ -960,6 +960,17 @@ accountant: SI→`CN`, DN→`DRN`, PI→`DBN`, PR→`PRN`.
     must assert the count (10 enabled `KATC *` formats on the live site) before trusting the diff.
     Same lesson as gotcha 31: an empty result is an ERROR, never a pass.
 
+120. 🔴 **A "PRINT AS" DECISION MADE IN ONE ROUTER IS INVISIBLE FROM EVERY OTHER PRINT PATH — AND THE
+    PRINTER ICON USES `meta.default_print_format`, NOT YOUR BUTTON.** Row 12 shipped with
+    `katc_as_delivery` set only inside the `KATC Sales Order` router. Osaid set Print As = Delivery
+    Note, pressed print, and got a Sales Order: on UAT the icon renders `YHT Sales Order` (a builder
+    format that cannot read the field), on the live site it renders `KATC Proforma Invoice` (yaser's
+    2026-09-24 Property Setter), and the Arabic / No LH shims are bare `{% include %}`s. Three of four
+    paths bypassed the feature while the one test rendered the fourth. Decide such a thing in the
+    SHARED TEMPLATE from `doc` itself, make the router the doctype default, and test every shipped
+    shim through `printview.get_rendered_template` with an in-memory Print Format — the disabled
+    records cannot be rendered through `frappe.get_print`, and it commits.
+
 ## Deploy
 
 Repo: **`git@github-yht:EnfonoTech/YHT-Custom.git`** (private). The box has a dedicated read-only deploy key at
@@ -1091,8 +1102,11 @@ Second round, also 2026-08-20:
 **2026-10-10 — meeting 2026-10-08 Batch A is on UAT** (branch `pipeline/meeting-1008-batch-a`, not merged; the bench is
 checked out ON the branch): rows 7+14 item search (`item_search.py`), 8 customer title display, 10 new-customer button,
 11 Quotation → SI/DN (`quotation_flow.py`), 12 SO prints as DN, 16 auto-translate off (`arabic_translation` 0.0.2),
-23 invoice-first DN link, 24 prepayment block, 27 list filters, plus the CR-013 repair (gotcha 112). Prod has the
-code (shared bench), every `oct08_*` switch off, prints byte-identical. See `docs/handoffs/handoff-20261010-*.md`.
+23 invoice-first DN link (own switch since Osaid's hold of 2026-10-10), 24 prepayment block, 27 list filters, plus the
+CR-013 repair (gotcha 112). Osaid's UAT round of 2026-10-10: rows 6–11, 14, 16 working; row 12 fixed on every print
+path (gotcha 120) and Sales Order now defaults to the KATC router; row 17's "Groq API key not configured" was the
+UAT copy lacking the key (copied server-side from live). Prod has the code (shared bench), every `oct08_*` switch
+off, prints byte-identical. See `docs/handoffs/handoff-20261010-*.md`.
 
 **Still outstanding:** 5.7 pricing (blocked on B9), 6.1 branded tax invoice + 6.9 ZATCA onboarding
 (blocked on CSR/OTP), 4.10 cancel rights (blocked on B8), Step 7.2–7.6 (needs the incumbent backup).
