@@ -343,12 +343,17 @@ class TestReturnStockRoute(FrappeTestCase):
 	def test_negation_runs_last_on_purchase_invoice(self):
 		"""expense_invoice.before_validate stamps qty = 1 on a blank row — a
 		POSITIVE 1, on a return. The flip has to come after it."""
+		# `frappe.get_hooks` merges EVERY installed app, in apps.txt order, and
+		# `zatca_vat_report` (installed on both sites, 2026-10-10 finding) appends
+		# its own cost-centre handler after ours. Only our own order is ours to
+		# assert: negation last among the yht_custom handlers.
 		events = frappe.get_hooks("doc_events")["Purchase Invoice"]["before_validate"]
-		self.assertEqual(events[-1], "yht_custom.return_flow.negate_return_quantities")
-		self.assertIn("yht_custom.expense_invoice.before_validate", events)
+		ours = [e for e in events if e.startswith("yht_custom.")]
+		self.assertEqual(ours[-1], "yht_custom.return_flow.negate_return_quantities")
+		self.assertIn("yht_custom.expense_invoice.before_validate", ours)
 		self.assertLess(
-			events.index("yht_custom.expense_invoice.before_validate"),
-			events.index("yht_custom.return_flow.negate_return_quantities"),
+			ours.index("yht_custom.expense_invoice.before_validate"),
+			ours.index("yht_custom.return_flow.negate_return_quantities"),
 		)
 
 	def test_every_return_capable_doctype_negates(self):
