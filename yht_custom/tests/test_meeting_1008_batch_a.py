@@ -520,6 +520,9 @@ class TestPrepaymentBlock(FrappeTestCase):
 		order = [f.fieldname for f in meta.fields]
 		self.assertLess(order.index("taxes_and_charges_section"), order.index("party_section"))
 		self.assertLess(order.index("custom_prepayment_invoice"), order.index("taxes_and_charges_section"))
+		# Everything else is still there — a declared prefix drops nothing.
+		self.assertIn("deductions_or_loss_section", order)
+		self.assertIn("subscription_section", order)
 
 	def test_both_halves_of_row_24_wait_for_one_switch(self):
 		"""Osaid, 2026-10-10: rows 20, 23, 24 and 27 stay off the live site until
@@ -534,9 +537,6 @@ class TestPrepaymentBlock(FrappeTestCase):
 			field_layout._apply_field_order(skipped)
 		self.assertEqual(field_layout.FIELD_ORDER_SWITCHES.get("Payment Entry"), "oct08_r24_prepayment_block")
 		self.assertTrue(any(s.startswith("Payment Entry: oct08_r24_prepayment_block") for s in skipped), skipped)
-		# Everything else is still there — a declared prefix drops nothing.
-		self.assertIn("deductions_or_loss_section", order)
-		self.assertIn("subscription_section", order)
 
 
 # --------------------------------------------------------------------- row 27
