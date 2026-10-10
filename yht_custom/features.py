@@ -71,6 +71,10 @@ KNOWN = {
 	# 20/24/27 are Property Setters and arrive only with a migrate; 23 is code on a
 	# shared event, so it gets a switch of its own.
 	"oct08_r23_invoice_first_dn_link": "A Delivery Note raised from a Sales Invoice carries the invoice number (row 23)",
+	# Rows 24 and 27 are Property Setters written by `after_migrate`; the switch is
+	# what lets a live migrate for rows 7–17 leave them out.
+	"oct08_r24_prepayment_block": "Payment Entry: prepayment tax sections collapsible, labelled, under the tick (row 24)",
+	"oct08_r27_list_filters": "Purchase Invoice list: Is Expense Invoice in the filter row (row 27)",
 }
 
 #: Reads as "every known switch is on". Meant for `yht-test`.

@@ -840,7 +840,14 @@ LIST_FILTER_FIELDS = {
 
 
 def setup_list_filters() -> dict:
-	"""Row 27 — put the listed Checks in the list view's filter row. Idempotent."""
+	"""Row 27 — put the listed Checks in the list view's filter row. Idempotent.
+
+	Behind `oct08_r27_list_filters` (Osaid, 2026-10-10: hold 20/23/24/27 off the
+	live site until discussed) — a migrate for rows 7–17 must not carry it."""
+	from yht_custom import features
+
+	if not features.enabled("oct08_r27_list_filters"):
+		return {"skipped": "oct08_r27_list_filters is off for this site"}
 	applied = {}
 	for doctype, fieldnames in LIST_FILTER_FIELDS.items():
 		if not frappe.db.exists("DocType", doctype):
@@ -873,7 +880,15 @@ PE_PREPAYMENT_SECTION_LABELS = {
 
 
 def setup_prepayment_block() -> dict:
-	"""Row 24 — collapsible, labelled prepayment tax sections. Idempotent."""
+	"""Row 24 — collapsible, labelled prepayment tax sections. Idempotent.
+
+	Behind `oct08_r24_prepayment_block`, like the field order it pairs with
+	(`field_layout.FIELD_ORDER_SWITCHES`): held off the live site at the client's
+	request of 2026-10-10."""
+	from yht_custom import features
+
+	if not features.enabled("oct08_r24_prepayment_block"):
+		return {"skipped": "oct08_r24_prepayment_block is off for this site"}
 	if not frappe.db.exists("DocType", "Payment Entry"):
 		return {}
 	meta = frappe.get_meta("Payment Entry")

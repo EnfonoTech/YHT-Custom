@@ -42,6 +42,8 @@ class TestTheSwitchesAreRegistered(FrappeTestCase):
 		"oct08_r11_quotation_create",
 		"oct08_r12_so_delivery_note",
 		"oct08_r23_invoice_first_dn_link",
+		"oct08_r24_prepayment_block",
+		"oct08_r27_list_filters",
 	)
 
 	def test_every_switch_is_known(self):
@@ -518,6 +520,20 @@ class TestPrepaymentBlock(FrappeTestCase):
 		order = [f.fieldname for f in meta.fields]
 		self.assertLess(order.index("taxes_and_charges_section"), order.index("party_section"))
 		self.assertLess(order.index("custom_prepayment_invoice"), order.index("taxes_and_charges_section"))
+
+	def test_both_halves_of_row_24_wait_for_one_switch(self):
+		"""Osaid, 2026-10-10: rows 20, 23, 24 and 27 stay off the live site until
+		discussed. A migrate for rows 7–17 must therefore leave these setters alone."""
+		from unittest import mock
+
+		off = {"oct08_r24_prepayment_block", "oct08_r27_list_filters"}
+		with mock.patch.object(features, "enabled", side_effect=lambda name: name not in off):
+			self.assertIn("skipped", form_layout.setup_prepayment_block())
+			self.assertIn("skipped", form_layout.setup_list_filters())
+			skipped = []
+			field_layout._apply_field_order(skipped)
+		self.assertEqual(field_layout.FIELD_ORDER_SWITCHES.get("Payment Entry"), "oct08_r24_prepayment_block")
+		self.assertTrue(any(s.startswith("Payment Entry: oct08_r24_prepayment_block") for s in skipped), skipped)
 		# Everything else is still there — a declared prefix drops nothing.
 		self.assertIn("deductions_or_loss_section", order)
 		self.assertIn("subscription_section", order)

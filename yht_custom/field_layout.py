@@ -164,6 +164,12 @@ STRUCTURAL_FIELDS = {
 	]
 }
 
+#: A declared order that is a client-sheet row of its own waits for that row's
+#: switch; `_apply_field_order` skips the doctype (and says so) while it is off.
+#: Row 24's Payment Entry order is half of a change whose other half is
+#: `form_layout.setup_prepayment_block`; both read the same switch.
+FIELD_ORDER_SWITCHES = {"Payment Entry": "oct08_r24_prepayment_block"}
+
 FIELD_ORDER = {
 	"Address": [
 		# --- first tab, LEFT column ------------------------------------------
@@ -529,9 +535,15 @@ def _apply_field_order(skipped: list) -> int:
 	* the result is a permutation of the stored order by construction, which is
 	  the invariant `apply_field_moves` refuses to write without
 	"""
+	from yht_custom import features
+
 	written = 0
 
 	for doctype, desired in FIELD_ORDER.items():
+		switch = FIELD_ORDER_SWITCHES.get(doctype)
+		if switch and not features.enabled(switch):
+			skipped.append(f"{doctype}: {switch} is off for this site")
+			continue
 		if not frappe.db.exists("DocType", doctype):
 			skipped.append(f"{doctype}: no such doctype")
 			continue
