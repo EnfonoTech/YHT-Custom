@@ -19,7 +19,7 @@ branch machinery is still built in full so adding branch #2 is a configuration c
 | Server | EFTSP-013 — `144.91.82.218` (ex-ALMashreq, Contabo EU) |
 | Bench | **`/home/v15/yht-bench`** — bench user `v15` |
 | Server-manager id | `efaa167b-8526-4fec-8912-7b2d4ad231c0` |
-| Apps | frappe 15.118.0 · erpnext 15.119.2 · ksa_compliance 0.61.4 · arabic_translation 0.0.1 · hrms 15.63.2 |
+| Apps | frappe 15.118.0 · erpnext 15.119.2 · ksa_compliance 0.61.4 · arabic_translation 0.0.2 (branch `new`) · hrms 15.63.2 · grey_theme 1.2.1 · **zatca_vat_report 0.0.3** (branch `purchase_split`, EnfonoTech — registers `doc_events` on six transaction doctypes, see gotcha 115) |
 | Company | `KATHOOM ALKHOBAR TRADING CO.` (`KATC`), SAR, VAT `311264592800003` |
 | Branch | `Kathoom Alkhobar`, prefix `KS` |
 
@@ -899,6 +899,49 @@ accountant: SI→`CN`, DN→`DRN`, PI→`DBN`, PR→`PRN`.
     order put District between Address Line 2 and Postal Code, and the pairs hoisted Postal Code · City
     · Country back above it, every migrate. A test asserts the two dicts never name the same doctype.
 
+112. 🔴 **A LIST COLUMN NEEDS BOTH LEVERS — `in_list_view` TO EXIST, `List View Settings` TO BE
+    SHOWN; AND THE STATUS COLUMN IS THE INDICATOR, NOT THE FIELD.** `list_view.js::setup_columns`
+    builds its candidates from the `in_list_view` docfields plus one Status *indicator* column, and
+    `reorder_listview_fields` walks `List View Settings.fields` keeping the candidates it names — it
+    reorders and drops, it never adds. A settings row naming `posting_date` on a doctype whose
+    `posting_date` is not `in_list_view` does nothing, and `{"fieldname": "status"}` matches nothing:
+    the indicator answers only to `{"type": "Status", "fieldname": "status_field"}`, which is what the
+    desk itself writes when a user drags that column. Measured headless on `yht-test` 2026-10-10: the
+    settings-only version of CR-013 rendered Customer Name · Grand Total · ID with Date and Status
+    gone, because Grand Total was the one field already `in_list_view`. That was the "CR-013 not
+    rendering" of the deploy script. `in_list_view` is what Customize Form's own tick writes; it is
+    not a hack.
+113. ⚠️ **AN EMPTY LIST IS USUALLY A SAVED FILTER, NOT A BUG.** Frappe restores each user's last
+    filters from `__UserSettings` (nested under the view key, see
+    `patches/clear_empty_list_filters.py`). On `yht-test` the Administrator's Delivery Note and
+    Payment Entry views carried `owner = manzoor@yaserhameed.co` from April and showed **0 of 0** rows
+    over 567 current-year notes. Read `cur_list.get_filters_for_args()` (or the filter chips) before
+    suspecting a permission query, and clear the row for that user and doctype rather than
+    "fixing" the list. `frappe.db.table_exists("__UserSettings")` is False — it prepends `tab`.
+114. ⚠️ **`FrappeTestCase` ROLLS BACK PER CLASS, SO A FIXTURE INSERTED IN `setUp` IS STILL THERE FOR
+    THE NEXT METHOD** (gotcha 50, met again). Three items inserted in `setUp` raised
+    `DuplicateEntryError` from the second test on — six errors from one line. Insert only when
+    absent, or build the fixture in `setUpClass`. And give test fixtures a token no real row has
+    (`ZQXTEST`): a search for "elbow ss 1" matches hundreds of real items that sort before `_T-…`,
+    so a 50-row page never reached the fixture and the assertion failed for a reason unrelated to
+    the code.
+115. ⚠️ **`frappe.get_hooks("doc_events")` MERGES EVERY INSTALLED APP, IN `apps.txt` ORDER.**
+    `zatca_vat_report` — installed on both sites and absent from this file until 2026-10-10 —
+    appends `cost_center.set_missing_cost_center` to `before_validate` on six doctypes AFTER ours,
+    so "our negation handler is last" was false for Purchase Invoice through no change of ours.
+    A test can only promise the order of the `yht_custom.` handlers. Check `sites/apps.txt` and
+    `bench list-apps` when a hook-order test fails after someone else's install.
+116. ⚠️ **A SOURCE-READING TEST TAKES THE FIRST MATCH.** `test_the_budget_is_derived_from_the_column_width`
+    reads the first `katc-ar-col … width:N%` in a template as the Arabic wrap budget. A second
+    header variant placed ABOVE the priced one (row 12's delivery columns) made the test read 38
+    where the helper uses 34. Add variants below the canonical block, and say so in the template.
+117. ⚠️ **`Session(user=…, resume=False)` NEEDS `frappe.init(site, sites_path=<ABSOLUTE>)` OR CWD =
+    `sites/`.** Initialised from the bench root with a relative `sites_path`, the site logger resolves
+    to `<bench>/<site>/logs/…` and `frappe.connect()` dies on `FileNotFoundError` before any DB
+    call. Mint evidence sessions from `sites/` with `../env/bin/python`, print the sid to stdout and
+    nothing else, and redirect that stdout straight into a 0600 file on the Mac — never into a
+    transcript.
+
 ## Deploy
 
 Repo: **`git@github-yht:EnfonoTech/YHT-Custom.git`** (private). The box has a dedicated read-only deploy key at
@@ -1026,6 +1069,12 @@ Second round, also 2026-08-20:
 | **7.1 import gate** | **done** — `Import Gate` + `Stock Valuation Snapshot` reports, 11 checks |
 | Address worklist | **done** — `Address Data Quality` + a Data-Import-ready CSV |
 | **client prints & HTML letterhead** | **in review, NOT done** — `KATC Letterhead` (HTML) + seven `KATC *` Jinja formats + the incumbent's toolbar buttons on all four selling doctypes. Sits BESIDE the `YHT *` set: `DEFAULT_PRINT_FORMATS` unchanged, nothing deleted, nothing re-defaulted. Held at *in review* until the wkhtmltopdf fidelity pass against `.pipeline/client-artefacts/*.pdf` is signed off — the row moves to **done** at DELIVER, not before |
+
+**2026-10-10 — meeting 2026-10-08 Batch A is on UAT** (branch `pipeline/meeting-1008-batch-a`, not merged; the bench is
+checked out ON the branch): rows 7+14 item search (`item_search.py`), 8 customer title display, 10 new-customer button,
+11 Quotation → SI/DN (`quotation_flow.py`), 12 SO prints as DN, 16 auto-translate off (`arabic_translation` 0.0.2),
+23 invoice-first DN link, 24 prepayment block, 27 list filters, plus the CR-013 repair (gotcha 112). Prod has the
+code (shared bench), every `oct08_*` switch off, prints byte-identical. See `docs/handoffs/handoff-20261010-*.md`.
 
 **Still outstanding:** 5.7 pricing (blocked on B9), 6.1 branded tax invoice + 6.9 ZATCA onboarding
 (blocked on CSR/OTP), 4.10 cancel rights (blocked on B8), Step 7.2–7.6 (needs the incumbent backup).
