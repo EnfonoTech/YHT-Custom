@@ -31,6 +31,7 @@ same source data through the same pipeline and would reintroduce it.
 """
 
 import frappe
+from frappe.utils import cint
 
 #: Chosen by coverage at run time, not hardcoded, so the re-import lands on
 #: whatever price list actually carries the rates.
@@ -40,6 +41,25 @@ MIN_COVERAGE = 50
 def setup_site_defaults():
 	_clear_dangling_role_links()
 	_set_price_list_defaults()
+	_disable_arabic_auto_translate()
+
+
+def _disable_arabic_auto_translate():
+	"""Row 16 (2026-10-08): no machine-translated Arabic on a Customer or Address save.
+
+	`arabic_translation` fills every blank Arabic field on `before_save`, and that
+	text goes straight into the ZATCA buyer block. The off switch is that app's
+	own setting (added for this); here it is only turned ON, once, per site, so a
+	migrate on the live site carries the client's decision with it. The manual
+	Translate buttons are not affected — only the silent fill.
+	"""
+	if not frappe.db.exists("DocType", "Arabic Translation Key"):
+		return
+	if not frappe.get_meta("Arabic Translation Key").has_field("disable_auto_translate"):
+		# The app on this bench predates the switch; nothing to turn on yet.
+		return
+	if not cint(frappe.db.get_single_value("Arabic Translation Key", "disable_auto_translate")):
+		frappe.db.set_single_value("Arabic Translation Key", "disable_auto_translate", 1)
 
 
 def _clear_dangling_role_links():
