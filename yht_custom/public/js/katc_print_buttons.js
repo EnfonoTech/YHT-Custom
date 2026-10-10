@@ -69,6 +69,9 @@ const KATC_LETTER_HEAD = "KATC Letterhead";
 // client's live site the moment it is pulled, and `KATC Quotation Arabic` and the
 // rest are only disabled on a site that has run the migrate — so where the switch
 // is off, the four buttons must keep naming formats that still exist.
+// 🔴 "Print Without LH" is Delivery Note ONLY, by client instruction — every other
+// doctype's no-letterhead format record stays on file (so re-adding the button later
+// is a one-line revert) but is no longer reachable from the toolbar.
 const KATC_BUTTONS_LEGACY = {
 	"Delivery Note": [
 		{ label: __("Print PDF"), format: "KATC Delivery Note", no_letterhead: 0, letterhead: KATC_LETTER_HEAD },
@@ -76,19 +79,16 @@ const KATC_BUTTONS_LEGACY = {
 	],
 	"Sales Invoice": [
 		{ label: __("Print PDF"), format: "KATC Tax Invoice", no_letterhead: 0, letterhead: KATC_LETTER_HEAD },
-		{ label: __("Print Without LH"), format: "KATC Tax Invoice", no_letterhead: 1 },
 	],
 	"Sales Order": [
 		{ label: __("Print PDF"), format: "KATC Sales Order", no_letterhead: 0, letterhead: KATC_LETTER_HEAD },
 		{ label: __("Print with Arabic"), format: "KATC Sales Order Arabic", no_letterhead: 0, letterhead: KATC_LETTER_HEAD },
 		{ label: __("Proforma Invoice"), format: "KATC Proforma Invoice", no_letterhead: 0, letterhead: KATC_LETTER_HEAD },
-		{ label: __("Print Without LH"), format: "KATC Sales Order No LH", no_letterhead: 1 },
 	],
 	Quotation: [
 		{ label: __("Print PDF"), format: "KATC Quotation", no_letterhead: 0, letterhead: KATC_LETTER_HEAD },
 		{ label: __("Print with Arabic"), format: "KATC Quotation Arabic", no_letterhead: 0, letterhead: KATC_LETTER_HEAD },
 		{ label: __("Proforma Invoice"), format: "KATC Quotation Proforma", no_letterhead: 0, letterhead: KATC_LETTER_HEAD },
-		{ label: __("Print Without LH"), format: "KATC Quotation No LH", no_letterhead: 1 },
 	],
 };
 
@@ -102,12 +102,18 @@ const KATC_FORMAT = {
 	"Purchase Order": "KATC Purchase Order",
 };
 
+// Same instruction applies once CR-004 is live: Delivery Note keeps both buttons,
+// everything else (Quotation, Sales Order, Sales Invoice, Purchase Order) gets Print only.
 const KATC_BUTTONS_CONSOLIDATED = {};
 Object.keys(KATC_FORMAT).forEach((doctype) => {
 	KATC_BUTTONS_CONSOLIDATED[doctype] = [
 		{ label: __("Print"), format: KATC_FORMAT[doctype], no_letterhead: 0, letterhead: KATC_LETTER_HEAD },
-		{ label: __("Print Without LH"), format: KATC_FORMAT[doctype], no_letterhead: 1 },
 	];
+	if (doctype === "Delivery Note") {
+		KATC_BUTTONS_CONSOLIDATED[doctype].push(
+			{ label: __("Print Without LH"), format: KATC_FORMAT[doctype], no_letterhead: 1 }
+		);
+	}
 });
 
 function katc_consolidated() {

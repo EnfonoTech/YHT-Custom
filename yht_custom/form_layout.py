@@ -749,12 +749,28 @@ def _combine_depends_on(existing, flag):
 	expression. Not built: these three are Section Breaks whose shipped
 	`depends_on` is empty in v15.119.2, so there is nothing to lose yet, and a
 	re-check belongs in the next ERPNext upgrade rather than here.
+
+	🔴 A BARE "0" OR "1" IS NOT A FIELDNAME — IT IS FRAPPE'S OWN SHORTHAND FOR AN
+	UNCONDITIONAL always-false / always-true `depends_on`. The final branch below
+	used to assume any non-"eval:" existing value was a bare fieldname and
+	prefixed it with `doc.` unconditionally. On production, `saheed@kathoomcompany.com`
+	edited one of these three Property Setters through Customize Form and the
+	stored value came back as the literal string `"0"` — plausibly the UI's own
+	"cleared" state for a Code-type property, not a deliberate edit. The next
+	`after_migrate` then produced `eval:doc.0 && doc.custom_prepayment_invoice`,
+	which is not valid JS at all: `doc.0` cannot parse. Frappe's own "Invalid
+	\"depends_on\" expression" dialog fired on every single new Payment Entry
+	from that migrate onward (five days, until this was traced to here).
+	A bare digit string is already a complete boolean literal and must never be
+	treated as `doc.<name>`.
 	"""
 	existing = (existing or "").strip()
 	if not existing:
 		return f"eval:doc.{flag}"
 	if existing.startswith("eval:"):
 		return f"eval:({existing[len('eval:') :].strip()}) && doc.{flag}"
+	if existing.lstrip("-").isdigit():
+		return f"eval:({existing}) && doc.{flag}"
 	return f"eval:doc.{existing} && doc.{flag}"
 
 

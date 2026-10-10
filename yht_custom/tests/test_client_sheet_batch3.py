@@ -2444,6 +2444,61 @@ class TestItem33PaymentEntryTaxBlock(FrappeTestCase):
 		self.assertIsNotNone(field, f"Payment Entry.{PREPAYMENT_FLAG} does not exist")
 		self.assertFalse(field.hidden, "the prepayment flag is hidden — the escape hatch is dead")
 
+
+class TestCombineDependsOnNeverProducesInvalidJs(FrappeTestCase):
+	"""Regression for a real production incident, not a hypothetical.
+
+	`saheed@kathoomcompany.com` edited `Payment Entry-section_break_60-depends_on`
+	through Customize Form on 2026-09-18 and it came back as the literal string
+	`"0"` — plausibly the UI's own "cleared" state for a Code-type property, not a
+	deliberate edit. `_combine_depends_on` treated that "0" as a bare fieldname and
+	produced `eval:doc.0 && doc.custom_prepayment_invoice`: `doc.0` does not parse
+	as JS at all. Every new Payment Entry on production threw Frappe's own
+	"Invalid \"depends_on\" expression" dialog — eleven times, once per gated
+	field read at form-open — from the next `after_migrate` (2026-09-26) until
+	this was traced here and fixed, five days later.
+
+	`test_the_gate_is_combined_with_a_shipped_depends_on_not_stacked_twice` above
+	would NOT have caught this: it asserts `PREPAYMENT_FLAG` appears exactly once
+	as a SUBSTRING of the stored value, and `"eval:doc.0 && doc.custom_prepayment_invoice"`
+	satisfies that happily. Only actually trying to combine a literal catches it.
+	"""
+
+	def test_a_bare_zero_combines_as_a_literal_not_a_fieldname(self):
+		combine = _attr(form_layout, "_combine_depends_on")
+		self.assertEqual(combine("0", PREPAYMENT_FLAG), f"eval:(0) && doc.{PREPAYMENT_FLAG}")
+
+	def test_a_bare_one_combines_as_a_literal_not_a_fieldname(self):
+		combine = _attr(form_layout, "_combine_depends_on")
+		self.assertEqual(combine("1", PREPAYMENT_FLAG), f"eval:(1) && doc.{PREPAYMENT_FLAG}")
+
+	def test_neither_literal_ever_produces_the_unparseable_doc_dot_digit_shape(self):
+		combine = _attr(form_layout, "_combine_depends_on")
+		for literal in ("0", "1"):
+			with self.subTest(literal=literal):
+				self.assertNotIn(f"doc.{literal} ", combine(literal, PREPAYMENT_FLAG))
+
+	def test_a_genuine_bare_fieldname_is_still_combined_the_old_way(self):
+		"""The fix must not regress the case it was already handling correctly."""
+		combine = _attr(form_layout, "_combine_depends_on")
+		self.assertEqual(
+			combine("some_other_flag", PREPAYMENT_FLAG),
+			f"eval:doc.some_other_flag && doc.{PREPAYMENT_FLAG}",
+		)
+
+	def test_an_eval_expression_is_still_combined_the_old_way(self):
+		combine = _attr(form_layout, "_combine_depends_on")
+		self.assertEqual(
+			combine("eval:doc.foo", PREPAYMENT_FLAG),
+			f"eval:(doc.foo) && doc.{PREPAYMENT_FLAG}",
+		)
+
+	def test_blank_is_still_combined_the_old_way(self):
+		combine = _attr(form_layout, "_combine_depends_on")
+		for blank in ("", None):
+			with self.subTest(blank=blank):
+				self.assertEqual(combine(blank, PREPAYMENT_FLAG), f"eval:doc.{PREPAYMENT_FLAG}")
+
 	def test_the_mandatory_rule_is_left_exactly_as_it_was(self):
 		"""Gate Q5: `zatca_vat_report` IS installed and WILL revert anything we
 		blank. `mandatory_depends_on` is ZATCA-adjacent and belongs to a client

@@ -1880,29 +1880,22 @@ class TestButtonsAndWiring(FrappeTestCase):
 		Delivery Note. Those last two get no Arabic button because both already print
 		the Arabic item name inside the item cell — a column would print it twice.
 
-		Eight letterhead= paths and four no_letterhead=1, and the two sets are disjoint
-		by construction: the letterhead is now the BUTTON's job for every doctype, since
-		the shared templates render one whenever they are handed one.
+		Eight letterhead= paths and ONE no_letterhead=1 — "Print Without LH" is
+		Delivery Note only, by client instruction (checked yourself — do not
+		reintroduce the other three without asking first).
 		"""
 		specs = button_specs(js_source())
-		# Four on Quotation and Sales Order (Print / With Arabic / Proforma / Without
-		# LH), two on Sales Invoice and Delivery Note — those two already print the
-		# Arabic name inline, so a column would duplicate it and they get no Arabic
-		# button.
-		self.assertEqual(len(specs), 12, "twelve buttons across the four doctypes")
+		# Three on Quotation and Sales Order (Print / With Arabic / Proforma), one on
+		# Sales Invoice, two on Delivery Note (it alone keeps Print Without LH).
+		self.assertEqual(len(specs), 9, "nine buttons across the four doctypes")
 
 		without = [s for s in specs if s["no_letterhead"] == "1"]
 		self.assertEqual(
 			{s["format"] for s in without},
-			{
-				"KATC Delivery Note",
-				"KATC Tax Invoice",
-				"KATC Sales Order No LH",
-				"KATC Quotation No LH",
-			},
-			"no_letterhead=1 belongs on exactly the four Print Without LH paths",
+			{"KATC Delivery Note"},
+			"no_letterhead=1 belongs on Delivery Note only",
 		)
-		self.assertEqual(len(without), 4)
+		self.assertEqual(len(without), 1)
 		for spec in without:
 			with self.subTest(print_format=spec["format"]):
 				self.assertIsNone(
