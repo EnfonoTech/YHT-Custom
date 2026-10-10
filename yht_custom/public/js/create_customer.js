@@ -44,12 +44,24 @@ yht.create_customer.add_button = function (frm, opts) {
 	opts = opts || {};
 	const field = opts.customerField || "customer";
 
-	if (frm.doc.docstatus !== 0) return;
 	if (!frm.fields_dict[field]) return;
 
 	const $wrapper = frm.fields_dict[field].$wrapper;
+	const $existing = $wrapper.parent().find(".yht-create-customer-btn");
+
+	// Row 10 (2026-10-08): the button belongs to a NEW document only. Once it is
+	// saved — draft or submitted — the party is decided and the button goes, and
+	// that includes the one this same form rendered before the save: the form
+	// object survives a save, so refresh has to REMOVE it, not merely skip adding
+	// another. Behind a switch because this file is served to both sites from one
+	// app directory; off, the previous rule (gone only on submit) still applies.
+	const gone = yht_r10_on() ? !frm.is_new() : frm.doc.docstatus !== 0;
+	if (gone) {
+		$existing.remove();
+		return;
+	}
 	// refresh fires repeatedly; without this the buttons stack up down the form.
-	if ($wrapper.parent().find(".yht-create-customer-btn").length) return;
+	if ($existing.length) return;
 
 	const $btn = $(
 		`<button type="button" class="btn btn-sm btn-secondary yht-create-customer-btn" style="margin-bottom: 5px;">
@@ -62,6 +74,10 @@ yht.create_customer.add_button = function (frm, opts) {
 	});
 	$wrapper.before($btn);
 };
+
+function yht_r10_on() {
+	return ((frappe.boot && frappe.boot.yht_features) || []).includes("oct08_r10_new_customer_button");
+}
 
 function open_dialog(frm, customerField) {
 	frappe.call({
