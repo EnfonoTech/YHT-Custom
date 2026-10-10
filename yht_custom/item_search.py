@@ -17,11 +17,18 @@ Two complaints, one query:
   as one `LIKE '%txt%'`, so `elbow 90 1` finds nothing. Here every word must
   match somewhere in the code, the name or the description, in any order.
 
-Registered through `override_whitelisted_methods` — the only lever that reaches
-every caller. ERPNext's own JS names `erpnext.controllers.queries.item_query` on
-the item grid of every transaction, so a `standard_queries` hook would never be
-consulted there. Until `oct08_r07_item_search` is on for the site the call goes
-straight through to ERPNext, so the live site keeps upstream behaviour.
+🔴 HOW A CALL GETS HERE — two levers, and the first one was believed to be
+enough. ERPNext's own JS names `erpnext.controllers.queries.item_query` on the
+item grid of every transaction, so a `standard_queries` hook would never be
+consulted. `hooks.override_whitelisted_methods` maps that name here, but frappe
+15.118 honours that hook only in `handler.execute_cmd`, `api/v2`, `model/mapper`
+and `desk/treeview` — `desk/search.py`, the picker's path, resolves the name
+with a bare `frappe.get_attr`. Measured on yht-test 2026-10-10: with the hook
+registered, "elbow 1" through `search_link` still returned 0 rows. So
+`public/js/item_search.js` rewrites the query name inside
+`ControlLink.set_custom_query`, and the hook stays for direct API calls.
+Until `oct08_r07_item_search` is on for the site both levers call straight
+through to ERPNext, so the live site keeps upstream behaviour.
 
 Kept from upstream on purpose, because callers rely on it: the `filters`
 contract (Party Specific Item rules, `fcond` / `mcond`, `has_variants = 0`,

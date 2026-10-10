@@ -11,6 +11,7 @@ Runs on `yht-test`, where `yht_features` is `["all"]`, so every switch is on;
 the one test that needs a switch OFF monkeypatches `features.enabled`.
 """
 
+import json
 import pathlib
 
 import frappe
@@ -52,6 +53,7 @@ class TestTheSwitchesAreRegistered(FrappeTestCase):
 		pairs = (
 			("public/js/create_customer.js", "oct08_r10_new_customer_button"),
 			("public/js/quotation_create.js", "oct08_r11_quotation_create"),
+			("public/js/item_search.js", "oct08_r07_item_search"),
 		)
 		for path, name in pairs:
 			with self.subTest(file=path):
@@ -66,6 +68,49 @@ class TestTheSwitchesAreRegistered(FrappeTestCase):
 
 
 # ------------------------------------------------------------ rows 7 and 14
+
+
+class TestTheClientRewritesThePickerQuery(FrappeTestCase):
+	"""`item_search.js` is the lever that actually reaches the picker (gotcha 118)."""
+
+	def test_the_script_is_included_and_names_both_methods(self):
+		src = _source("public/js/item_search.js")
+		for needle in (
+			'"erpnext.controllers.queries.item_query"',
+			'"yht_custom.item_search.item_query"',
+			"set_custom_query",
+			f'"{ITEM_SEARCH_FEATURE}"',
+		):
+			with self.subTest(needle=needle):
+				self.assertIn(needle, src)
+
+		from yht_custom import hooks
+
+		self.assertTrue(
+			any(path.startswith("/assets/yht_custom/js/item_search.js?v=") for path in hooks.app_include_js),
+			"item_search.js is not in app_include_js",
+		)
+
+	def test_the_hook_stays_for_direct_api_calls(self):
+		from yht_custom import hooks
+
+		self.assertEqual(
+			hooks.override_whitelisted_methods["erpnext.controllers.queries.item_query"],
+			"yht_custom.item_search.item_query",
+		)
+
+	def test_frappe_still_builds_the_request_through_set_custom_query(self):
+		"""The hook point is frappe's, not ours. If an upgrade renames it the
+		rewrite stops silently and every picker is upstream again."""
+		link_js = pathlib.Path(
+			frappe.get_app_path("frappe", "public", "js", "frappe", "form", "controls", "link.js")
+		).read_text()
+		self.assertIn("set_custom_query(args) {", link_js)
+		self.assertLess(
+			link_js.index("me.set_custom_query(args)"),
+			link_js.index('method: "frappe.desk.search.search_link"'),
+			"set_custom_query no longer runs before the search_link call",
+		)
 
 
 class TestItemSearch(FrappeTestCase):
@@ -107,7 +152,37 @@ class TestItemSearch(FrappeTestCase):
 		# Same words, different order — same answer.
 		self.assertEqual([n for n in self._names("1 inch ss elbow zqxtest") if n.startswith("_T-R07")], found)
 		# A word that matches nothing on the row excludes it, however many others hit.
-		self.assertEqual([n for n in self._names("zqxtest elbow ss tee") if n.startswith("_T-R07")], [])
+		# (Not "tee": the match is a substring, and "sTEEl" is in every description.)
+		self.assertEqual([n for n in self._names("zqxtest elbow ss valve") if n.startswith("_T-R07")], [])
+
+	def _search_link(self, query, txt):
+		"""The desk's own path — `link.js` → `search_link` → `search_widget` →
+		`frappe.call(query, …)`, with the kwargs 15.118 adds on top of upstream's
+		positional contract."""
+		from frappe.desk.search import search_link
+
+		rows = search_link(
+			"Item",
+			txt,
+			query=query,
+			filters=json.dumps({"has_variants": 0}),
+			page_length=50,
+			reference_doctype="Sales Invoice Item",
+			ignore_user_permissions=False,
+		)
+		return [r["value"] for r in rows if r["value"].startswith("_T-R07")]
+
+	def test_the_picker_reaches_the_query_through_search_link(self):
+		found = self._search_link("yht_custom.item_search.item_query", "zqxtest elbow ss 1 inch")
+		self.assertEqual(found, ["_T-R07-ELBOW-008", "_T-R07-ELBOW-025"])
+
+	def test_search_link_does_not_honour_the_server_override(self):
+		"""Why `public/js/item_search.js` exists. `hooks.override_whitelisted_methods`
+		maps upstream's name to ours, and the picker's path ignores it — upstream's
+		whole-string LIKE finds no fixture. If this ever FAILS, frappe has started
+		honouring the hook in `desk/search.py` and the client rewrite can go."""
+		found = self._search_link("erpnext.controllers.queries.item_query", "zqxtest elbow ss 1 inch")
+		self.assertEqual(found, [])
 
 	def test_a_word_may_live_in_the_description_only(self):
 		found = [n for n in self._names("zqxtest ninety quarter") if n.startswith("_T-R07")]

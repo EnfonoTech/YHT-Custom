@@ -22,6 +22,8 @@ app_include_js = [
 	"/assets/yht_custom/js/rate_lock.js?v=2",
 	"/assets/yht_custom/js/grid_search_width.js?v=1",
 	"/assets/yht_custom/js/branch_warehouse.js?v=1",
+	# Rows 7 + 14 — rewrites the Item picker's query name; see the file header.
+	"/assets/yht_custom/js/item_search.js?v=1",
 ]
 app_include_css = "/assets/yht_custom/css/yht_custom.css?v=8"
 
@@ -103,10 +105,13 @@ override_whitelisted_methods = {
 	"erpnext.selling.doctype.sales_order.sales_order.make_sales_invoice": (
 		"yht_custom.sales_flow.make_sales_invoice_from_sales_order"
 	),
-	# Rows 7 + 14 (2026-10-08) — the Item picker. ERPNext names this method from
-	# its own JS on every transaction's item grid, so a `standard_queries` hook
-	# would never be consulted; overriding the whitelisted method reaches every
-	# caller. Calls straight through to ERPNext until `oct08_r07_item_search` is on.
+	# Rows 7 + 14 (2026-10-08) — the Item picker. 🔴 THIS ENTRY DOES NOT REACH THE
+	# PICKER. frappe honours `override_whitelisted_methods` in `handler.execute_cmd`,
+	# `api/v2`, `model/mapper` and `desk/treeview` — and NOT in `desk/search.py`,
+	# which is what `link.js` calls. It covers a direct `/api/method/…item_query`
+	# call only; the picker is redirected client-side by `public/js/item_search.js`
+	# (gotcha 118). Both call straight through to ERPNext until
+	# `oct08_r07_item_search` is on.
 	"erpnext.controllers.queries.item_query": "yht_custom.item_search.item_query",
 }
 
