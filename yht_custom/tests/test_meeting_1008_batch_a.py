@@ -13,6 +13,7 @@ the one test that needs a switch OFF monkeypatches `features.enabled`.
 
 import json
 import pathlib
+from unittest import mock
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
