@@ -19,7 +19,7 @@ branch machinery is still built in full so adding branch #2 is a configuration c
 | Server | EFTSP-013 — `144.91.82.218` (ex-ALMashreq, Contabo EU) |
 | Bench | **`/home/v15/yht-bench`** — bench user `v15` |
 | Server-manager id | `efaa167b-8526-4fec-8912-7b2d4ad231c0` |
-| Apps | frappe 15.118.0 · erpnext 15.119.2 · ksa_compliance 0.61.4 · arabic_translation 0.0.2 (branch `new`) · hrms 15.63.2 · grey_theme 1.2.1 · **zatca_vat_report 0.0.3** (branch `purchase_split`, EnfonoTech — registers `doc_events` on six transaction doctypes, see gotcha 115) |
+| Apps | frappe 15.118.0 · erpnext 15.119.2 · ksa_compliance 0.61.4 · arabic_translation 0.0.2 (branch `new`) · hrms 15.63.2 · grey_theme 1.2.1 · **zatca_vat_report 0.0.3** (branch `purchase_split`, EnfonoTech — registers `doc_events` on six transaction doctypes, see gotcha 115) · **print_designer 1.6.7** (frappe/print_designer `main` @ `7beaad2`, both sites since 2026-10-11, see gotcha 121; chromium at `/home/v15/yht-bench/chromium/`) |
 | Company | `KATHOOM ALKHOBAR TRADING CO.` (`KATC`), SAR, VAT `311264592800003` |
 | Branch | `Kathoom Alkhobar`, prefix `KS` |
 
@@ -970,6 +970,19 @@ accountant: SI→`CN`, DN→`DRN`, PI→`DBN`, PR→`PRN`.
     SHARED TEMPLATE from `doc` itself, make the router the doctype default, and test every shipped
     shim through `printview.get_rendered_template` with an in-memory Print Format — the disabled
     records cannot be rendered through `frappe.get_print`, and it commits.
+
+121. 🔴 **INSTALLING AN APP ON THIS BENCH: PIP-INSTALL, BUILD, RELOAD THE WORKERS, *THEN* `install-app --force`.**
+    Three things bit on 2026-10-11 with `print_designer`: (1) a process cannot import a package that was
+    pip-installed after it started, and `print_designer` registers `before_request` and `jinja` hooks — so
+    `install-app` on a site served by old workers 500s that site until they reload; web `signal QUIT` and
+    `supervisorctl restart yht-bench-workers:` go BEFORE the install, while the hooks are still inert.
+    (2) The legacy database already carries `Module Def` rows and columns for apps the old system had
+    (`print_designer`, see memory `yht-legacy-orphan-apps`): the plain install dies on `DuplicateEntryError`
+    and rolls back; `--force` (gotcha 11) is the whole fix, and the old records come back alive under the new
+    app. (3) Verify prints by rendering PDFs of the SAME documents before and after and comparing
+    `pdftotext` + size — an HTML-hash diff moved on five formats because the client edited the customer
+    behind them at 10:03 while we worked. No `version-15` branch: `main` is the v15 one, and `bench get-app`
+    exits 1 at `supervisorctl status` (gotcha 10) — check `apps/`, `apps.txt`, `pip show` instead.
 
 ## Deploy
 
