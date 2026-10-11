@@ -1105,8 +1105,10 @@ checked out ON the branch): rows 7+14 item search (`item_search.py`), 8 customer
 23 invoice-first DN link (own switch since Osaid's hold of 2026-10-10), 24 prepayment block, 27 list filters, plus the
 CR-013 repair (gotcha 112). Osaid's UAT round of 2026-10-10: rows 6–11, 14, 16 working; row 12 fixed on every print
 path (gotcha 120) and Sales Order now defaults to the KATC router; row 17's "Groq API key not configured" was the
-UAT copy lacking the key (copied server-side from live). Prod has the code (shared bench), every `oct08_*` switch
-off, prints byte-identical. Rows 23/24/27 wait for `oct08_r23_invoice_first_dn_link` / `oct08_r24_prepayment_block` /
+UAT copy lacking the key (copied server-side from live). **2026-10-11 09:31 site time: rows 7, 8, 10, 11, 14, 16 are LIVE** — `yht-khobhar/site_config.json` carries
+`oct08_r07_item_search`, `oct08_r10_new_customer_button`, `oct08_r11_quotation_create`; row 8's setter and row 16's field +
+value were applied by their own functions, with NO migrate (one would also carry the unapproved 23-Sep batch and the
+print-default deletions). Prints byte-identical before/after; new baseline `/tmp/h_baseline_0a71872_prod.txt` on the box. Rows 23/24/27 wait for `oct08_r23_invoice_first_dn_link` / `oct08_r24_prepayment_block` /
 `oct08_r27_list_filters` (held off live at the client's request); the live deploy list and the Q1 print-default
 consequences are in `docs/handoffs/handoff-20261010-batch-a-uat.md`.
 
