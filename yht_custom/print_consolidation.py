@@ -89,6 +89,21 @@ LEGACY_NOISE = ()
 #: the change were looking at different places, which is the whole lesson.
 DOCTYPES = ("Quotation", "Sales Order", "Sales Invoice", "Delivery Note", "Purchase Order")
 
+#: 2026-10-11 — THE CLIENT'S OWN ANSWER to "which print formats are canonical?"
+#: Osaid Kamal (YHT's coordinator): "please make sure the print formats are the
+#: following in the live version". They are site-built formats (`standard = No`),
+#: created by `saheed@kathoomcompany.com` directly on `yht-khobhar` on 2026-10-03/06
+#: — they exist only in that site's database — and each is that doctype's default
+#: through a `default_print_format` Property Setter. Nothing here WRITES them; the
+#: constant is what `check_client_defaults` verifies, and what the cleanup below
+#: must never undo.
+CLIENT_DEFAULT_PRINT_FORMATS = {
+	"Sales Invoice": "SALES-INVOICE",
+	"Quotation": "SALES-QUOTATION",
+	"Purchase Order": "PURCHASE-ORDER",
+	"Delivery Note": "DELIVERY-NOTE W/O HEAD",
+}
+
 
 def setup_print_consolidation() -> dict:
 	"""Idempotent. Behind `cr_004_print_heading`."""
@@ -104,7 +119,15 @@ def setup_print_consolidation() -> dict:
 		frappe.db.set_value("Print Format", name, "disabled", 1, update_modified=False)
 		disabled.append(name)
 
-	return {"disabled": disabled, "live": live_formats()}
+	# 🔴 A DEFAULT THAT POINTS AT A FORMAT THIS STEP JUST RETIRED MAKES THE PRINTER ICON
+	# THROW ("Print Format … is disabled"). On the live site `yaser@` pinned Sales Order
+	# to `KATC Proforma Invoice` on 2026-09-24, which is in SUPERSEDED. Only setters
+	# that are stale NOW go — a named user's choice of an enabled format stays.
+	dropped = _delete_setters(classify_default_print_format_setters()["delete"])
+	for doctype in DOCTYPES:
+		frappe.clear_cache(doctype=doctype)
+
+	return {"disabled": disabled, "stale_defaults_dropped": dropped, "live": live_formats()}
 
 
 def restore(names=None) -> dict:
@@ -143,42 +166,114 @@ def report() -> dict:
 	return summary
 
 
-def drop_stale_default_print_format_setters() -> dict:
-	"""Delete the `default_print_format` Property Setters an earlier version wrote.
+def classify_default_print_format_setters() -> dict:
+	"""Read-only. Which `default_print_format` setters on the five doctypes are
+	stale, and which are somebody's choice.
 
-	🔴 A PROPERTY SETTER IS A ROW, NOT A LINE OF CODE. Removing the code that
-	wrote these leaves them working. And they do not merely duplicate
-	`setup.DEFAULT_PRINT_FORMATS` — they OVERRIDE it, because `frappe.get_meta`
-	applies Property Setters over the DocType row.
+	🔴 THE FIRST VERSION OF THIS CLEANUP SWEPT BY (doctype, property) AND DELETED
+	THE CLIENT'S OWN DEFAULTS. It was written on 2026-09-27 for one incident — an
+	earlier version of this module pinned Sales Invoice to `KATC Tax Invoice` with a
+	Property Setter, which overrides the DocType row and put a non-ZATCA format in
+	front of a tax invoice. Nobody else set these then. Since 2026-09-24 the client
+	has set five of their own on the live site, and on 2026-10-11 Osaid asked for
+	four of them in writing. `backfill_meeting_0923_data` calls this and had not yet
+	run on live: the next migrate there would have undone the request without a word.
 
-	Measured on `yht-test` 2026-09-27, after the code was already reverted:
+	What is deleted, and why each is safe:
 
-	    tabDocType.default_print_format      Sales Invoice -> NULL   (looks correct)
-	    Property Setter                      Sales Invoice -> KATC Tax Invoice
+	* the target Print Format does not exist, or is disabled — a default nobody can
+	  use; the printer icon would throw
+	* `modified_by` is Administrator AND the target is one of this app's own formats
+	  (`standard = Yes`) — what the original incident looked like: provisioning code
+	  pinning a doctype to a format it ships
+	* a blank value saved by Administrator — meaningless, and the DocType row already
+	  says what the default is
 
-	So Sales Invoice was pinned to a non-ZATCA format while every check that read
-	the DocType row — including
-	`test_sales_invoice_has_no_pinned_default` — reported it clean.
-	`ksa_compliance` owns Sales Invoice printing until ZATCA onboarding; this puts
-	that back.
-
-	Scoped to the five doctypes this module ever touched, never to the property in
-	general: another app is entitled to set its own default.
+	What is KEPT: a setter whose target is a format the client built (`standard =
+	No`), whoever saved it — this includes the ones a script saved on their behalf —
+	and a setter a named user chose, while its target is enabled. A blank value a
+	named user saved is theirs too: it means "no default" on purpose.
 	"""
-	deleted = []
+	delete, keep = [], []
 	for row in frappe.get_all(
 		"Property Setter",
 		filters={"property": "default_print_format", "doc_type": ["in", list(DOCTYPES)]},
-		fields=["name", "doc_type", "value"],
+		fields=["name", "doc_type", "value", "modified_by"],
 	):
-		frappe.delete_doc("Property Setter", row.name, force=1, ignore_permissions=True)
-		deleted.append("%s -> %s" % (row.doc_type, row.value))
+		named_user = row.modified_by not in ("Administrator", None, "")
+		entry = (row.name, row.doc_type, row.value)
+		if not row.value:
+			if named_user:
+				keep.append(entry + ("a default cleared on purpose by %s" % row.modified_by,))
+			else:
+				delete.append(entry + ("blank, saved by provisioning code",))
+			continue
+		target = frappe.db.get_value("Print Format", row.value, ["disabled", "standard"], as_dict=True)
+		if not target:
+			delete.append(entry + ("points at a Print Format that does not exist",))
+		elif target.disabled:
+			delete.append(entry + ("points at a disabled Print Format",))
+		elif target.standard != "Yes":
+			keep.append(entry + ("a format the client built",))
+		elif named_user:
+			keep.append(entry + ("chosen by %s" % row.modified_by,))
+		else:
+			delete.append(entry + ("pinned to one of this app's own formats by provisioning code",))
+	return {"delete": delete, "keep": keep}
+
+
+def _delete_setters(entries) -> list:
+	"""Delete the setters `classify_default_print_format_setters` marked. No commit."""
+	deleted = []
+	for name, doctype, value, why in entries:
+		frappe.delete_doc("Property Setter", name, force=1, ignore_permissions=True)
+		deleted.append("%s -> %s (%s)" % (doctype, value, why))
+	return deleted
+
+
+def drop_stale_default_print_format_setters() -> dict:
+	"""Delete the stale `default_print_format` setters — and ONLY those.
+
+	    bench --site … execute yht_custom.print_consolidation.drop_stale_default_print_format_setters
+
+	See `classify_default_print_format_setters` for the rule and for why it is not
+	a sweep. A Property Setter is a row, not a line of code: removing the code that
+	wrote one leaves it working, and `frappe.get_meta` applies it OVER the DocType
+	row that `setup.DEFAULT_PRINT_FORMATS` owns.
+	"""
+	plan = classify_default_print_format_setters()
+	deleted = _delete_setters(plan["delete"])
 
 	for doctype in DOCTYPES:
 		frappe.clear_cache(doctype=doctype)
 	frappe.db.commit()
 
 	effective = {d: frappe.get_meta(d).default_print_format or None for d in DOCTYPES}
-	summary = {"deleted": deleted, "effective_default_now": effective}
+	summary = {
+		"deleted": deleted,
+		"kept": ["%s -> %s (%s)" % (doctype, value, why) for _name, doctype, value, why in plan["keep"]],
+		"effective_default_now": effective,
+	}
 	print(frappe.as_json(summary, indent=1))
 	return summary
+
+
+def check_client_defaults() -> dict:
+	"""Does each doctype default to the format the client asked for?
+
+	    bench --site … execute yht_custom.print_consolidation.check_client_defaults
+
+	Run it after ANY migrate on a site that carries the client's formats. Three
+	outcomes, never folded together: OK, FAIL, and SKIP for a site that has no such
+	format (`yht-test` until the client's formats are copied there) — a check that
+	cannot run must not read as a pass.
+	"""
+	rows = {}
+	for doctype, fmt in CLIENT_DEFAULT_PRINT_FORMATS.items():
+		if not frappe.db.exists("Print Format", fmt):
+			rows[doctype] = {"expected": fmt, "effective": None, "status": "SKIP - this site has no such format"}
+			continue
+		effective = frappe.get_meta(doctype).default_print_format
+		rows[doctype] = {"expected": fmt, "effective": effective, "status": "OK" if effective == fmt else "FAIL"}
+	print(frappe.as_json(rows, indent=1))
+	return rows

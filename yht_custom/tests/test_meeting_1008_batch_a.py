@@ -401,6 +401,33 @@ class TestSalesOrderPrintsAsDeliveryNote(FrappeTestCase):
 				self.assertNotIn(">Rate<", html)
 				self.assertNotIn("Grand Total", html)
 
+	def test_the_live_conditions_heading_switch_off_and_the_old_shims(self):
+		"""Production: `cr_004_print_heading` is OFF, and the `KATC Sales Order` /
+		`KATC Proforma Invoice` records are the OLD plain `{% include %}`s until a
+		migrate replaces them — so the layout has to come from the shared template and
+		the title from the legacy path. UAT has every switch on and the new routers, so
+		this is the only place that conditions are exercised. Row 12 shipped to live
+		on 2026-10-11 on the strength of it."""
+		if not features.enabled("oct08_r12_so_delivery_note"):
+			self.skipTest("switch off on this site")
+		doc = self._submitted_sales_order()
+		real = features.enabled
+		old_shims = {
+			"old KATC Sales Order": '{% include "yht_custom/templates/includes/katc/sales_order.html" %}',
+			"old KATC Sales Order Arabic": '{% set katc_show_arabic = true %}{% include "yht_custom/templates/includes/katc/sales_order.html" %}',
+			"new Proforma router": self._shim("katc_proforma_invoice"),
+		}
+		with mock.patch.object(features, "enabled", side_effect=lambda n: False if n == "cr_004_print_heading" else real(n)):
+			for label, html in old_shims.items():
+				with self.subTest(shim=label):
+					doc.custom_print_as = "Delivery Note"
+					out = self._render_with(html, doc)
+					self.assertIn("DELIVERY NOTE", out)
+					self.assertNotIn(">Rate<", out)
+					self.assertNotIn("Grand Total", out)
+			doc.custom_print_as = "Sales Order"
+			self.assertIn("PROFORMA INVOICE", self._render_with(old_shims["new Proforma router"], doc))
+
 	def test_the_proforma_router_still_prints_a_proforma_otherwise(self):
 		doc = self._submitted_sales_order()
 		doc.custom_print_as = "Sales Order"
