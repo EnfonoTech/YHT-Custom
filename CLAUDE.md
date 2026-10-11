@@ -984,6 +984,28 @@ accountant: SI→`CN`, DN→`DRN`, PI→`DBN`, PR→`PRN`.
     behind them at 10:03 while we worked. No `version-15` branch: `main` is the v15 one, and `bench get-app`
     exits 1 at `supervisorctl status` (gotcha 10) — check `apps/`, `apps.txt`, `pip show` instead.
 
+122. 🔴 **A CLEANUP THAT DELETES BY (doctype, property) DELETES WHATEVER THE CLIENT SET AFTERWARDS.**
+    `print_consolidation.drop_stale_default_print_format_setters` was written 2026-09-27 for one incident — this
+    app's own earlier code pinning Sales Invoice to a non-ZATCA format — and swept every `default_print_format`
+    Property Setter on five doctypes. By 2026-10-11 the client had set five of their own on live, Osaid had asked
+    for four of them in writing (SALES-INVOICE, SALES-QUOTATION, PURCHASE-ORDER, DELIVERY-NOTE W/O HEAD), and the
+    patch that calls the sweep (`backfill_meeting_0923_data`) had not yet run there: the next migrate would have
+    undone the request without an error. It now CLASSIFIES — deletes only a target that is missing or disabled, or
+    Administrator pinning one of OUR formats (`standard = Yes`); keeps a client-built target (`standard = No`)
+    whoever saved it, and a named user's choice of an enabled format. Note the Administrator trap: a setter a
+    SCRIPT saves for the client carries `modified_by = Administrator`, so authorship alone cannot be the test.
+    `check_client_defaults` returns OK / FAIL / SKIP — run it after every live migrate. Before any pending patch
+    runs on live, read what it DELETES, not what it adds; this one still runs
+    `list_columns.drop_stale_in_list_view_setters` and `dn_links.backfill` unconditionally.
+123. ⚠️ **A DEFAULT PRINT FORMAT DECIDES WHICH PATH THE PRINTER ICON TAKES — TEST EVERY PATH THE CLIENT HAS.**
+    Live prints Sales Order through `KATC Proforma Invoice` (yaser's 09-24 setter), Quotation / Sales Invoice /
+    Purchase Order / Delivery Note through the client's own site-built formats, and UAT through the `YHT` set.
+    A feature that only the KATC router implements (row 12, gotcha 120) is invisible from every other path, and
+    the shipped print-format RECORDS on live stay the old plain `{% include %}`s until a migrate or a targeted
+    `reload_doc` replaces them — a template under `templates/includes/` deploys with the pull, a record does not.
+    Rehearse with the heading switch off and the old shims in memory
+    (`test_the_live_conditions_heading_switch_off_and_the_old_shims`); UAT alone is every switch ON.
+
 ## Deploy
 
 Repo: **`git@github-yht:EnfonoTech/YHT-Custom.git`** (private). The box has a dedicated read-only deploy key at
@@ -1121,7 +1143,10 @@ path (gotcha 120) and Sales Order now defaults to the KATC router; row 17's "Gro
 UAT copy lacking the key (copied server-side from live). **2026-10-11 09:31 site time: rows 7, 8, 10, 11, 14, 16 are LIVE** — `yht-khobhar/site_config.json` carries
 `oct08_r07_item_search`, `oct08_r10_new_customer_button`, `oct08_r11_quotation_create`; row 8's setter and row 16's field +
 value were applied by their own functions, with NO migrate (one would also carry the unapproved 23-Sep batch and the
-print-default deletions). Prints byte-identical before/after; new baseline `/tmp/h_baseline_0a71872_prod.txt` on the box. Rows 23/24/27 wait for `oct08_r23_invoice_first_dn_link` / `oct08_r24_prepayment_block` /
+print-default deletions). Prints byte-identical before/after; new baseline `/tmp/h_baseline_0a71872_prod.txt` on the box.
+**Row 12 followed at 12:30** (switch `oct08_r12_so_delivery_note`, Print As option, the live Sales Order default
+`KATC Proforma Invoice` re-synced; targeted, no migrate), and the client's four default print formats are confirmed live — Osaid's
+list, which answers Sunday Q1 (gotcha 122; check with `print_consolidation.check_client_defaults`). Rows 23/24/27 wait for `oct08_r23_invoice_first_dn_link` / `oct08_r24_prepayment_block` /
 `oct08_r27_list_filters` (held off live at the client's request); the live deploy list and the Q1 print-default
 consequences are in `docs/handoffs/handoff-20261010-batch-a-uat.md`.
 
