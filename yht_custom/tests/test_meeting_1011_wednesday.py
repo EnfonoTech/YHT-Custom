@@ -847,6 +847,28 @@ class TestRow26Provisioning(FrappeTestCase):
 			self.assertFalse(frappe.defaults.get_defaults_for(frappe.session.user).get("fiscal_year"))
 
 
+class TestRow26NewFormYear(FrappeTestCase):
+	"""A Link to Fiscal Year takes the session default on a new document, so a form dated
+	today opened showing the SESSION year under a note saying it is derived from the date."""
+
+	def test_the_script_clears_the_year_on_a_new_draft_of_all_eight(self):
+		source = (ROOT / "public/js/session_year.js").read_text()
+		self.assertIn('frm.is_new() && frm.doc.custom_fiscal_year', source)
+		self.assertIn('"oct11_r26_session_fiscal_year"', source)
+		for doctype in ("Sales Invoice", "Purchase Invoice", "Delivery Note", "Purchase Receipt", "Payment Entry", "Journal Entry", "Sales Order", "Quotation"):
+			self.assertIn(f'"{doctype}"', source, doctype)
+
+	def test_the_eight_match_the_doctypes_that_carry_the_field(self):
+		from yht_custom import fiscal_year
+
+		source = (ROOT / "public/js/session_year.js").read_text()
+		for doctype in fiscal_year.DATE_FIELD:
+			self.assertIn(f'"{doctype}"', source, doctype)
+
+	def test_the_cache_buster_was_bumped(self):
+		self.assertIn("session_year.js?v=2", (ROOT / "hooks.py").read_text())
+
+
 class TestRow26Script(FrappeTestCase):
 	def setUp(self):
 		self.js = _source("public/js/session_year.js")

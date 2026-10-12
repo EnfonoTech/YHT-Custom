@@ -27,7 +27,7 @@ app_include_js = [
 	# Row 36 (2026-10-11) — the branch's default print format on the printer icon.
 	"/assets/yht_custom/js/branch_print_format.js?v=1",
 	# Row 26 (2026-10-11 Wednesday batch) — one-time fiscal-year pop-up after login.
-	"/assets/yht_custom/js/session_year.js?v=1",
+	"/assets/yht_custom/js/session_year.js?v=2",
 ]
 app_include_css = "/assets/yht_custom/css/yht_custom.css?v=8"
 

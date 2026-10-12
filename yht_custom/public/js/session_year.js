@@ -82,3 +82,28 @@ yht_custom.session_year.maybe_prompt = function () {
 };
 
 $(document).on("app_ready", yht_custom.session_year.maybe_prompt);
+
+// A Link field to Fiscal Year takes the user's `fiscal_year` default on a NEW document —
+// frappe does that for any such Link. With a Session Default of 2025 a document dated today
+// (2026) therefore opened showing "Fiscal Year 2025", under a description saying the value is
+// derived from the date on every save. The server does derive it (`fiscal_year.set_fiscal_year`),
+// so nothing wrong is stored; but the form said otherwise until the save. Cleared on a new draft,
+// only where the site has the switch on. Found by the browser pass, not by a test.
+(function () {
+	const DOCTYPES = [
+		"Sales Invoice", "Purchase Invoice", "Delivery Note", "Purchase Receipt",
+		"Payment Entry", "Journal Entry", "Sales Order", "Quotation",
+	];
+	DOCTYPES.forEach((doctype) => {
+		frappe.ui.form.on(doctype, {
+			onload(frm) {
+				const features = (frappe.boot && frappe.boot.yht_features) || [];
+				if (features.indexOf("oct11_r26_session_fiscal_year") === -1) return;
+				if (frm.is_new() && frm.doc.custom_fiscal_year) {
+					frm.doc.custom_fiscal_year = "";
+					frm.refresh_field("custom_fiscal_year");
+				}
+			},
+		});
+	});
+})();
