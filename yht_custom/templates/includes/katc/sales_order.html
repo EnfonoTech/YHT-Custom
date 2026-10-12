@@ -139,6 +139,16 @@ table.katc-items td.ctr { text-align: center; }
     <td class="lbl">Attention:</td><td colspan="3">{{ doc.get("custom_attention_person") }}</td>
   </tr>
 {%- endif %}
+{# r30 #}{% if yht_feature("oct11_r30_front_details") %}
+  <tr>
+    <td class="lbl">Address:</td><td>{{ doc.address_display or "" }}</td>
+    <td class="lbl">PO Date:</td><td>{{ yht_date(doc.po_date) }}</td>
+  </tr>
+  <tr>
+    <td class="lbl">Contact:</td><td>{{ doc.contact_display or "" }}</td>
+    <td class="lbl">Sales Executive:</td><td>{{ yht_sales_person(doc).name }}</td>
+  </tr>
+{# r30 #}{%- endif -%}
 </tbody></table>
 
 <table class="katc-items">

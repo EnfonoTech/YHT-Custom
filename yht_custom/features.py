@@ -85,6 +85,13 @@ KNOWN = {
 	"oct11_r29_branch_purchase_order": "Branch users create and edit Purchase Orders, scoped to their branch; PO tile on the dashboard (row 29)",
 	"oct11_r36_branch_print_format": "Branch Configuration carries a default print format per document type (row 36)",
 	"oct11_r37_print_heading_front": "Print Heading on the front page of the four selling documents, filled in as the document is made (row 37)",
+	# --- client meeting 2026-10-11, Wednesday batch (rows 13, 26, 30, 32, 33) ----
+	# Row 35 is a guard (tests + one restriction) and has no switch.
+	"oct11_r13_sales_history": "Show Sales History popup (sales, purchases, stock, comparison) and the Valuation Rate grid column (row 13)",
+	"oct11_r26_session_fiscal_year": "Session-defaults fiscal year drives the list default filters; one-time year pop-up after login (row 26)",
+	"oct11_r30_front_details": "Address, contact, PO and sales team on the front page of the selling documents and the KATC prints (row 30)",
+	"oct11_r32_doc_number_search": "Global search: a document-number-shaped text returns that series/number first (row 32)",
+	"oct11_r33_record_expense": "Record Expense / Expense Invoices entry points, expense print heading and printer-icon format (row 33)",
 }
 
 #: Reads as "every known switch is on". Meant for `yht-test`.

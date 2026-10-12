@@ -176,6 +176,25 @@ const ACTIONS = [
 		mode: "list",
 		feature: "oct11_r29_branch_purchase_order",
 	},
+	// Row 33 (2026-10-11) — shown only on a site with `oct11_r33_record_expense`. The first is
+	// intercepted (`data-yht-expense`) so the flag reaches the form through route options; the
+	// second is a filtered list (no "+": the thing it would create is not what it shows).
+	{
+		icon: "expense",
+		label: "Record Expense",
+		desc: "Enter an expense invoice",
+		expense: 1,
+		feature: "oct11_r33_record_expense",
+	},
+	{
+		icon: "expense",
+		label: "Expense Invoices",
+		desc: "View expense invoices",
+		doctype: "Purchase Invoice",
+		mode: "list",
+		filters: { custom_is_expense_invoice: 1 },
+		feature: "oct11_r33_record_expense",
+	},
 ];
 
 function feature_on(name) {
@@ -280,6 +299,13 @@ function render(page, d) {
 		}
 	});
 
+	page.body.off("click.yht-expense").on("click.yht-expense", "[data-yht-expense]", function (e) {
+		e.preventDefault();
+		if (window.yht_custom && yht_custom.expense && yht_custom.expense.new_expense) {
+			yht_custom.expense.new_expense();
+		}
+	});
+
 	page.body.off("click.yht-return").on("click.yht-return", "[data-yht-return]", function (e) {
 		e.preventDefault();
 		if (window.yht_custom && yht_custom.sales && yht_custom.sales.new_return) {
@@ -338,6 +364,9 @@ function action_card(a) {
 	}
 	if (a.stock_ret) {
 		return card("#", a.icon, __(a.label), __(a.desc), `data-yht-stock-return="${a.stock_ret}"`);
+	}
+	if (a.expense) {
+		return card("#", a.icon, __(a.label), __(a.desc), `data-yht-expense="1"`);
 	}
 	// A page tile routes straight to a Frappe Page. It carries no doctype, so it must
 	// be handled BEFORE the slug() call below — slug(undefined) throws.

@@ -11,7 +11,7 @@ import frappe
 from frappe.utils import cint
 
 from yht_custom.setup_branch_series import setup_branch_series
-from yht_custom.expense_invoice import setup_expense_invoice
+from yht_custom.expense_invoice import setup_expense_invoice, setup_record_expense
 from yht_custom.form_layout import (
 	setup_form_layout,
 	setup_hidden_required_defaults,
@@ -28,6 +28,8 @@ from yht_custom.meeting_1011 import (
 	setup_quotation_id_first,
 )
 from yht_custom.branch_purchase_order import setup_branch_purchase_order
+from yht_custom.meeting_1011_wednesday import setup_front_details, setup_valuation_column
+from yht_custom.session_year import setup_session_year
 from yht_custom.site_defaults import setup_site_defaults
 from yht_custom.setup_property_setters import setup_ignore_user_permissions
 from yht_custom.discount_totals import setup_discount_grid_columns
@@ -281,6 +283,11 @@ PROVISIONING_STEPS = (
 	"setup_heading_front",         # row 37 (after the Arabic tick: the tick sits under it)
 	"setup_quotation_id_first",    # row 20
 	"setup_branch_purchase_order", # row 29
+	# --- client meeting 2026-10-11, Wednesday batch (each behind its own switch) ---
+	"setup_valuation_column",      # row 13 (after setup_sales_assist_columns: it re-sets the grid widths)
+	"setup_front_details",         # row 30 (after the heading and the tick: it places against the front page)
+	"setup_session_year",          # row 26
+	"setup_record_expense",        # row 33
 	"repair_mirrored_perm_flags",
 	"run_dashboard_reports_inline",
 	"setup_hr",
@@ -435,6 +442,10 @@ def _imported(name):
 		"setup_heading_front": setup_heading_front,
 		"setup_quotation_id_first": setup_quotation_id_first,
 		"setup_branch_purchase_order": setup_branch_purchase_order,
+		"setup_valuation_column": setup_valuation_column,
+		"setup_front_details": setup_front_details,
+		"setup_session_year": setup_session_year,
+		"setup_record_expense": setup_record_expense,
 		"setup_unified_number": setup_unified_number,
 		"setup_print_headings": setup_print_headings,
 		"setup_delivery_note_links": setup_delivery_note_links,

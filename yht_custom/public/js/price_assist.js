@@ -51,9 +51,21 @@ function add_grid_buttons(frm) {
 	// Both ask which line when there is more than one, so an earlier row is always reachable.
 	grid.add_custom_button(__("Price Assist"), () =>
 		yht_custom.price.pick_row(frm, (row) => yht_custom.price.open(frm, row)));
+	// Row 13 (2026-10-11): the history button becomes "Show Sales History" and opens the
+	// unified popup. Behind its switch — this file is served to the live site as soon as it is
+	// pulled, and with the switch off the button is the old one.
+	if (yht_custom.price.sales_history_on()) {
+		grid.add_custom_button(__("Show Sales History"), () =>
+			yht_custom.price.pick_row(frm, (row) => yht_custom.price.open_sales_history(frm, row)));
+		return;
+	}
 	grid.add_custom_button(__("Show Price History"), () =>
 		yht_custom.price.pick_row(frm, (row) => yht_custom.price.open_history(frm, row)));
 }
+
+yht_custom.price.sales_history_on = function () {
+	return ((frappe.boot && frappe.boot.yht_features) || []).indexOf("oct11_r13_sales_history") !== -1;
+};
 
 // Opening it from a rate field is the natural gesture, so wire the item table too.
 frappe.ui.form.on("Sales Invoice Item", {
@@ -61,6 +73,19 @@ frappe.ui.form.on("Sales Invoice Item", {
 		yht_custom.price.hint(frm, locals[cdt][cdn]);
 	},
 });
+
+// Row 13 — the Valuation Rate column is filled when the ITEM changes on a draft, never on
+// `refresh` (that would dirty every draft that is merely opened). A row that already holds a
+// value keeps it until its item changes.
+const fill_valuation_on_item = {
+	item_code(frm, cdt, cdn) {
+		yht_custom.price.fill_valuation(frm, cdt, cdn);
+	},
+};
+frappe.ui.form.on("Quotation Item", fill_valuation_on_item);
+frappe.ui.form.on("Sales Order Item", fill_valuation_on_item);
+frappe.ui.form.on("Sales Invoice Item", fill_valuation_on_item);
+frappe.ui.form.on("Delivery Note Item", fill_valuation_on_item);
 
 yht_custom.price.current_row = function (frm) {
 	const open = frappe.ui.form.get_open_grid_form();
@@ -70,6 +95,8 @@ yht_custom.price.current_row = function (frm) {
 };
 
 yht_custom.price.open = function (frm, explicit) {
+	// Row 13 — one implementation: the Price Assist button opens the same popup.
+	if (yht_custom.price.sales_history_on()) return yht_custom.price.open_sales_history(frm, explicit);
 	const row = explicit || yht_custom.price.current_row(frm);
 	if (!row) {
 		frappe.msgprint(__("Add an item row first."));
@@ -93,7 +120,12 @@ yht_custom.price.open = function (frm, explicit) {
 	});
 };
 
-yht_custom.price.show = function (frm, row, d) {
+/**
+ * The rate-comparison rows (price list, last sale to this customer / anyone, recent range,
+ * valuation, margin). Shared by the Price Assist dialog and, at the bottom of the unified
+ * popup, by `render_assist_block`.
+ */
+yht_custom.price.assist_rows = function (d, row) {
 	const money = (v) => (v === null || v === undefined ? "—" : format_currency(v, d.currency));
 	const cur = flt(row.rate);
 	const val = flt(d.valuation_rate);
@@ -134,6 +166,12 @@ yht_custom.price.show = function (frm, row, d) {
 			__("current rate {0}", [money(cur)])
 		);
 	}
+	return rows;
+};
+
+yht_custom.price.show = function (frm, row, d) {
+	const mine = d.last_to_this_customer;
+	const rows = yht_custom.price.assist_rows(d, row);
 
 	const stock = (d.stock || []).length
 		? `<table class="table table-bordered table-sm" style="margin-top:8px">
@@ -560,6 +598,174 @@ document.addEventListener(
 			return;
 		}
 		lastRateClick = { key, at: now };
+	},
+	true
+);
+
+// ------------------------------------------------------------ row 13 — sales history
+//
+// ONE popup for the grid button, the Price Assist button and a click on the Valuation cell:
+// (1) sales, (2) purchases, (3) stock, (4) the price comparison at the BOTTOM — no comparison
+// above the fold. One `frappe.call`, branch-scoped on the server.
+
+yht_custom.price.fill_valuation = function (frm, cdt, cdn) {
+	if (!yht_custom.price.sales_history_on()) return;
+	if (cint(frm.doc.docstatus) !== 0) return;
+	const row = locals[cdt] && locals[cdt][cdn];
+	if (!row || !row.item_code) return;
+	const item_code = row.item_code;
+
+	frappe.call({
+		method: "yht_custom.api.price_assist.get_valuation_rates",
+		args: { item_codes: JSON.stringify([item_code]), company: frm.doc.company },
+		callback(r) {
+			const rates = r.message || {};
+			// The user may have changed the item again while this was in flight.
+			if (!(item_code in rates) || row.item_code !== item_code) return;
+			frappe.model.set_value(cdt, cdn, "custom_valuation_rate", flt(rates[item_code]));
+		},
+	});
+};
+
+yht_custom.price.open_sales_history = function (frm, explicit) {
+	const row = explicit || yht_custom.price.current_row(frm);
+	if (!row) {
+		frappe.msgprint(__("Add an item row first."));
+		return;
+	}
+
+	frappe.call({
+		method: "yht_custom.api.price_assist.get_history_popup",
+		args: {
+			item_code: row.item_code,
+			customer: frm.doc.customer || null,
+			company: frm.doc.company,
+			price_list: frm.doc.selling_price_list,
+			qty: row.qty || 1,
+			limit: 6,
+		},
+		freeze: true,
+		freeze_message: __("Loading history…"),
+		callback(r) {
+			if (r.message) yht_custom.price.show_sales_history(frm, row, r.message);
+		},
+	});
+};
+
+yht_custom.price.show_sales_history = function (frm, row, d) {
+	const dialog = new frappe.ui.Dialog({
+		title: __("Sales History — {0}", [(d.assist && d.assist.item_name) || row.item_name || row.item_code]),
+		size: "large",
+		fields: [{ fieldtype: "HTML", fieldname: "body" }],
+	});
+	const section = (title, html) =>
+		`<div style="font-weight:600;margin-top:10px">${title}</div>${html}`;
+
+	dialog.fields_dict.body.$wrapper.html(
+		section(__("Recent sales"), yht_custom.price.history_table(d.sales || [])) +
+			section(
+				__("Recent purchases"),
+				d.can_see_purchases === false
+					? `<span class="text-muted">${__("Purchase history is not available for your role.")}</span>`
+					: yht_custom.price.purchases_table(d.purchases || [])
+			) +
+			section(__("Stock"), yht_custom.price.stock_table(d.stock || [])) +
+			`<div class="yht-assist-block"></div>`
+	);
+	yht_custom.price.render_assist_block(dialog, frm, row, d.assist || {});
+	dialog.show();
+};
+
+/**
+ * The price comparison, at the bottom of the popup. The "use" buttons only render on a draft:
+ * they write the rate, and a submitted document must not offer to.
+ */
+yht_custom.price.render_assist_block = function (dialog, frm, row, d) {
+	const mine = d.last_to_this_customer;
+	const draft = frm.doc.docstatus === 0;
+	const $block = dialog.$wrapper.find(".yht-assist-block");
+
+	$block.html(`
+		<div style="font-weight:600;margin-top:14px">${__("Price comparison")}</div>
+		<table class="table table-borderless table-sm">${yht_custom.price.assist_rows(d, row)}</table>
+		${
+			draft
+				? `<div>
+				${d.price_list_rate ? `<button class="btn btn-xs btn-default yht-use-list">${__("Use price list rate")}</button>` : ""}
+				${mine ? `<button class="btn btn-xs btn-default yht-use-last" style="margin-left:6px">${__("Use last rate to this customer")}</button>` : ""}
+			</div>`
+				: ""
+		}
+	`);
+
+	$block.find(".yht-use-list").on("click", () => {
+		frappe.model.set_value(row.doctype, row.name, "rate", d.price_list_rate);
+		dialog.hide();
+	});
+	$block.find(".yht-use-last").on("click", () => {
+		frappe.model.set_value(row.doctype, row.name, "rate", mine.rate);
+		dialog.hide();
+	});
+};
+
+yht_custom.price.purchases_table = function (rows) {
+	if (!rows.length) return `<span class="text-muted">${__("No purchase history for this item.")}</span>`;
+	return `<table class="table table-bordered table-sm">
+		<thead><tr>
+			<th>${__("Date")}</th><th>${__("Supplier")}</th>
+			<th class="text-right">${__("Qty")}</th><th class="text-right">${__("Rate")}</th>
+			<th>${__("Document")}</th>
+		</tr></thead><tbody>
+		${rows
+			.map(
+				(x) => `<tr>
+					<td>${frappe.datetime.str_to_user(x.posting_date)}</td>
+					<td>${frappe.utils.escape_html(x.supplier_name || x.supplier || "")}</td>
+					<td class="text-right">${flt(x.qty)} ${frappe.utils.escape_html(x.uom || "")}</td>
+					<td class="text-right">${format_currency(x.rate, x.currency)}</td>
+					<td>${frappe.utils.escape_html(x.doc_type)}
+						<a href="/app/${encodeURIComponent(frappe.router.slug(x.doc_type))}/${encodeURIComponent(x.doc)}">${frappe.utils.escape_html(x.doc)}</a></td>
+				</tr>`
+			)
+			.join("")}
+	</tbody></table>`;
+};
+
+yht_custom.price.stock_table = function (rows) {
+	if (!rows.length) return `<span class="text-muted">${__("No stock in your branch warehouses.")}</span>`;
+	return `<table class="table table-bordered table-sm">
+		<thead><tr><th>${__("Warehouse")}</th><th class="text-right">${__("Available")}</th>
+		<th class="text-right">${__("Reserved")}</th></tr></thead><tbody>
+		${rows
+			.map(
+				(x) => `<tr><td>${frappe.utils.escape_html(x.warehouse)}</td>
+					<td class="text-right">${flt(x.actual_qty)}</td>
+					<td class="text-right">${flt(x.reserved_qty) || ""}</td></tr>`
+			)
+			.join("")}
+	</tbody></table>`;
+};
+
+// A click on a Valuation cell opens the same popup for that row, on any docstatus (it only
+// reads). Capture phase and a native listener for the same reason as the Rate listener above:
+// frappe's own grid handler stops propagation before a bubble-phase listener could see it.
+// Nothing is prevented or stopped here. The Rate listener is untouched — double-click on Rate
+// stays off (CR-019).
+document.addEventListener(
+	"click",
+	function (event) {
+		if (!yht_custom.price.sales_history_on()) return;
+
+		const cell = event.target instanceof Element
+			? event.target.closest('.grid-row [data-fieldname="custom_valuation_rate"]')
+			: null;
+		if (!cell) return;
+
+		const frm = window.cur_frm;
+		if (!frm || !SELLING.includes(frm.doc.doctype)) return;
+
+		const row = yht_custom.price.row_from_node(frm, cell);
+		if (row && row.item_code) yht_custom.price.open_sales_history(frm, row);
 	},
 	true
 );

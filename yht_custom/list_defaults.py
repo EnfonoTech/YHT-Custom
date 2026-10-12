@@ -45,3 +45,14 @@ def current_fiscal_year() -> str:
 	the list JS then sets no filter at all.
 	"""
 	return fiscal_year.resolve(today())
+
+
+def default_fiscal_year() -> str:
+	"""What the lists open on: the year chosen for the session (row 26), else today's.
+
+	`session_year.chosen_year` is `""` unless `oct11_r26_session_fiscal_year` is on and the
+	user picked an enabled year, so with the switch off this is `current_fiscal_year()`.
+	"""
+	from yht_custom import session_year
+
+	return session_year.chosen_year() or current_fiscal_year()

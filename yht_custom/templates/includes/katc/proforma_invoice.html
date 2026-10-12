@@ -118,6 +118,12 @@ table.katc-items td.ctr { text-align: center; }
     <td class="lbl">Delivery Date / ‏تاريخ التسليم‏</td><td>{{ yht_date(doc.get("delivery_date")) if doc.get("delivery_date") else "" }}</td>
     <td class="lbl">PO#</td><td>{{ doc.get("po_no") or "" }}</td>
   </tr>
+{# r30 #}{% if yht_feature("oct11_r30_front_details") %}
+  <tr>
+    <td class="lbl">Contact:</td><td colspan="3">{{ doc.get("contact_display") or "" }}</td>
+    <td class="lbl">PO Date:</td><td>{{ yht_date(doc.get("po_date")) }}</td>
+  </tr>
+{# r30 #}{%- endif -%}
 </tbody></table>
 
 <div style="font-weight:bold; font-size:9.5pt; margin-bottom:4px">Buyer - ‏العميل‏</div>

@@ -16,8 +16,8 @@ app_include_js = [
 	"/assets/yht_custom/js/branch_user_restrict.js?v=9",
 	"/assets/yht_custom/js/branch_user_forms.js?v=1",
 	"/assets/yht_custom/js/sales_flow.js?v=10",
-	"/assets/yht_custom/js/expense_invoice.js?v=5",
-	"/assets/yht_custom/js/price_assist.js?v=8",
+	"/assets/yht_custom/js/expense_invoice.js?v=6",
+	"/assets/yht_custom/js/price_assist.js?v=9",
 	"/assets/yht_custom/js/payment_assist.js?v=3",
 	"/assets/yht_custom/js/rate_lock.js?v=2",
 	"/assets/yht_custom/js/grid_search_width.js?v=1",
@@ -26,6 +26,8 @@ app_include_js = [
 	"/assets/yht_custom/js/item_search.js?v=1",
 	# Row 36 (2026-10-11) — the branch's default print format on the printer icon.
 	"/assets/yht_custom/js/branch_print_format.js?v=1",
+	# Row 26 (2026-10-11 Wednesday batch) — one-time fiscal-year pop-up after login.
+	"/assets/yht_custom/js/session_year.js?v=1",
 ]
 app_include_css = "/assets/yht_custom/css/yht_custom.css?v=8"
 
@@ -124,6 +126,10 @@ override_whitelisted_methods = {
 	# (gotcha 118). Both call straight through to ERPNext until
 	# `oct08_r07_item_search` is on.
 	"erpnext.controllers.queries.item_query": "yht_custom.item_search.item_query",
+	# Row 32 (2026-10-11 Wednesday batch) — the awesomebar's "Search for X" calls this through
+	# `handler.execute_cmd`, which DOES apply the override (unlike the Link picker, gotcha 118).
+	# A plain pass-through to upstream unless `oct11_r32_doc_number_search` is on.
+	"frappe.utils.global_search.search": "yht_custom.doc_number_search.search",
 }
 
 

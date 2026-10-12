@@ -33,10 +33,24 @@ def boot_session(bootinfo):
 	# A missing fiscal year must never be the reason a site cannot be logged into;
 	# `list_defaults.js` already treats an empty value as "set no filter".
 	try:
-		bootinfo.yht_current_fiscal_year = list_defaults.current_fiscal_year()
+		# Row 26 (2026-10-11): the session's chosen year wins, behind its own switch.
+		if features.enabled("oct11_r26_session_fiscal_year"):
+			bootinfo.yht_current_fiscal_year = list_defaults.default_fiscal_year()
+		else:
+			bootinfo.yht_current_fiscal_year = list_defaults.current_fiscal_year()
 	except Exception:
 		bootinfo.yht_current_fiscal_year = ""
 		frappe.log_error(frappe.get_traceback(), "YHT boot: current fiscal year")
+
+	# Row 26 — what the one-time year pop-up needs. `{}` unless the switch is on. Same
+	# place and same wrapping as the key above: nothing on the boot path may 500 `/login`.
+	try:
+		from yht_custom import session_year
+
+		bootinfo.yht_session_year = session_year.boot_value()
+	except Exception:
+		bootinfo.yht_session_year = {}
+		frappe.log_error(title="YHT boot: session year", message=frappe.get_traceback())
 
 	# 🔴 SAME PLACE, SAME REASON. `features.active()` is how desk JS finds out
 	# which site it is on — this bench serves the live site and UAT off ONE

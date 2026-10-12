@@ -1044,6 +1044,36 @@ accountant: SI→`CN`, DN→`DRN`, PI→`DBN`, PR→`PRN`.
     the cell regardless (see the comment above `KATC_BUTTONS_LEGACY`), so the tick has nothing to switch there — it
     exists for the client's own hand-built formats, which read `doc.custom_print_with_arabic`.
 
+129. ⚠️ **SESSION DEFAULTS IS FRAPPE CORE, AND LOGOUT CLEARS ONLY THE KEYS THAT HAVE A ROW.** Not ERPNext, whatever the
+    brief says: `frappe/core/doctype/session_default_settings`. `set_session_default_values` calls
+    `frappe.defaults.set_user_default` per key; the `on_logout` hook `clear_session_defaults` clears only keys listed in
+    Session Default Settings, so the `Fiscal Year` row is what makes a chosen year last one login (row 26,
+    `session_year.setup_session_year`). Read `get_defaults_for(user)` (the user's OWN rows), never `get_user_default`, which
+    merges global defaults over them.
+130. 🔴 **A LIST DEFAULT BECOMES A SAVED FILTER ON FIRST RENDER, SO A DEFAULT ALONE NEVER REACHES EXISTING USERS.**
+    `list_view.js` prefers saved filters over `listview_settings[dt].filters` and `before_render` (`:618-624`) saves the
+    current filters every time. 17 (test) / 33 (live) `__UserSettings` rows already named `custom_fiscal_year`.
+    `session_year.sync_saved_filters` rewrites the clause through `update_user_settings` (a SHALLOW merge on the top-level
+    key, session user only) — never write `__UserSettings` directly, the cache hash would overwrite it.
+131. ⚠️ **THE SEARCH DIALOG DOES REACH `override_whitelisted_methods` — CONTRAST 118.** "Search for X" calls
+    `frappe.utils.global_search.search` through `/api/method` → `execute_cmd`, which applies the override, so
+    `doc_number_search.search` works with no client lever. Test it through `execute_cmd`, not by a direct call. Case
+    -insensitive and not whole-word (`utf8mb4_general_ci`); pagination falls through to upstream.
+132. 🔴 **THE SALES ORDER ITEM GRID WAS ALREADY OVER THE 11-UNIT BUDGET** (gotcha 52): ERPNext's `delivery_date`
+    (`in_list_view`, 2 units) is not in `sales_assist.GRID_LAYOUT`, so Amount and Stock never rendered. Adding the Valuation
+    column made it worse; `setup_valuation_column` re-sets every width to 10 total and takes `delivery_date` out of the grid.
+    It runs AFTER `setup_sales_assist_columns` and overrides `item_code` 3 → 2.
+133. ⚠️ **THE LIVE DELIVERY NOTE NEEDS "BEFORE THE PRECEDING SECTION BREAK".** The client re-laid-out it: `section_break1`
+    heads the item table, so a block inserted between it and `items` lands INSIDE the items section.
+    `meeting_1011_wednesday.place_block` targets the Section Break just before the boundary when there is one, and places
+    the address/contact/team block as ONE contiguous run (two separate blocks fight each other and never converge).
+134. 🔴 **A WHITESPACE-EXACT SWITCH-OFF TEMPLATE NEEDS THE MARKER ON THE `{% if %}` LINE AND `-%}` ON THE `{% endif %}`.**
+    The `{# r30 #}` pairs in the KATC templates are `{# r30 #}{% if yht_feature(…) %}` … `{# r30 #}{%- endif -%}`, inserted
+    directly before a column-0 line: that is the only shape whose switch-OFF render is byte-identical to the template with
+    the lines removed (`-%}` also eats the next line's indent, so the following line must start at column 0).
+135. ⚠️ **A CUSTOM DOCPERM ON A STANDARD DOCTYPE STRIPS ITS STANDARD PERMISSIONS (gotcha 6, again).** Row 26 therefore
+    uses a Select, not a Fiscal Year Link, for the Branch User who cannot read Fiscal Year — and no Custom DocPerm on it.
+
 ## Deploy
 
 Repo: **`git@github-yht:EnfonoTech/YHT-Custom.git`** (private). The box has a dedicated read-only deploy key at
@@ -1196,6 +1226,13 @@ the front page, pre-filled). Every row has its own `oct11_*` switch; `yht-test` 
 verified: the 10 KATC prints are byte-identical before/after the pull (`N 10`), the override class is still the upstream one there, every new
 Python entry point returns its "off" value. Rows 21 (global-search purge, needs the night window and a go-ahead), 22, 26, 30, 32, 33, 13 are the
 Wednesday batch. Analysis: `docs/09-MEETING-2026-10-11-ESCALATED-ROWS.md`.
+
+**2026-10-12 — meeting 2026-10-11 "Wednesday batch" is on UAT** (branch `pipeline/meeting-1011-wednesday`, off the Tuesday batch, not merged): rows
+13 (Show Sales History popup + Valuation Rate grid column, `oct11_r13_sales_history`), 26 (session fiscal year + one-time pop-up, `oct11_r26_session_fiscal_year`),
+30 (address / contact / PO / sales team on the front page and the KATC prints, `oct11_r30_front_details`), 32 (document-number search first,
+`oct11_r32_doc_number_search`), 33 (Record Expense entry points + expense print heading, `oct11_r33_record_expense`), 35 (guard only: print
+formats the client built are never retired or restored; `check_client_defaults` accepts `DELIVERY-NOTE W HEAD`). Live runs unchanged until the
+switches are added to its `site_config.json`; the live promotion of row 33 (backfill of 926 expense invoices) is written in the spec, not run.
 
 **Still outstanding:** 5.7 pricing (blocked on B9), 6.1 branded tax invoice + 6.9 ZATCA onboarding
 (blocked on CSR/OTP), 4.10 cancel rights (blocked on B8), Step 7.2–7.6 (needs the incumbent backup).

@@ -25,10 +25,14 @@ filters applied in SQL, and no dependence on frappe's grid DOM.
 
 import frappe
 from frappe import _
-from frappe.utils import cint, flt
+from frappe.query_builder.functions import Sum
+from frappe.utils import cint, cstr, flt
 
 #: How far back "recent" reaches for the high/low band and the history list.
 DEFAULT_LIMIT = 15
+
+#: Most items `get_valuation_rates` answers for in one call.
+MAX_VALUATION_ITEMS = 200
 
 
 def _branch_warehouses(user=None) -> list[str]:
@@ -55,6 +59,11 @@ def get_price_assist(item_code: str, customer: str | None = None, company: str |
 	frappe.has_permission("Item", "read", throw=True)
 	frappe.has_permission("Sales Invoice", "read", throw=True)
 
+	return _assist(item_code, customer, company, price_list, qty)
+
+
+def _assist(item_code, customer, company, price_list, qty) -> dict:
+	"""The body of `get_price_assist`, shared with `get_history_popup`. Callers gate."""
 	company = _company(company)
 	warehouses = _branch_warehouses()
 
@@ -99,10 +108,16 @@ def _price_list_rate(item_code, price_list):
 	)
 
 
-def _sale_conditions(warehouses, customer=None):
-	"""Shared WHERE for the sales-history queries. Parameterised throughout."""
+def _sale_conditions(warehouses, customer=None, exclude_returns=False):
+	"""Shared WHERE for the sales-history queries. Parameterised throughout.
+
+	`exclude_returns` is for the sales-history popup (row 13); every other caller keeps the
+	old behaviour byte for byte.
+	"""
 	where = ["si.docstatus = 1", "sii.item_code = %(item_code)s"]
 	params = {}
+	if exclude_returns:
+		where.append("si.is_return = 0")
 	if customer:
 		where.append("si.customer = %(customer)s")
 		params["customer"] = customer
@@ -356,3 +371,160 @@ def _buying_and_stock(item_code: str, company: str | None, warehouses: list) -> 
 		"reserved_qty": sum(flt(row.get("reserved_qty")) for row in stock),
 		"stock": stock,
 	}
+
+
+# --------------------------------------------------- row 13 — Show Sales History
+
+
+@frappe.whitelist()
+def get_valuation_rates(item_codes: str, company: str | None = None) -> dict:
+	"""`{item_code: valuation_rate or None}` for the grid's Valuation Rate column.
+
+	ONE grouped query on `tabBin` for all items (no per-item loop), scoped to the caller's
+	branch warehouses (`[]` = unrestricted). `get_item_details` is deliberately not used: its
+	valuation comes from the row's/default warehouse Bin and is not branch-scoped. An item with
+	no branch stock falls back to `Item.last_purchase_rate`, the same fallback `_assist` uses.
+	"""
+	frappe.has_permission("Item", "read", throw=True)
+
+	codes = frappe.parse_json(item_codes) if item_codes else []
+	if not isinstance(codes, list):
+		frappe.throw(_("item_codes must be a list"))
+	codes = list(dict.fromkeys(cstr(c) for c in codes if c))
+	if len(codes) > MAX_VALUATION_ITEMS:
+		frappe.throw(_("Too many items: at most {0} per request").format(MAX_VALUATION_ITEMS))
+
+	out = dict.fromkeys(codes)
+	if not codes:
+		return out
+
+	warehouses = _branch_warehouses()
+	bin_ = frappe.qb.DocType("Bin")
+	query = (
+		frappe.qb.from_(bin_)
+		.select(bin_.item_code, Sum(bin_.stock_value).as_("value"), Sum(bin_.actual_qty).as_("qty"))
+		.where(bin_.item_code.isin(codes))
+		.where(bin_.actual_qty > 0)
+		.groupby(bin_.item_code)
+	)
+	if warehouses:
+		query = query.where(bin_.warehouse.isin(warehouses))
+	for row in query.run(as_dict=True):
+		if flt(row.qty):
+			out[row.item_code] = flt(row.value) / flt(row.qty)
+
+	missing = [code for code, rate in out.items() if rate is None]
+	if missing:
+		item = frappe.qb.DocType("Item")
+		for row in (
+			frappe.qb.from_(item)
+			.select(item.name, item.last_purchase_rate)
+			.where(item.name.isin(missing))
+			.run(as_dict=True)
+		):
+			out[row.name] = flt(row.last_purchase_rate) or None
+	return out
+
+
+@frappe.whitelist()
+def get_history_popup(
+	item_code: str,
+	customer: str | None = None,
+	company: str | None = None,
+	price_list: str | None = None,
+	qty: float = 1,
+	limit: int = 6,
+) -> dict:
+	"""Everything the Show Sales History popup shows, in one round trip. Read-only.
+
+	`{sales, purchases, stock, assist, currency, can_see_purchases}`, in the order the popup
+	lists them (sales, purchases, stock, then the price comparison at the bottom). Every block
+	is scoped to the caller's branch warehouses. A role without Purchase Invoice read gets an
+	empty `purchases` block rather than an error — a popup must not fail as a whole.
+	"""
+	if not item_code:
+		frappe.throw(_("Item Code is required"))
+	frappe.has_permission("Item", "read", throw=True)
+	frappe.has_permission("Sales Invoice", "read", throw=True)
+
+	limit = cint(limit) or 6
+	company = _company(company)
+	warehouses = _branch_warehouses()
+
+	where, params = _sale_conditions(warehouses, None, exclude_returns=True)
+	if company:
+		where.append("si.company = %(company)s")
+		params["company"] = company
+	params.update({"item_code": item_code, "limit": limit})
+	sales = frappe.db.sql(
+		f"""
+		SELECT si.name AS invoice, si.posting_date, si.customer, si.customer_name,
+		       sii.qty, sii.uom, sii.rate, si.currency
+		FROM `tabSales Invoice Item` sii
+		INNER JOIN `tabSales Invoice` si ON si.name = sii.parent
+		WHERE {' AND '.join(where)}
+		ORDER BY si.posting_date DESC, si.creation DESC
+		LIMIT %(limit)s
+		""",
+		params,
+		as_dict=True,
+	)
+
+	can_see_purchases = bool(frappe.has_permission("Purchase Invoice", "read"))
+	assist = _assist(item_code, customer, company, price_list, qty)
+	return {
+		"sales": sales,
+		"purchases": _purchases(item_code, company, warehouses, limit) if can_see_purchases else [],
+		"stock": _stock(item_code, warehouses),
+		"assist": assist,
+		"currency": assist.get("currency"),
+		"can_see_purchases": can_see_purchases,
+	}
+
+
+def _purchases(item_code, company, warehouses, limit) -> list:
+	"""Last `limit` purchases: Purchase Invoice rows UNION Purchase Receipt rows that no
+	submitted Purchase Invoice references yet (so a billed receipt is not counted twice).
+
+	Same branch rule as `_purchase_conditions`: the item row's warehouse, else the header's.
+	Returns are not purchases and are left out.
+	"""
+	where, params = _purchase_conditions(warehouses)
+	where.append("pi.is_return = 0")
+	pr_where = ["pr.docstatus = 1", "pr.is_return = 0", "pri.item_code = %(item_code)s"]
+	if warehouses:
+		pr_where.append(
+			"(pri.warehouse IN %(warehouses)s"
+			" OR (IFNULL(pri.warehouse, '') = '' AND pr.set_warehouse IN %(warehouses)s))"
+		)
+	if company:
+		where.append("pi.company = %(company)s")
+		pr_where.append("pr.company = %(company)s")
+		params["company"] = company
+	params.update({"item_code": item_code, "limit": cint(limit) or 6})
+
+	return frappe.db.sql(
+		f"""
+		SELECT * FROM (
+			SELECT 'Purchase Invoice' AS doc_type, pi.name AS doc, pi.posting_date, pi.creation,
+			       pi.supplier, pi.supplier_name, pii.qty, pii.uom, pii.rate, pi.currency
+			FROM `tabPurchase Invoice Item` pii
+			INNER JOIN `tabPurchase Invoice` pi ON pi.name = pii.parent
+			WHERE {' AND '.join(where)}
+			UNION ALL
+			SELECT 'Purchase Receipt' AS doc_type, pr.name AS doc, pr.posting_date, pr.creation,
+			       pr.supplier, pr.supplier_name, pri.qty, pri.uom, pri.rate, pr.currency
+			FROM `tabPurchase Receipt Item` pri
+			INNER JOIN `tabPurchase Receipt` pr ON pr.name = pri.parent
+			WHERE {' AND '.join(pr_where)}
+			AND NOT EXISTS (
+				SELECT 1 FROM `tabPurchase Invoice Item` billed
+				WHERE billed.pr_detail = pri.name AND billed.docstatus = 1
+			)
+		) purchases
+		ORDER BY posting_date DESC, creation DESC
+		LIMIT %(limit)s
+		""",
+		params,
+		as_dict=True,
+	)

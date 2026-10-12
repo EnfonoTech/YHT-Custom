@@ -6,15 +6,63 @@
 // Strips a Purchase Invoice down to what an expense actually needs, so the person
 // entering the electricity bill is not looking at warehouses and receipts.
 
+frappe.provide("yht_custom.expense");
+
+// Row 33 (2026-10-11) — "Record Expense". The workspace shortcut and the dashboard tile both
+// arrive here. The flag survives `frappe.route_options` (`custom_is_expense_invoice` is not
+// `no_copy`); the naming series does NOT (`naming_series` is `no_copy`, and `create_new.js`
+// skips such fields), so the form sets it below.
+yht_custom.expense.new_expense = function () {
+	frappe.new_doc("Purchase Invoice", {custom_is_expense_invoice: 1});
+};
+
+const EXPENSE_SERIES = "KSEPI-.YY.-.####";
+const EXPENSE_PRINT_FORMAT = "YHT Expense Invoice";
+
+function record_expense_on() {
+	return ((frappe.boot && frappe.boot.yht_features) || []).indexOf("oct11_r33_record_expense") !== -1;
+}
+
+function record_expense(frm) {
+	if (!record_expense_on()) return;
+	const flagged = !!frm.doc.custom_is_expense_invoice;
+
+	// The operator SEES the expense series on a new expense. Once per form, so a deliberate
+	// change of series afterwards is not fought. The server (`set_expense_series`) is still the
+	// authority; this only makes the number visible before saving.
+	if (frm.is_new() && flagged && !frm.doc.is_return && !frm.__yht_series_set) {
+		const offered = ((frm.fields_dict.naming_series && frm.fields_dict.naming_series.df.options) || "")
+			.split("\n")
+			.includes(EXPENSE_SERIES);
+		if (offered) {
+			frm.__yht_series_set = true;
+			if (frm.doc.naming_series !== EXPENSE_SERIES) frm.set_value("naming_series", EXPENSE_SERIES);
+		}
+	}
+
+	// The printer icon preselects `frm.meta.default_print_format`, the browser's own copy (the
+	// only per-user lever). Put the original back for an ordinary invoice, or an expense would
+	// leave the next Purchase Invoice in the same session defaulting to the expense format.
+	if (frm.meta) {
+		if (frm.meta.default_print_format !== EXPENSE_PRINT_FORMAT) {
+			frm.meta.__yht_pf = frm.meta.default_print_format || "";
+		}
+		frm.meta.default_print_format = flagged ? EXPENSE_PRINT_FORMAT : frm.meta.__yht_pf || "";
+	}
+}
+
 frappe.ui.form.on("Purchase Invoice", {
 	onload(frm) {
 		shape(frm);
+		record_expense(frm);
 	},
 	refresh(frm) {
 		shape(frm);
+		record_expense(frm);
 	},
 	custom_is_expense_invoice(frm) {
 		shape(frm);
+		record_expense(frm);
 		if (frm.doc.custom_is_expense_invoice) {
 			frm.set_value("update_stock", 0);
 		}

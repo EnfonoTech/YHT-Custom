@@ -128,6 +128,11 @@ table.katc-items td.ctr { text-align: center; }
     <td class="lbl">Attention:</td><td colspan="3">{{ doc.get("custom_attention_person") }}</td>
   </tr>
 {%- endif %}
+{# r30 #}{% if yht_feature("oct11_r30_front_details") %}
+  <tr>
+    <td class="lbl">Address:</td><td colspan="3">{{ doc.address_display or "" }}</td>
+  </tr>
+{# r30 #}{%- endif -%}
 </tbody></table>
 
 <table class="katc-items">

@@ -104,6 +104,16 @@ CLIENT_DEFAULT_PRINT_FORMATS = {
 	"Delivery Note": "DELIVERY-NOTE W/O HEAD",
 }
 
+#: Other client-built formats `check_client_defaults` accepts for a doctype. Row 35
+#: (2026-10-11): live Delivery Note defaults to `DELIVERY-NOTE W HEAD` (a Property Setter by
+#: `saheed@`, 2026-10-12) while Osaid's list says `DELIVERY-NOTE W/O HEAD`, which does not
+#: exist there — so the check read SKIP ("no such format") over a default that IS a client
+#: format. Which of the two is final is the client's question, not decided here, which is why
+#: `CLIENT_DEFAULT_PRINT_FORMATS` itself is left as Osaid wrote it.
+CLIENT_DEFAULT_ALTERNATIVES = {
+	"Delivery Note": ("DELIVERY-NOTE W HEAD",),
+}
+
 
 def setup_print_consolidation() -> dict:
 	"""Idempotent. Behind `cr_004_print_heading`."""
@@ -112,9 +122,14 @@ def setup_print_consolidation() -> dict:
 
 	disabled = []
 	for name in list(SUPERSEDED) + list(LEGACY_NOISE):
-		if not frappe.db.exists("Print Format", name):
+		current = frappe.db.get_value("Print Format", name, ["disabled", "standard"], as_dict=True)
+		if not current:
 			continue
-		if frappe.db.get_value("Print Format", name, "disabled"):
+		# Row 35: a format the client built (`standard != Yes`) is never touched, even if it
+		# happens to carry a retired name.
+		if current.standard != "Yes":
+			continue
+		if current.disabled:
 			continue
 		frappe.db.set_value("Print Format", name, "disabled", 1, update_modified=False)
 		disabled.append(name)
@@ -141,7 +156,9 @@ def restore(names=None) -> dict:
 	names = names or list(SUPERSEDED)
 	back = []
 	for name in names:
-		if frappe.db.exists("Print Format", name) and frappe.db.get_value("Print Format", name, "disabled"):
+		current = frappe.db.get_value("Print Format", name, ["disabled", "standard"], as_dict=True)
+		# Row 35: never re-enable a format the client built (`standard != Yes`).
+		if current and current.standard == "Yes" and current.disabled:
 			frappe.db.set_value("Print Format", name, "disabled", 0, update_modified=False)
 			back.append(name)
 	frappe.db.commit()
@@ -270,10 +287,34 @@ def check_client_defaults() -> dict:
 	"""
 	rows = {}
 	for doctype, fmt in CLIENT_DEFAULT_PRINT_FORMATS.items():
-		if not frappe.db.exists("Print Format", fmt):
-			rows[doctype] = {"expected": fmt, "effective": None, "status": "SKIP - this site has no such format"}
-			continue
+		accepted = (fmt, *CLIENT_DEFAULT_ALTERNATIVES.get(doctype, ()))
 		effective = frappe.get_meta(doctype).default_print_format
-		rows[doctype] = {"expected": fmt, "effective": effective, "status": "OK" if effective == fmt else "FAIL"}
+		current = (
+			frappe.db.get_value("Print Format", effective, "disabled", as_dict=True) if effective else None
+		)
+		if effective and (current is None or current.disabled):
+			# A default nobody can print with: the printer icon throws.
+			reason = (
+				"the default names a Print Format that does not exist"
+				if current is None
+				else "the default Print Format is disabled"
+			)
+			rows[doctype] = {"expected": fmt, "effective": effective, "status": "FAIL", "reason": reason}
+		elif not any(frappe.db.exists("Print Format", name) for name in accepted):
+			rows[doctype] = {
+				"expected": fmt,
+				"effective": effective,
+				"status": "SKIP - this site has no such format",
+				"reason": "none of %s exists on this site" % ", ".join(accepted),
+			}
+		elif effective in accepted:
+			rows[doctype] = {"expected": fmt, "effective": effective, "status": "OK", "reason": ""}
+		else:
+			rows[doctype] = {
+				"expected": fmt,
+				"effective": effective,
+				"status": "FAIL",
+				"reason": "the default is not one of %s" % ", ".join(accepted),
+			}
 	print(frappe.as_json(rows, indent=1))
 	return rows

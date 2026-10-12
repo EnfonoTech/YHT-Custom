@@ -46,6 +46,8 @@ expense — kept without the wrapper. Payment stays a Payment Entry, or ERPNext'
 own `is_paid` + `cash_bank_account` for a genuine one-step cash expense.
 """
 
+import json
+
 import frappe
 from frappe import _
 from frappe.utils import cint, cstr, flt
@@ -411,3 +413,90 @@ def set_expense_series(doc, method=None):
 	if cint(doc.get("is_return")):
 		return
 	doc.naming_series = EXPENSE_SERIES
+
+
+# ------------------------------------------------------------- row 33 — entry points
+
+
+#: `stats_filter` of the `Record Expense` shortcut. A Workspace Shortcut of `type DocType,
+#: doc_view New` applies it as `frappe.route_options` (`shortcut_widget.js`), so the flag is
+#: preset with no URL hack. The series is NOT carried (`naming_series` is `no_copy`), which is
+#: why `expense_invoice.js` sets it on the new form.
+RECORD_EXPENSE_FILTER = json.dumps({"custom_is_expense_invoice": 1})
+EXPENSE_LIST_FILTER = json.dumps([["Purchase Invoice", "custom_is_expense_invoice", "=", 1, False]])
+
+RECORD_EXPENSE_LABEL = "Record Expense"
+EXPENSE_LIST_LABEL = "Expense Invoices"
+
+
+def setup_record_expense() -> dict:
+	"""Row 33 — `Record Expense` and `Expense Invoices` workspace shortcuts. Idempotent.
+
+	Same contract as `workspace_shortcuts.setup_new_shortcuts`: a shortcut is TWO writes (the
+	`shortcuts` child row AND the workspace `content` layout entry), and this only ever ADDS.
+	The client's existing `Expense Invoice` shortcut (a List filtered on the flag, on Buying and
+	Home) is adopted, never duplicated or renamed. Nothing goes on the `Branch User` workspace:
+	a branch user cannot open a named workspace (gotcha 62) and reaches this through the
+	dashboard tiles instead.
+	"""
+	if not features.enabled("oct11_r33_record_expense"):
+		return {"skipped": "oct11_r33_record_expense is off for this site"}
+
+	from yht_custom.workspace_shortcuts import _content_has, _load_content
+
+	wanted = {
+		"Buying": [(RECORD_EXPENSE_LABEL, "New", RECORD_EXPENSE_FILTER, "Green"), (EXPENSE_LIST_LABEL, "List", EXPENSE_LIST_FILTER, "Orange")],
+		"Accounting": [(RECORD_EXPENSE_LABEL, "New", RECORD_EXPENSE_FILTER, "Green"), (EXPENSE_LIST_LABEL, "List", EXPENSE_LIST_FILTER, "Orange")],
+	}
+	added, adopted, skipped = [], [], []
+	for workspace, shortcuts in wanted.items():
+		if not frappe.db.exists("Workspace", workspace):
+			skipped.append(f"{workspace}: no such workspace")
+			continue
+		doc = frappe.get_doc("Workspace", workspace)
+		content = _load_content(doc)
+		changed = False
+		for label, view, stats_filter, color in shortcuts:
+			if view == "List":
+				# Adopt the client's own List shortcut on the flag, whatever it is called.
+				existing = [
+					row
+					for row in doc.shortcuts
+					if row.link_to == "Purchase Invoice"
+					and row.doc_view != "New"
+					and "custom_is_expense_invoice" in (row.stats_filter or "")
+				]
+				if existing:
+					adopted.append(f"{workspace}: {existing[0].label}")
+					continue
+			if label not in {row.label for row in doc.shortcuts}:
+				doc.append(
+					"shortcuts",
+					{
+						"type": "DocType",
+						"link_to": "Purchase Invoice",
+						"doc_view": view,
+						"stats_filter": stats_filter,
+						"label": label,
+						"color": color,
+					},
+				)
+				added.append(f"{workspace}: {label}")
+				changed = True
+			if not _content_has(content, label):
+				content.append(
+					{
+						"id": f"yht-{label.lower().replace(' ', '-')}",
+						"type": "shortcut",
+						"data": {"shortcut_name": label, "col": 3},
+					}
+				)
+				changed = True
+		if changed:
+			doc.content = json.dumps(content)
+			doc.flags.ignore_permissions = True
+			doc.flags.ignore_links = True
+			doc.save()
+	if skipped:
+		frappe.log_error(title="yht_custom: record expense shortcuts", message="\n".join(skipped))
+	return {"added": added, "adopted": adopted, "skipped": skipped}
