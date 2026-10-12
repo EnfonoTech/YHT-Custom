@@ -280,10 +280,17 @@ class TestCr004AndCr005ThePrintHeading(FrappeTestCase):
 				self.assertNotIn('katc-title">PROFORMA INVOICE<', source)
 
 	def test_the_arabic_column_follows_the_print_language(self):
-		for template in ("quotation.html", "sales_order.html", "purchase_order.html"):
+		# Rows 17 + 34 (2026-10-11): the selling templates pass the document so its own
+		# Print With Arabic tick can answer; the Purchase Order has no such tick.
+		expected = {
+			"quotation.html": 'yht_print_lang(doc) == "ar"',
+			"sales_order.html": 'yht_print_lang(doc) == "ar"',
+			"purchase_order.html": 'yht_print_lang() == "ar"',
+		}
+		for template, call in expected.items():
 			with self.subTest(template=template):
 				source = _read("templates", "includes", "katc", template)
-				self.assertIn('yht_print_lang() == "ar"', source)
+				self.assertIn(call, source)
 
 	def test_the_jinja_methods_are_registered(self):
 		"""An unregistered method is an exception on every page that renders."""
