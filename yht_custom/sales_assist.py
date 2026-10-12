@@ -87,6 +87,18 @@ def setup_sales_assist_columns() -> dict:
 	"""
 	applied, already, failed = 0, 0, []
 
+	# Row 13 (2026-10-11): with the Valuation Rate column on, the widths are the ones
+	# `meeting_1011_wednesday` sets (item 2, not 3, so the ten units still hold). Reading them
+	# here keeps this step idempotent next to that one — two steps writing different widths
+	# would flip the Property Setters on every migrate. With the switch off, `GRID_LAYOUT` as is.
+	from yht_custom import features
+
+	widths = {}
+	if features.enabled("oct11_r13_sales_history"):
+		from yht_custom.meeting_1011_wednesday import GRID_WIDTHS
+
+		widths = {fieldname: str(width) for fieldname, width in GRID_WIDTHS}
+
 	def _set(doctype, fieldname, prop, value, prop_type):
 		nonlocal applied, already
 		existing = frappe.db.get_value(
@@ -126,7 +138,7 @@ def setup_sales_assist_columns() -> dict:
 				failed.append(f"{doctype}: no {fieldname}")
 				continue
 			_set(doctype, fieldname, "in_list_view", "1", "Check")
-			_set(doctype, fieldname, "columns", columns, "Int")
+			_set(doctype, fieldname, "columns", widths.get(fieldname, columns), "Int")
 			_set(doctype, fieldname, "read_only", read_only, "Check")
 			if label:
 				_set(doctype, fieldname, "label", label, "Data")
