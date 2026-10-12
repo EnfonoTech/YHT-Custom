@@ -34,6 +34,7 @@ import frappe
 
 from yht_custom import features
 from yht_custom.field_layout import _read_order, _write_order
+from yht_custom.form_layout import GROUP_BEFORE
 from yht_custom.meeting_1011 import SELLING, _front_boundary, _live_order, place_after
 
 ITEM_DOCTYPES = ("Quotation Item", "Sales Order Item", "Sales Invoice Item", "Delivery Note Item")
@@ -139,9 +140,21 @@ def _block_target(doctype: str, order: list):
 	boundary = _front_boundary(order)
 	if boundary >= len(order):
 		return None
-	if boundary > 0 and _is_section_break(doctype, order[boundary - 1]):
-		return order[boundary - 1]
-	return order[boundary]
+	before = order[boundary]
+
+	# 🔴 `form_layout.GROUP_BEFORE` (client sheet item 10) keeps "update stock · selling price ·
+	# store" contiguous IMMEDIATELY above the item table. A block placed between that group and
+	# the item table would be pulled back out by `_group_before` on every migrate, and would pull
+	# the group out in turn — the oscillation that rule was written to end. So go before the group.
+	group, anchor = GROUP_BEFORE.get(doctype, ([], None))
+	present = [name for name in group if name in order]
+	if present and anchor == before and order[boundary - len(present) : boundary] == present:
+		before = present[0]
+
+	at = order.index(before)
+	if at > 0 and _is_section_break(doctype, order[at - 1]):
+		return order[at - 1]
+	return before
 
 
 def place_block(doctype: str, fieldnames: list, before: str) -> bool:
