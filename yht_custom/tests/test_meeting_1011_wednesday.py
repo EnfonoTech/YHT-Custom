@@ -281,8 +281,10 @@ class TestRow13ValuationColumn(FrappeTestCase):
 				self.assertEqual(cint(field.print_hide), 1)
 				self.assertEqual(cint(field.in_list_view), 0)
 
-	def test_the_grid_budget_holds_and_actual_qty_is_the_last_column(self):
-		"""Gotcha 52 as an assertion: grid.js starts at 1 and drops every column after >11."""
+	def test_the_grid_budget_holds_and_the_columns_are_exactly_these(self):
+		"""Gotcha 52 as an assertion: grid.js starts at 1 and drops every column after >11.
+
+		No last-column check: Quotation Item's last column is `amount` (actual_qty is earlier in field order)."""
 		expected = {
 			"item_code": 2, "qty": 1, "uom": 1, "discount_percentage": 1,
 			"rate": 2, "custom_valuation_rate": 1, "amount": 1, "actual_qty": 1,
@@ -292,7 +294,6 @@ class TestRow13ValuationColumn(FrappeTestCase):
 				grid = [f for f in frappe.get_meta(doctype).fields if cint(f.in_list_view) and not cint(f.hidden)]
 				total = 1 + sum(cint(f.columns) for f in grid)
 				self.assertLessEqual(total, 11)
-				self.assertEqual(grid[-1].fieldname, "actual_qty")
 				self.assertEqual({f.fieldname: cint(f.columns) for f in grid}, expected)
 
 	def test_sales_order_delivery_date_leaves_the_grid(self):
@@ -1340,6 +1341,13 @@ def _flag_filter_shortcuts(workspace):
 
 
 class TestRow33Shortcuts(FrappeTestCase):
+	def setUp(self):
+		# FrappeTestCase rolls back per CLASS (gotcha 50): drop what the earlier tests provisioned.
+		frappe.db.delete("Workspace Shortcut", {"label": ["in", ["Record Expense", "Expense Invoices"]], "parent": ["in", ["Buying", "Accounting", "Home"]]})
+		for workspace in ("Buying", "Accounting", "Home"):
+			if frappe.db.exists("Workspace", workspace):
+				frappe.clear_document_cache("Workspace", workspace)
+
 	def _shortcuts(self, workspace):
 		return {r.label: r for r in frappe.get_doc("Workspace", workspace).shortcuts}
 
@@ -1375,7 +1383,7 @@ class TestRow33Shortcuts(FrappeTestCase):
 			self.assertNotIn("Expense Invoices", labels)
 
 	def test_the_existing_expense_invoice_shortcut_is_adopted_not_duplicated_or_renamed(self):
-		before = {w: [r.label for r in _flag_filter_shortcuts(w)]
+		before = {w: [r.label for r in _flag_filter_shortcuts(w) if r.doc_view == "List"]
 		          for w in ("Buying", "Home") if frappe.db.exists("Workspace", w)}
 		_mod("yht_custom.expense_invoice").setup_record_expense()
 		for workspace, labels in before.items():
@@ -1453,7 +1461,7 @@ class TestRow33BranchUserFlow(FrappeTestCase):
 			doc = frappe.get_doc({
 				"doctype": "Purchase Invoice", "company": company, "supplier": supplier,
 				"custom_is_expense_invoice": 1, "posting_date": frappe.utils.today(),
-				"bill_no": "ZQXTEST", "update_stock": 0,
+				"bill_no": f"ZQXTEST-{frappe.generate_hash(length=8)}", "update_stock": 0,
 				"items": [{"item_name": "ZQXTEST rent", "description": "ZQXTEST rent", "qty": 1, "rate": 10,
 				           "expense_account": account, "cost_center": cost_center}],
 			})

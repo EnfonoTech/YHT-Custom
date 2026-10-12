@@ -105,6 +105,7 @@ def _prefix_hits(text: str, limit: int, doctype: str) -> list:
 			visible[dt] = set(frappe.get_list(dt, filters={"name": ["in", names]}, pluck="name"))
 		except Exception:
 			frappe.clear_messages()
+			frappe.log_error(frappe.get_traceback(), f"doc_number_search: get_list failed for {dt}")
 			visible[dt] = set()
 
 	hits = []

@@ -409,12 +409,16 @@ def get_valuation_rates(item_codes: str, company: str | None = None) -> dict:
 	)
 	if warehouses:
 		query = query.where(bin_.warehouse.isin(warehouses))
+	if company:
+		wh = frappe.qb.DocType("Warehouse")
+		query = query.join(wh).on(wh.name == bin_.warehouse).where(wh.company == company)
 	for row in query.run(as_dict=True):
 		if flt(row.qty):
 			out[row.item_code] = flt(row.value) / flt(row.qty)
 
+	# Same rule as the popup: a role that cannot read purchases is not shown a purchase rate.
 	missing = [code for code, rate in out.items() if rate is None]
-	if missing:
+	if missing and frappe.has_permission("Purchase Invoice", "read"):
 		item = frappe.qb.DocType("Item")
 		for row in (
 			frappe.qb.from_(item)
