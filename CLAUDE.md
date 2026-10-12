@@ -1006,6 +1006,44 @@ accountant: SI→`CN`, DN→`DRN`, PI→`DBN`, PR→`PRN`.
     Rehearse with the heading switch off and the old shims in memory
     (`test_the_live_conditions_heading_switch_off_and_the_old_shims`); UAT alone is every switch ON.
 
+124. 🔴 **A `doc_events` HANDLER ON ANOTHER APP'S DOCTYPE RUNS AFTER ITS CONTROLLER — SO IT IS TOO LATE WHENEVER THE
+    CONTROLLER ALREADY USED THE VALUE.** `ksa_compliance.SalesInvoiceAdditionalFields.before_insert` calls
+    `_set_buyer_details` and then `_prepare_for_zatca`, which builds the invoice XML, hash and QR from the fields as
+    they stand. Row 28 (the buyer's Additional Number) therefore could not be a handler: it would have rewritten the
+    field after the signed XML was produced from the placeholder, leaving a stored field that disagrees with its own
+    XML. `zatca_buyer.YHTSalesInvoiceAdditionalFields` subclasses the upstream class and overrides the one method that
+    assigns it (`_set_buyer_address`), registered through `override_doctype_class`. Upstream hard-codes
+    `buyer_additional_number = 'not available for now'` for EVERY invoice and the template emits it as
+    `<cbc:PlotIdentification>`; 161 addresses carry a real `custom_additional_number` that was never read. A class
+    override is inert on a site whose switch is off — and also on a site whose HOOKS CACHE is stale: measured on live
+    right after the deploy, `type(doc)` was still the upstream class until that site's `clear-cache`.
+125. ⚠️ **A STANDARD-FILTER CHECK CANNOT EXPRESS "NOT".** `base_list.js::get_standard_filters` skips any falsy control
+    value, so an unticked `is_return` adds NO filter — "normal invoices only" cannot be built from the Check that item
+    36 put in the filter row, only "returns only". Row 27's dropdown is a VIRTUAL control (`fieldname: yht_kind`, never
+    a column): it is added with `page.add_field` in `settings.onload` (which runs in `setup_view`, i.e. AFTER
+    `setup_filter_area`, so `listview.filter_area` exists), and `filter_area.get_standard_filters` is wrapped so the
+    choice becomes ordinary `[doctype, column, "=", value]` filters. A Select's `options` may be `{value, label}`
+    objects, which is what lets a label differ from the value. The native Is Return / Is Expense Invoice checks are
+    hidden, not removed — a saved view carrying them still works.
+126. 🔴 **THE PRINTER ICON'S PRESELECTED FORMAT IS `frm.meta.default_print_format` — THE BROWSER'S COPY, WHICH IS THE
+    ONLY PER-USER LEVER THERE IS.** The server's `meta.default_print_format` is cached once for everybody, so a
+    per-branch default cannot live there. `printing/page/print/print.js::set_default_print_format` fills the selector
+    from `this.frm.meta`, and `frm.meta` is `locals.DocType[...]` in that session; row 36 sets it from
+    `frappe.boot.yht_branch_print_formats` in the form's `setup`. It moves the PRESELECTION only — a toolbar button
+    naming its format, a `/printview?format=` link and an email attachment are unaffected. Verified headless as the
+    branch user: Sales Invoice → `KATC Tax Invoice`, Quotation unchanged at the site default.
+127. ⚠️ **PLACING A CUSTOM FIELD "UNDER" A STANDARD ONE MUST CONVERGE WHICHEVER STEP RUNS FIRST.** Row 17's tick and row
+    37's heading are two provisioning steps; written independently the tick landed under the heading only on the SECOND
+    migrate (the first created it beside an anchor that row 37 then moved away from). `setup_heading_front` now places
+    the tick too, and the idempotence test runs the steps in both orders. `meeting_1011.place_after` builds from
+    `meta.fields` (gotcha 111) and refuses a candidate anchor that sits behind the item table on this site — the
+    client re-laid-out the live Delivery Note, whose `set_posting_time` is below the items.
+128. ⚠️ **`yht_print_lang(doc)` TAKES THE DOCUMENT NOW; TEMPLATES THAT CALL IT WITH NO ARGUMENT STILL WORK.** Rows 17 + 34:
+    the tick answers "ar" before the CR-004 check, so it works on the legacy (live) path as well. Only `quotation`,
+    `proforma_invoice` and `sales_order` pass `doc`; Sales Invoice and Delivery Note print the Arabic item name inside
+    the cell regardless (see the comment above `KATC_BUTTONS_LEGACY`), so the tick has nothing to switch there — it
+    exists for the client's own hand-built formats, which read `doc.custom_print_with_arabic`.
+
 ## Deploy
 
 Repo: **`git@github-yht:EnfonoTech/YHT-Custom.git`** (private). The box has a dedicated read-only deploy key at
@@ -1149,6 +1187,15 @@ print-default deletions). Prints byte-identical before/after; new baseline `/tmp
 list, which answers Sunday Q1 (gotcha 122; check with `print_consolidation.check_client_defaults`). Rows 23/24/27 wait for `oct08_r23_invoice_first_dn_link` / `oct08_r24_prepayment_block` /
 `oct08_r27_list_filters` (held off live at the client's request); the live deploy list and the Q1 print-default
 consequences are in `docs/handoffs/handoff-20261010-batch-a-uat.md`.
+
+**2026-10-12 — meeting 2026-10-11 "Tuesday batch" is on UAT** (branch `pipeline/meeting-1011-batch-c`, off the 10-08 branch, not merged; the bench is checked out on it):
+rows 17+34 (Print With Arabic tick, one toolbar print button), 20 (Quotation list on the ID), 24 (Payment Entry opens on Pay), 27 (one
+Type dropdown on SI / DN / PI / PR lists), 28 (ZATCA buyer additional number, gotcha 124), 29 (Purchase Order for branch users — create/write,
+NOT submit — plus tile and row filter), 36 (Branch Configuration default print format per document type, gotcha 126), 37 (Print Heading on
+the front page, pre-filled). Every row has its own `oct11_*` switch; `yht-test` has `["all"]`, the live site none, so live runs unchanged —
+verified: the 10 KATC prints are byte-identical before/after the pull (`N 10`), the override class is still the upstream one there, every new
+Python entry point returns its "off" value. Rows 21 (global-search purge, needs the night window and a go-ahead), 22, 26, 30, 32, 33, 13 are the
+Wednesday batch. Analysis: `docs/09-MEETING-2026-10-11-ESCALATED-ROWS.md`.
 
 **Still outstanding:** 5.7 pricing (blocked on B9), 6.1 branded tax invoice + 6.9 ZATCA onboarding
 (blocked on CSR/OTP), 4.10 cancel rights (blocked on B8), Step 7.2–7.6 (needs the incumbent backup).
