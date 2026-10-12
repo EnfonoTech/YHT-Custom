@@ -1074,6 +1074,18 @@ accountant: SI→`CN`, DN→`DRN`, PI→`DBN`, PR→`PRN`.
 135. ⚠️ **A CUSTOM DOCPERM ON A STANDARD DOCTYPE STRIPS ITS STANDARD PERMISSIONS (gotcha 6, again).** Row 26 therefore
     uses a Select, not a Fiscal Year Link, for the Branch User who cannot read Fiscal Year — and no Custom DocPerm on it.
 
+136. 🔴 **A LINK STANDARD FILTER VALIDATES ITS VALUE, SO A DEFAULT FILTER ON A LINK NEEDS READ ON THE TARGET.** The lists'
+    Fiscal Year filter (`custom_fiscal_year`, a Link) is validated through `frappe.client.validate_link` when it is set, and a
+    branch user has no read on Fiscal Year: every list opened with "You do not have Read or Select Permissions for Fiscal Year"
+    and the default year was never applied — since item 35, for exactly the users it was written for. Tests were green because
+    they ran as Administrator. Found by the headless pass as `branchtest@`. Fix: `session_year._grant_fiscal_year_read` (behind
+    the row-26 switch) mirrors Fiscal Year's standard DocPerms first (gotcha 6) and gives the two branch roles read. **Run the
+    browser pass as the least-privileged user, not only as Administrator.**
+137. ⚠️ **A LINK TO FISCAL YEAR TAKES THE USER'S `fiscal_year` DEFAULT ON A NEW DOCUMENT.** With a Session Default of 2025 a
+    Sales Invoice dated today (2026) opened showing "Fiscal Year 2025" under a note saying it is derived from the date. The
+    server recomputes it on save (`fiscal_year.set_fiscal_year`), so nothing wrong was stored, but the form lied until then.
+    `session_year.js` clears it on a new draft of the eight doctypes, behind the row-26 switch.
+
 ## Deploy
 
 Repo: **`git@github-yht:EnfonoTech/YHT-Custom.git`** (private). The box has a dedicated read-only deploy key at
