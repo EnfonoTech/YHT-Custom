@@ -144,6 +144,10 @@ def setup_heading_front() -> dict:
 			continue
 		if place_after(doctype, HEADING, anchor):
 			moved.append(doctype)
+			# The tick belongs directly under the heading, whichever step ran first —
+			# otherwise it converges only on the SECOND migrate.
+			if ARABIC_TICK in _live_order(doctype):
+				place_after(doctype, ARABIC_TICK, HEADING)
 	if skipped:
 		frappe.log_error(message="\n".join(skipped), title="yht_custom: heading front")
 	return {"moved": moved, "skipped": skipped}

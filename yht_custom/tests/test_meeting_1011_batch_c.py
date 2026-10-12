@@ -157,6 +157,10 @@ class TestPrintWithArabicTick(FrappeTestCase):
 
 	def test_a_ticked_quotation_prints_the_arabic_column_on_the_plain_format(self):
 		doc = self._quotation()
+		# The newest quotation may carry Print As = Proforma, which routes to the
+		# proforma layout; this test is about the plain quotation layout.
+		doc.custom_print_as = "Sales Quotation"
+		doc.select_print_heading = "Sales Quotation"
 		doc.custom_print_with_arabic = 0
 		plain = self._render(doc)
 		doc.custom_print_with_arabic = 1
