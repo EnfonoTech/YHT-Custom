@@ -793,11 +793,46 @@ class TestRow26Provisioning(FrappeTestCase):
 		with _off(R26):
 			self.assertIn("skipped", _sy().setup_session_year())
 
-	def test_no_custom_docperm_is_ever_created_on_fiscal_year(self):
-		"""Gotcha 6: one Custom DocPerm replaces the standard permissions of the whole doctype."""
-		self.assertEqual(frappe.db.count("Custom DocPerm", {"parent": "Fiscal Year"}), 0)
+	def test_branch_roles_can_read_fiscal_year_and_nobody_else_loses_access(self):
+		"""The browser pass found "You do not have Read or Select Permissions for Fiscal
+		Year" on every list a branch user opened: the Fiscal Year filter is a Link control
+		and validates its value. The grant mirrors the standard rows first (gotcha 6)."""
+		standard = {
+			(r.role, r.permlevel): r.read
+			for r in frappe.get_all("DocPerm", filters={"parent": "Fiscal Year"}, fields=["role", "permlevel", "read"])
+		}
+		before = frappe.db.count("Custom DocPerm", {"parent": "Fiscal Year"})
 		_sy().setup_session_year()
-		self.assertEqual(frappe.db.count("Custom DocPerm", {"parent": "Fiscal Year"}), 0)
+		for role in ("Branch User", "Branch Manager"):
+			row = frappe.db.get_value(
+				"Custom DocPerm", {"parent": "Fiscal Year", "role": role, "permlevel": 0}, ["read", "write", "create", "delete"], as_dict=True
+			)
+			self.assertTrue(row, role)
+			self.assertEqual((row.read, row.write, row.create, row.delete), (1, 0, 0, 0), role)
+		if not before:
+			# every standard role keeps what it had
+			for (role, level), read in standard.items():
+				got = frappe.db.get_value("Custom DocPerm", {"parent": "Fiscal Year", "role": role, "permlevel": level}, "read")
+				self.assertEqual(got, read, role)
+
+	def test_the_grant_is_idempotent_and_off_writes_nothing(self):
+		_sy().setup_session_year()
+		count = frappe.db.count("Custom DocPerm", {"parent": "Fiscal Year"})
+		_sy().setup_session_year()
+		self.assertEqual(frappe.db.count("Custom DocPerm", {"parent": "Fiscal Year"}), count)
+		with _off(R26):
+			before = frappe.db.count("Custom DocPerm", {"parent": "Fiscal Year"})
+			_sy().setup_session_year()
+			self.assertEqual(frappe.db.count("Custom DocPerm", {"parent": "Fiscal Year"}), before)
+
+	def test_a_branch_user_can_read_fiscal_year_after_the_step(self):
+		user = "branchtest@yht-khobhar.enfonoerp.com"
+		if not frappe.db.exists("User", user):
+			self.skipTest("branch test user not present")
+		_sy().setup_session_year()
+		frappe.clear_cache(user=user)
+		self.assertTrue(frappe.has_permission("Fiscal Year", "read", user=user))
+		self.assertFalse(frappe.has_permission("Fiscal Year", "write", user=user))
 
 	def test_logout_clears_the_chosen_year_because_the_row_exists(self):
 		from frappe.core.doctype.session_default_settings.session_default_settings import (

@@ -121,19 +121,61 @@ def sync_saved_filters(user, year) -> None:
 
 
 def setup_session_year() -> dict:
-	"""Make sure Session Default Settings has a `Fiscal Year` row. Idempotent, no commit.
+	"""Row 26 provisioning. Idempotent, no commit.
 
-	Present on both sites today; the step exists so a re-seeded UAT cannot regress.
-	No Custom DocPerm on Fiscal Year: one would replace the standard permissions of the
-	whole doctype (gotcha 6), and the pop-up is a Select, so none is needed.
+	1. `Session Default Settings` has a `Fiscal Year` row (present on both sites today;
+	   the step exists so a re-seeded UAT cannot regress).
+	2. **Branch roles may READ Fiscal Year.** Found by the browser pass, not by a test:
+	   the lists' Fiscal Year filter is a LINK control, a Link control validates its value
+	   through `frappe.client.validate_link`, and without read on the target a branch user
+	   gets "You do not have Read or Select Permissions for Fiscal Year" the moment a list
+	   opens with the default year set — and the filter is never applied. The default year
+	   (item 35) therefore never worked for the people it was written for.
+
+	   The grant follows the app's own rule for a doctype that gains a Custom DocPerm
+	   (gotcha 6): a Custom DocPerm row REPLACES the standard permissions of the whole
+	   doctype, so the standard rows are mirrored first — exactly what
+	   `setup.preserve_standard_docperms` does for every doctype in
+	   `BRANCH_USER_PERMISSIONS`. Fiscal Year is deliberately NOT added to that list: this
+	   is behind the row-26 switch, that list is not.
 	"""
 	if not features.enabled("oct11_r26_session_fiscal_year"):
 		return {"skipped": "oct11_r26_session_fiscal_year is off for this site"}
 
+	out = {}
 	settings = frappe.get_single("Session Default Settings")
 	if any(row.ref_doctype == "Fiscal Year" for row in settings.session_defaults):
-		return {"already": True}
-	settings.append("session_defaults", {"ref_doctype": "Fiscal Year"})
-	settings.flags.ignore_permissions = True
-	settings.save()
-	return {"added": True}
+		out["session_row"] = "already"
+	else:
+		settings.append("session_defaults", {"ref_doctype": "Fiscal Year"})
+		settings.flags.ignore_permissions = True
+		settings.save()
+		out["session_row"] = "added"
+
+	out["fiscal_year_read"] = _grant_fiscal_year_read()
+	return out
+
+
+def _grant_fiscal_year_read() -> dict:
+	from yht_custom.setup import (
+		BRANCH_MANAGER_ROLE,
+		BRANCH_USER_ROLE,
+		PERM_FIELDS,
+		_upsert_custom_docperm,
+	)
+
+	if not frappe.db.exists("DocType", "Fiscal Year"):
+		return {}
+
+	mirrored = 0
+	if not frappe.db.exists("Custom DocPerm", {"parent": "Fiscal Year"}):
+		for row in frappe.get_all(
+			"DocPerm", filters={"parent": "Fiscal Year"}, fields=["role", "permlevel", *PERM_FIELDS]
+		):
+			_upsert_custom_docperm("Fiscal Year", row.role, row, permlevel=row.permlevel)
+			mirrored += 1
+
+	for role in (BRANCH_USER_ROLE, BRANCH_MANAGER_ROLE):
+		_upsert_custom_docperm("Fiscal Year", role, {"read": 1, "select": 1, "report": 1})
+	frappe.clear_cache(doctype="Fiscal Year")
+	return {"mirrored": mirrored, "roles": [BRANCH_USER_ROLE, BRANCH_MANAGER_ROLE]}
