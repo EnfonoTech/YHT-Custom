@@ -241,6 +241,36 @@ def yht_print_heading(doc, as_kind: str | None = None) -> dict:
 	return {"en": english(chosen), "ar": ARABIC.get(chosen, ""), "heading": chosen}
 
 
+#: Row 37 (2026-10-11) — the heading each selling document opens with, by candidate
+#: record names in order of preference. The client's own site names its headings
+#: differently from the app's (live has "Sales" and "Sales Return", no "Sales
+#: Invoice"), so the first candidate that EXISTS wins and nothing invented is ever
+#: offered to the form.
+FRONT_CANDIDATES = {
+	"Quotation": (("Sales Quotation", "Quotation"), ()),
+	"Sales Order": (("Sales Order",), ()),
+	"Sales Invoice": (("Sales Invoice", "Sales"), ("Credit Note", "Sales Return")),
+	"Delivery Note": (("Delivery Note",), ("Delivery Note Return",)),
+}
+
+
+def boot_map() -> dict:
+	"""`{doctype: {fwd, ret}}` for `public/js/print_heading_front.js`, or `{}` when off."""
+	if not features.enabled("oct11_r37_print_heading_front"):
+		return {}
+
+	def first_existing(names):
+		for name in names:
+			if frappe.db.exists("Print Heading", name):
+				return name
+		return ""
+
+	return {
+		doctype: {"fwd": first_existing(forward), "ret": first_existing(returned)}
+		for doctype, (forward, returned) in FRONT_CANDIDATES.items()
+	}
+
+
 def yht_item_note(row) -> str:
 	"""The line's own description, when it says something the item name does not.
 
@@ -282,8 +312,12 @@ def yht_feature(name: str) -> bool:
 		return False
 
 
-def yht_print_lang() -> str:
+def yht_print_lang(doc=None) -> str:
 	"""`"ar"` when the print dialog asked for Arabic, else `"en"`.
+
+	Rows 17 + 34 (2026-10-11): a document's own **Print With Arabic** tick also
+	answers `"ar"`. The templates pass `doc`; with `oct11_r17_print_with_arabic` off
+	the argument is ignored, so the live prints stay byte-identical.
 
 	🔴 THIS IS WHAT REPLACES A SECOND PRINT FORMAT. `printview` sets
 	`frappe.local.lang` from the dialog's `_lang`, so the language selector the
@@ -294,6 +328,13 @@ def yht_print_lang() -> str:
 	PDF — has no `frappe.local.lang` worth trusting, and English is the safe
 	answer for a document that may be going to a bank.
 	"""
+	if doc is not None and features.enabled("oct11_r17_print_with_arabic"):
+		try:
+			if cint(doc.get("custom_print_with_arabic")):
+				return "ar"
+		except Exception:
+			pass
+
 	if not features.enabled("cr_004_print_heading"):
 		# The Arabic column stays where it was — on the "… Arabic" shim records —
 		# until the switch is on. Same reason as `LEGACY_TITLES`.

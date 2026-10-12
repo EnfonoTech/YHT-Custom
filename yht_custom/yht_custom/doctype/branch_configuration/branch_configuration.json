@@ -21,7 +21,10 @@
   "mode_of_payment",
   "section_user",
   "user_help",
-  "user"
+  "user",
+  "section_print_format",
+  "print_format_help",
+  "print_format"
  ],
  "fields": [
   {
@@ -110,11 +113,27 @@
    "fieldtype": "Table",
    "label": "User",
    "options": "Branch Configuration User"
+  },
+  {
+   "fieldname": "section_print_format",
+   "fieldtype": "Section Break",
+   "label": "Default Print Formats"
+  },
+  {
+   "fieldname": "print_format_help",
+   "fieldtype": "HTML",
+   "options": "<p class=\"text-muted small\">The format the <b>printer icon</b> opens for this branch's users, per document type. Leave a document type out to keep the site default. Takes effect when the site has the branch print-format switch on.</p>"
+  },
+  {
+   "fieldname": "print_format",
+   "fieldtype": "Table",
+   "label": "Default Print Format",
+   "options": "Branch Configuration Print Format"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-19 02:00:00.000000",
+ "modified": "2026-10-12 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Yht Custom",
  "name": "Branch Configuration",

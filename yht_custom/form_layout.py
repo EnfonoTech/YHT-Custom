@@ -905,4 +905,13 @@ def setup_prepayment_block() -> dict:
 		if label and not (field.label or "").strip():
 			_set_property("Payment Entry", fieldname, "label", label, "Data")
 		applied[fieldname] = label or field.label
+
+	# Meeting 2026-10-11, row 24: a new Payment Entry opens as **Pay**, and the block
+	# above stays hidden on Pay (item 33's `depends_on` shows it on Receive only).
+	# Saeed: "keep it default Pay … when we select Receive, it shows". The client's
+	# own site already carries this setter (Saheed, 10-06); `_set_property` leaves an
+	# equal value alone.
+	if meta.get_field("payment_type"):
+		_set_property("Payment Entry", "payment_type", "default", "Pay", "Text")
+		applied["payment_type.default"] = "Pay"
 	return applied

@@ -13,7 +13,7 @@ required_apps = ["frappe/erpnext"]
 # can keep a stale copy for hours after a deploy. BUMP the ?v= counter whenever
 # one of these changes, or the deploy is invisible to anyone already loaded.
 app_include_js = [
-	"/assets/yht_custom/js/branch_user_restrict.js?v=8",
+	"/assets/yht_custom/js/branch_user_restrict.js?v=9",
 	"/assets/yht_custom/js/branch_user_forms.js?v=1",
 	"/assets/yht_custom/js/sales_flow.js?v=10",
 	"/assets/yht_custom/js/expense_invoice.js?v=5",
@@ -24,6 +24,8 @@ app_include_js = [
 	"/assets/yht_custom/js/branch_warehouse.js?v=1",
 	# Rows 7 + 14 — rewrites the Item picker's query name; see the file header.
 	"/assets/yht_custom/js/item_search.js?v=1",
+	# Row 36 (2026-10-11) — the branch's default print format on the printer icon.
+	"/assets/yht_custom/js/branch_print_format.js?v=1",
 ]
 app_include_css = "/assets/yht_custom/css/yht_custom.css?v=8"
 
@@ -37,12 +39,15 @@ doctype_js = {
 	# The client's incumbent print buttons (Print PDF / Print Without LH, plus
 	# Print Arabic with LH on Quotation). ONE file under four doctypes — it guards
 	# its own registration so the handlers cannot stack up across a session.
-	"Delivery Note": "public/js/katc_print_buttons.js",
-	"Sales Order": "public/js/katc_print_buttons.js",
+	# Row 37 (2026-10-11) — `print_heading_front.js` pre-fills the Print Heading on the
+	# four selling documents; inert unless `oct11_r37_print_heading_front` is on.
+	"Delivery Note": ["public/js/katc_print_buttons.js", "public/js/print_heading_front.js"],
+	"Sales Order": ["public/js/katc_print_buttons.js", "public/js/print_heading_front.js"],
 	# Create New Customer / Supplier — the button sits above the party field on the
 	# forms where an operator actually meets a new party. Ported from rmax_custom.
 	"Sales Invoice": [
 		"public/js/katc_print_buttons.js",
+		"public/js/print_heading_front.js",
 		"public/js/create_customer.js",
 		"public/js/sales_return_delivery.js",
 	],
@@ -50,6 +55,7 @@ doctype_js = {
 	# Quotation; the file guards itself behind `oct08_r11_quotation_create`.
 	"Quotation": [
 		"public/js/katc_print_buttons.js",
+		"public/js/print_heading_front.js",
 		"public/js/create_customer.js",
 		"public/js/quotation_create.js",
 	],
@@ -83,6 +89,11 @@ doctype_list_js = {
 		"Quotation",
 	)
 }
+
+# Row 27 (2026-10-11) — the one "Type" dropdown. A second file under four of the eight
+# doctypes: `doctype_list_js` takes a list, and both files only ever MERGE.
+for _doctype in ("Sales Invoice", "Delivery Note", "Purchase Invoice", "Purchase Receipt"):
+	doctype_list_js[_doctype] = ["public/js/list_defaults.js", "public/js/list_type_filter.js"]
 
 # ------------------------------------------------------------------- home pages
 role_home_page = {
@@ -126,6 +137,8 @@ permission_query_conditions = {
 	"Payment Entry": "yht_custom.branch_filters.payment_entry_query",
 	"Stock Entry": "yht_custom.branch_filters.stock_entry_query",
 	"Material Request": "yht_custom.branch_filters.material_request_query",
+	# Row 29 (2026-10-11) — returns "" until `oct11_r29_branch_purchase_order` is on.
+	"Purchase Order": "yht_custom.branch_purchase_order.purchase_order_query",
 }
 
 # ----------------------------------------------------------------- doc events
@@ -353,6 +366,11 @@ doc_events = _merge_events(doc_events, _DELIVERY_BACKLINK_EVENTS)
 # yht_custom/opening_invoice.py for why a doc_event cannot do this.
 override_doctype_class = {
 	"Opening Invoice Creation Tool": "yht_custom.opening_invoice.YHTOpeningInvoiceCreationTool",
+	# Row 28 (2026-10-11) — the buyer's Additional Number. A subclass and NOT a
+	# `doc_events` handler, on purpose: ksa_compliance builds the invoice XML, hash
+	# and QR inside the controller's own `before_insert`, and a doc_event runs after
+	# it. Inert until `oct11_r28_zatca_additional_number` is on; see `zatca_buyer`.
+	"Sales Invoice Additional Fields": "yht_custom.zatca_buyer.YHTSalesInvoiceAdditionalFields",
 }
 
 

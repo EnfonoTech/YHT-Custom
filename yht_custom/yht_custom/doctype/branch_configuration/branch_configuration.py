@@ -38,6 +38,13 @@ class BranchConfiguration(Document):
 		self.validate_child_companies()
 		self.validate_roles()
 		self.validate_duplicate_users()
+		self.validate_print_formats()
+
+	def validate_print_formats(self):
+		# Row 36 (2026-10-11): one usable default print format per document type.
+		from yht_custom.branch_print_format import validate_rows
+
+		validate_rows(self)
 
 	def before_save(self):
 		self.revoke_for_removed_users()

@@ -28,6 +28,13 @@ const ALLOWED_DOCTYPES = [
 	"Item",
 ];
 
+// Row 29 (2026-10-11) — the dashboard's Purchase Order tile. Only where the site has
+// the switch on: the server grants the permission under the same switch, and a tile
+// pointing at a doctype missing from this list bounces the user straight back.
+if (((frappe.boot && frappe.boot.yht_features) || []).indexOf("oct11_r29_branch_purchase_order") !== -1) {
+	ALLOWED_DOCTYPES.push("Purchase Order");
+}
+
 //: Single-segment routes a branch user legitimately lands on. Multi-segment routes
 //: (["query-report", "Stock Balance"], ["print", ...]) are handled by the branches below and
 //: do not need to appear here — but leaving them costs nothing and documents the intent.

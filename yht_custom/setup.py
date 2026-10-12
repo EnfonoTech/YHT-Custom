@@ -22,6 +22,12 @@ from yht_custom.form_layout import (
 	setup_list_filters,
 )
 from yht_custom.other_remarks import ensure_other_remarks_fields
+from yht_custom.meeting_1011 import (
+	setup_heading_front,
+	setup_print_with_arabic,
+	setup_quotation_id_first,
+)
+from yht_custom.branch_purchase_order import setup_branch_purchase_order
 from yht_custom.site_defaults import setup_site_defaults
 from yht_custom.setup_property_setters import setup_ignore_user_permissions
 from yht_custom.discount_totals import setup_discount_grid_columns
@@ -270,6 +276,11 @@ PROVISIONING_STEPS = (
 	"setup_link_title_display",    # row 8
 	"setup_prepayment_block",      # row 24
 	"setup_list_filters",          # row 27
+	# --- client meeting 2026-10-11, Tuesday batch (each behind its own switch) ---
+	"setup_print_with_arabic",     # rows 17 + 34
+	"setup_heading_front",         # row 37 (after the Arabic tick: the tick sits under it)
+	"setup_quotation_id_first",    # row 20
+	"setup_branch_purchase_order", # row 29
 	"repair_mirrored_perm_flags",
 	"run_dashboard_reports_inline",
 	"setup_hr",
@@ -420,6 +431,10 @@ def _imported(name):
 		"setup_link_title_display": setup_link_title_display,
 		"setup_prepayment_block": setup_prepayment_block,
 		"setup_list_filters": setup_list_filters,
+		"setup_print_with_arabic": setup_print_with_arabic,
+		"setup_heading_front": setup_heading_front,
+		"setup_quotation_id_first": setup_quotation_id_first,
+		"setup_branch_purchase_order": setup_branch_purchase_order,
 		"setup_unified_number": setup_unified_number,
 		"setup_print_headings": setup_print_headings,
 		"setup_delivery_note_links": setup_delivery_note_links,

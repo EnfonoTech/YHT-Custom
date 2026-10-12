@@ -167,7 +167,20 @@ const ACTIONS = [
 	{ icon: "box", label: "Purchase Receipt", desc: "View receipts", doctype: "Purchase Receipt", mode: "list" },
 	{ icon: "expense", label: "Purchase Invoice", desc: "View invoices", doctype: "Purchase Invoice", mode: "list" },
 	{ icon: "tag", label: "Item", desc: "Browse items", doctype: "Item", mode: "list" },
+	// Row 29 (2026-10-11) — shown only on a site with `oct11_r29_branch_purchase_order`.
+	{
+		icon: "order",
+		label: "Purchase Order",
+		desc: "Raise purchase orders",
+		doctype: "Purchase Order",
+		mode: "list",
+		feature: "oct11_r29_branch_purchase_order",
+	},
 ];
+
+function feature_on(name) {
+	return ((frappe.boot && frappe.boot.yht_features) || []).indexOf(name) !== -1;
+}
 
 const REPORTS = [
 	{ icon: "trend", label: "Stock Sales", desc: "Sold by item or customer", report: "Stock Sales" },
@@ -243,7 +256,7 @@ function render(page, d) {
 		${chips ? `<div class="yht-chips"><span class="yht-chips-label">${__("Drafts")}</span>${chips}</div>` : ""}
 
 		<h3 class="yht-section">${__("Quick Actions")}</h3>
-		<div class="yht-grid">${ACTIONS.map(action_card).join("")}</div>
+		<div class="yht-grid">${ACTIONS.filter((a) => !a.feature || feature_on(a.feature)).map(action_card).join("")}</div>
 
 		<h3 class="yht-section">${__("Reports")}</h3>
 		<div class="yht-grid">${REPORTS.map(report_card).join("")}</div>
@@ -308,6 +321,9 @@ const CAN_CREATE = [
 	"Purchase Invoice",
 	"Payment Entry",
 	"Customer",
+	// Row 29 — a branch user can raise (not approve) a Purchase Order; the tile that
+	// carries it is itself behind the feature switch.
+	"Purchase Order",
 ];
 
 function action_card(a) {

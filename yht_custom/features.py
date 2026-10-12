@@ -75,6 +75,16 @@ KNOWN = {
 	# what lets a live migrate for rows 7–17 leave them out.
 	"oct08_r24_prepayment_block": "Payment Entry: prepayment tax sections collapsible, labelled, under the tick (row 24)",
 	"oct08_r27_list_filters": "Purchase Invoice list: Is Expense Invoice in the filter row (row 27)",
+	# --- client meeting 2026-10-11 ("New Task" sheet, rows 17-37), Tuesday batch ----
+	# Each one changes code both sites execute (a doc_event, a JS file, a template
+	# argument) or writes something `migrate` would otherwise carry to live.
+	"oct11_r17_print_with_arabic": "One 'Print With Arabic' tick on Quotation / Sales Order / Sales Invoice / Delivery Note; the extra toolbar buttons go (rows 17 + 34)",
+	"oct11_r20_quotation_id_first": "Quotation list opens with the ID as its first column (row 20)",
+	"oct11_r27_type_filter": "One 'Type' dropdown on the Sales Invoice / Delivery Note / Purchase Invoice / Purchase Receipt lists (row 27)",
+	"oct11_r28_zatca_additional_number": "ZATCA buyer additional number from the customer address instead of the placeholder text (row 28)",
+	"oct11_r29_branch_purchase_order": "Branch users create and edit Purchase Orders, scoped to their branch; PO tile on the dashboard (row 29)",
+	"oct11_r36_branch_print_format": "Branch Configuration carries a default print format per document type (row 36)",
+	"oct11_r37_print_heading_front": "Print Heading on the front page of the four selling documents, filled in as the document is made (row 37)",
 }
 
 #: Reads as "every known switch is on". Meant for `yht-test`.

@@ -16,6 +16,14 @@ frappe.ui.form.on("Branch Configuration", {
 			filters: { type: ["in", ["Cash", "Bank"]] },
 		}));
 
+		frm.set_query("print_format", "print_format", (doc, cdt, cdn) => {
+			const row = locals[cdt][cdn];
+			return { filters: { doc_type: row.document_type || "", disabled: 0 } };
+		});
+		// Row 36 — the table only means something where the site has the switch on.
+		const row36 = ((frappe.boot && frappe.boot.yht_features) || []).indexOf("oct11_r36_branch_print_format") !== -1;
+		frm.toggle_display(["section_print_format", "print_format_help", "print_format"], row36);
+
 		if (!frm.is_new()) {
 			frm.add_custom_button(__("Show Provisioned Permissions"), () => show_permissions(frm));
 		}

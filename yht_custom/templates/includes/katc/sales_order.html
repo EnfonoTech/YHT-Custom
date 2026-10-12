@@ -13,7 +13,7 @@
     doctype's own default, in that order — CR-004's heading axis and the whole
     of CR-005. It was hardcoded here, which is why the field the client was
     ALREADY filling on 1,906 Delivery Notes never reached the page. -#}
-{%- set katc_show_arabic = katc_show_arabic or (yht_print_lang() == "ar") -%}
+{%- set katc_show_arabic = katc_show_arabic or (yht_print_lang(doc) == "ar") -%}
 {#- Row 12 (2026-10-08): "Print As = Delivery Note" is decided HERE, from the
     document, and not only by the KATC Sales Order router. Osaid (2026-10-10:
     "the format is still showing sales order") printed through a path that never

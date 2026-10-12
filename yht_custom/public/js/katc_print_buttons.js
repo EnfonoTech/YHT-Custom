@@ -122,9 +122,25 @@ function katc_consolidated() {
 	);
 }
 
+// Rows 17 + 34 (meeting 2026-10-11): "Print with Arabic" is ONE tick on the form, not a
+// second toolbar button, and the toolbar keeps a single print button per document
+// (Delivery Note also keeps Print Without LH — the one client instruction on that).
+// The Arabic and Proforma buttons only exist in the legacy table; the consolidated one
+// never had them. Behind a switch because this file is served to the live site the moment
+// it is pulled.
+function katc_single_button() {
+	return (
+		((frappe.boot && frappe.boot.yht_features) || []).indexOf("oct11_r17_print_with_arabic") !== -1
+	);
+}
+
 function katc_buttons_for(doctype) {
 	const table = katc_consolidated() ? KATC_BUTTONS_CONSOLIDATED : KATC_BUTTONS_LEGACY;
-	return table[doctype] || [];
+	const specs = table[doctype] || [];
+	if (katc_single_button() && doctype !== "Delivery Note") {
+		return specs.slice(0, 1);
+	}
+	return specs;
 }
 
 

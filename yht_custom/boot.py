@@ -50,6 +50,27 @@ def boot_session(bootinfo):
 		bootinfo.yht_features = []
 		frappe.log_error(frappe.get_traceback(), "YHT boot: feature switches")
 
+	# Row 36 (2026-10-11) — the branch's default print formats, for the printer icon.
+	# Above the early returns for the same reason as the two blocks above: it is read
+	# by `public/js/branch_print_format.js` at boot, and a manager on two branches
+	# must get it too. `boot_value()` is `{}` unless the site has the switch on.
+	try:
+		from yht_custom import branch_print_format
+
+		bootinfo.yht_branch_print_formats = branch_print_format.boot_value()
+	except Exception:
+		bootinfo.yht_branch_print_formats = {}
+		frappe.log_error(frappe.get_traceback(), "YHT boot: branch print formats")
+
+	# Row 37 (2026-10-11) — the headings `print_heading_front.js` may pre-fill.
+	try:
+		from yht_custom import print_heading
+
+		bootinfo.yht_print_headings = print_heading.boot_map()
+	except Exception:
+		bootinfo.yht_print_headings = {}
+		frappe.log_error(frappe.get_traceback(), "YHT boot: print headings")
+
 	# 🔴 CR-006 ACCEPTANCE #2 — "confirm the warehouse PICKER is scoped to the
 	# branch, not just the saved value". The `before_validate` handler corrects the
 	# value AFTER the operator has chosen; on its own that means the dropdown still

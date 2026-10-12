@@ -12,7 +12,7 @@
     doctype's own default, in that order — CR-004's heading axis and the whole
     of CR-005. It was hardcoded here, which is why the field the client was
     ALREADY filling on 1,906 Delivery Notes never reached the page. -#}
-{%- set katc_show_arabic = katc_show_arabic or (yht_print_lang() == "ar") -%}
+{%- set katc_show_arabic = katc_show_arabic or (yht_print_lang(doc) == "ar") -%}
 {%- set katc_heading = yht_print_heading(doc, "Proforma Invoice") -%}
 {%- set cur = yht_currency(doc) -%}
 <style>
