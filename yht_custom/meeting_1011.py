@@ -227,23 +227,38 @@ def setup_quotation_id_first() -> dict:
 	if not frappe.db.exists("DocType", "Quotation"):
 		return {}
 
+	import json
+
 	from yht_custom.form_layout import _set_property
 	from yht_custom.list_columns import STATUS_INDICATOR, _write_list_view_settings
 
 	_set_property("Quotation", None, "title_field", "", "Data", for_doctype=True)
 
-	columns = []
 	meta = frappe.get_meta("Quotation")
-	for fieldname in ("customer_name", "transaction_date", STATUS_INDICATOR, "grand_total"):
-		if fieldname != STATUS_INDICATOR:
-			if not meta.get_field(fieldname):
-				continue
-			_set_property("Quotation", fieldname, "in_list_view", "1", "Check")
-		columns.append(fieldname)
-	_write_list_view_settings("Quotation", columns)
+	if meta.get_field("customer_name"):
+		# The column only exists as a candidate when it is `in_list_view`.
+		_set_property("Quotation", "customer_name", "in_list_view", "1", "Check")
+
+	# 🔴 A List View Settings row the client (or an admin) already made is THEIR column set —
+	# the live Quotation list carries eight of them (ID, Status, Customer Name, Date, Total,
+	# Mobile, Contact …). Only a site with no row gets our default; a row that lacks the
+	# customer name gets it inserted after the first column; anything else is left alone.
+	columns = ["customer_name", "transaction_date", STATUS_INDICATOR, "grand_total"]
+	raw = frappe.db.get_value("List View Settings", "Quotation", "fields")
+	if not raw:
+		_write_list_view_settings("Quotation", [c for c in columns if c == STATUS_INDICATOR or meta.get_field(c)])
+		action = "default columns written"
+	else:
+		entries = json.loads(raw)
+		if any(e.get("fieldname") == "customer_name" for e in entries):
+			action = "existing columns kept"
+		else:
+			entries.insert(min(1, len(entries)), {"fieldname": "customer_name", "label": meta.get_label("customer_name") or "Customer Name"})
+			frappe.db.set_value("List View Settings", "Quotation", "fields", json.dumps(entries))
+			action = "customer_name inserted into existing columns"
 
 	frappe.clear_cache(doctype="Quotation")
-	return {"Quotation": {"title_field": "cleared", "columns": columns}}
+	return {"Quotation": {"title_field": "cleared", "columns": action}}
 
 
 # ------------------------------------------------------ row 22 — Other Remarks

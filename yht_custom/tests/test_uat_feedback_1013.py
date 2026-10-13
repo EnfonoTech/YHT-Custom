@@ -59,6 +59,10 @@ class TestRow13OneButton(FrappeTestCase):
 class TestRow20QuotationColumns(FrappeTestCase):
 	"""'ID is showing first but the Title column is not appearing.'"""
 
+	def setUp(self):
+		# FrappeTestCase rolls back per CLASS (gotcha 50), so every test starts from "no row".
+		frappe.db.delete("List View Settings", {"name": "Quotation"})
+
 	def _settings(self):
 		raw = frappe.db.get_value("List View Settings", "Quotation", "fields")
 		return [row["fieldname"] for row in json.loads(raw)]
@@ -81,6 +85,25 @@ class TestRow20QuotationColumns(FrappeTestCase):
 		before = frappe.db.get_value("List View Settings", "Quotation", ["fields", "modified"])
 		meeting_1011.setup_quotation_id_first()
 		self.assertEqual(frappe.db.get_value("List View Settings", "Quotation", ["fields", "modified"]), before)
+
+	def test_a_column_set_the_client_made_is_never_overwritten(self):
+		meeting_1011.setup_quotation_id_first()
+		custom = [
+			{"fieldname": "name", "label": "ID"},
+			{"fieldname": "customer_name", "label": "Customer Name"},
+			{"fieldname": "contact_mobile", "label": "Mobile No"},
+		]
+		frappe.db.set_value("List View Settings", "Quotation", "fields", json.dumps(custom))
+		meeting_1011.setup_quotation_id_first()
+		self.assertEqual(json.loads(frappe.db.get_value("List View Settings", "Quotation", "fields")), custom)
+
+	def test_a_client_set_without_the_customer_name_gets_it_after_the_first_column(self):
+		meeting_1011.setup_quotation_id_first()
+		custom = [{"fieldname": "name", "label": "ID"}, {"fieldname": "grand_total", "label": "Grand Total"}]
+		frappe.db.set_value("List View Settings", "Quotation", "fields", json.dumps(custom))
+		meeting_1011.setup_quotation_id_first()
+		got = [e["fieldname"] for e in json.loads(frappe.db.get_value("List View Settings", "Quotation", "fields"))]
+		self.assertEqual(got, ["name", "customer_name", "grand_total"])
 
 	def test_it_waits_for_its_switch(self):
 		with _off("oct11_r20_quotation_id_first"):
