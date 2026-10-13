@@ -24,6 +24,7 @@ from yht_custom.form_layout import (
 from yht_custom.other_remarks import ensure_other_remarks_fields
 from yht_custom.meeting_1011 import (
 	setup_heading_front,
+	setup_other_remarks_front,
 	setup_print_with_arabic,
 	setup_quotation_id_first,
 )
@@ -282,6 +283,7 @@ PROVISIONING_STEPS = (
 	"setup_print_with_arabic",     # rows 17 + 34
 	"setup_heading_front",         # row 37 (after the Arabic tick: the tick sits under it)
 	"setup_quotation_id_first",    # row 20
+	"setup_other_remarks_front",   # row 22 (after ensure_other_remarks_fields created the field)
 	"setup_branch_purchase_order", # row 29
 	# --- client meeting 2026-10-11, Wednesday batch (each behind its own switch) ---
 	"setup_valuation_column",      # row 13 (after setup_sales_assist_columns: it re-sets the grid widths)
@@ -441,6 +443,7 @@ def _imported(name):
 		"setup_print_with_arabic": setup_print_with_arabic,
 		"setup_heading_front": setup_heading_front,
 		"setup_quotation_id_first": setup_quotation_id_first,
+		"setup_other_remarks_front": setup_other_remarks_front,
 		"setup_branch_purchase_order": setup_branch_purchase_order,
 		"setup_valuation_column": setup_valuation_column,
 		"setup_front_details": setup_front_details,

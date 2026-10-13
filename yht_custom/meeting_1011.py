@@ -213,14 +213,77 @@ def setup_print_with_arabic() -> dict:
 
 
 def setup_quotation_id_first() -> dict:
-	"""Row 20 — `Quotation.title_field = ""`, so the list's first column is the ID."""
+	"""Row 20 — `Quotation.title_field = ""`, so the list's first column is the ID.
+
+	Clearing the title field removes the Title column, and the Quotation list had no other
+	column carrying the customer (only Date, Grand Total, Status) — the client's UAT round
+	(2026-10-13) reported "ID is showing first but Title column is not appearing". The
+	customer's name is therefore made an ordinary list column, directly after the ID, using
+	the same two levers as `list_columns`: `in_list_view` so the column exists and a List
+	View Settings row to order it.
+	"""
 	if not features.enabled("oct11_r20_quotation_id_first"):
 		return {"skipped": "oct11_r20_quotation_id_first is off for this site"}
 	if not frappe.db.exists("DocType", "Quotation"):
 		return {}
 
 	from yht_custom.form_layout import _set_property
+	from yht_custom.list_columns import STATUS_INDICATOR, _write_list_view_settings
 
 	_set_property("Quotation", None, "title_field", "", "Data", for_doctype=True)
+
+	columns = []
+	meta = frappe.get_meta("Quotation")
+	for fieldname in ("customer_name", "transaction_date", STATUS_INDICATOR, "grand_total"):
+		if fieldname != STATUS_INDICATOR:
+			if not meta.get_field(fieldname):
+				continue
+			_set_property("Quotation", fieldname, "in_list_view", "1", "Check")
+		columns.append(fieldname)
+	_write_list_view_settings("Quotation", columns)
+
 	frappe.clear_cache(doctype="Quotation")
-	return {"Quotation": "title_field cleared"}
+	return {"Quotation": {"title_field": "cleared", "columns": columns}}
+
+
+# ------------------------------------------------------ row 22 — Other Remarks
+
+
+#: doctype → candidate anchors on the FRONT page for `custom_other_remarks`. The field is
+#: created beside `remarks`, which on these three sits at the bottom of the collapsed
+#: "Additional Info" section of the More Info tab (Sales Invoice: field 223 of 225), so the
+#: client's UAT round reported it "missing". Purchase Order is created at the front already.
+OTHER_REMARKS_FRONT_ANCHORS = {
+	"Sales Invoice": ("po_date", "po_no", "company"),
+	"Purchase Invoice": ("company", "supplier_name"),
+	"Purchase Receipt": ("supplier_delivery_note", "supplier_name"),
+}
+
+
+def setup_other_remarks_front() -> dict:
+	"""Row 22 — bring Other Remarks to the front page of SI / PI / PR. Idempotent."""
+	if not features.enabled("oct11_r22_other_remarks_front"):
+		return {"skipped": "oct11_r22_other_remarks_front is off for this site"}
+
+	from yht_custom.other_remarks import FIELDNAME
+
+	moved, skipped = [], []
+	for doctype, candidates in OTHER_REMARKS_FRONT_ANCHORS.items():
+		if not frappe.db.exists("DocType", doctype):
+			continue
+		order = _live_order(doctype)
+		if FIELDNAME not in order:
+			skipped.append(f"{doctype}: no {FIELDNAME}")
+			continue
+		boundary = _front_boundary(order)
+		if order.index(FIELDNAME) < boundary:
+			continue  # already on the front page
+		anchor = next((c for c in candidates if c in order and order.index(c) < boundary), None)
+		if not anchor:
+			skipped.append(f"{doctype}: no front-page anchor on this site")
+			continue
+		if place_after(doctype, FIELDNAME, anchor):
+			moved.append(doctype)
+	if skipped:
+		frappe.log_error(message="\n".join(skipped), title="yht_custom: other remarks front")
+	return {"moved": moved, "skipped": skipped}

@@ -24,9 +24,14 @@ yht_custom.session_year.maybe_prompt = function () {
 	const info = (frappe.boot && frappe.boot.yht_session_year) || {};
 	if (!info.needs_prompt || !(info.choices || []).length) return;
 
+	// Once per LOGIN, not once per browser tab. `sessionStorage` outlives a logout and the next
+	// login in the same tab, so a plain "shown" flag kept the pop-up away from every login after
+	// the first (found in the client's UAT round, 2026-10-13: "option popped up once in multiple
+	// log-in attempts"). The CSRF token is minted per login session, so the flag holds that token.
 	try {
-		if (sessionStorage.getItem("yht_session_year_shown")) return;
-		sessionStorage.setItem("yht_session_year_shown", "1");
+		const login = frappe.csrf_token || (frappe.boot && frappe.boot.sid) || "1";
+		if (sessionStorage.getItem("yht_session_year_shown") === login) return;
+		sessionStorage.setItem("yht_session_year_shown", login);
 	} catch (e) {
 		// Storage blocked: prompt anyway, once per page load.
 	}

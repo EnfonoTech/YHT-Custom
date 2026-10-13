@@ -1275,12 +1275,13 @@ OTHER_REMARKS_DOCTYPES = (
 	"Stock Entry",
 	"Material Request",
 	"Stock Reconciliation",
+	"Purchase Order",
 )
 TRACK_CHANGES_OFF_UPSTREAM = ("Quotation", "Stock Entry", "Material Request", "Stock Reconciliation")
 
 
 class TestItem28OtherRemarksField(FrappeTestCase):
-	"""A new "Other Remarks", editable after submit, on eleven transaction doctypes."""
+	"""A new "Other Remarks", editable after submit, on twelve transaction doctypes (Purchase Order added 2026-10-13)."""
 
 	def setUp(self):
 		self.module = _module("other_remarks")

@@ -48,17 +48,18 @@ function add_grid_buttons(frm) {
 	const grid = frm.fields_dict.items && frm.fields_dict.items.grid;
 	if (!grid || !grid.add_custom_button) return;
 
+	// Row 13 (2026-10-11): ONE button, "Show Sales History", opening the unified popup. The
+	// client's UAT round (2026-10-13) found "Price Assist" beside it doing the same thing, so
+	// with the switch on it is not added at all. Behind the switch — this file is served to the
+	// live site as soon as it is pulled, and with the switch off both old buttons stay.
 	// Both ask which line when there is more than one, so an earlier row is always reachable.
-	grid.add_custom_button(__("Price Assist"), () =>
-		yht_custom.price.pick_row(frm, (row) => yht_custom.price.open(frm, row)));
-	// Row 13 (2026-10-11): the history button becomes "Show Sales History" and opens the
-	// unified popup. Behind its switch — this file is served to the live site as soon as it is
-	// pulled, and with the switch off the button is the old one.
 	if (yht_custom.price.sales_history_on()) {
 		grid.add_custom_button(__("Show Sales History"), () =>
 			yht_custom.price.pick_row(frm, (row) => yht_custom.price.open_sales_history(frm, row)));
 		return;
 	}
+	grid.add_custom_button(__("Price Assist"), () =>
+		yht_custom.price.pick_row(frm, (row) => yht_custom.price.open(frm, row)));
 	grid.add_custom_button(__("Show Price History"), () =>
 		yht_custom.price.pick_row(frm, (row) => yht_custom.price.open_history(frm, row)));
 }

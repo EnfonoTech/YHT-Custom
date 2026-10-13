@@ -40,7 +40,8 @@ from yht_custom.form_layout import _set_property
 #: the fixture list and the tests cannot drift apart.
 FIELDNAME = "custom_other_remarks"
 
-#: The eleven transaction doctypes from the client sheet.
+#: The eleven transaction doctypes from the client sheet, plus Purchase Order (added
+#: 2026-10-13 after the client's UAT round found the note missing there).
 DOCTYPES = (
 	"Sales Invoice",
 	"Purchase Invoice",
@@ -53,6 +54,7 @@ DOCTYPES = (
 	"Stock Entry",
 	"Material Request",
 	"Stock Reconciliation",
+	"Purchase Order",
 )
 
 #: `Document.save_version()` returns early unless the DocType has
@@ -100,6 +102,10 @@ ANCHORS = {
 	"Quotation": ("amended_from",),
 	"Material Request": ("amended_from",),
 	"Stock Reconciliation": ("amended_from",),
+	# Purchase Order has no remarks field of its own. Under the supplier's order-confirmation
+	# date is the front page's first column; `amended_from` is the fallback every
+	# submittable doctype carries.
+	"Purchase Order": ("order_confirmation_date", "supplier_name", "amended_from"),
 }
 
 DESCRIPTION = (
