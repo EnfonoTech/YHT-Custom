@@ -130,6 +130,11 @@ override_whitelisted_methods = {
 	# `handler.execute_cmd`, which DOES apply the override (unlike the Link picker, gotcha 118).
 	# A plain pass-through to upstream unless `oct11_r32_doc_number_search` is on.
 	"frappe.utils.global_search.search": "yht_custom.doc_number_search.search",
+	# 2026-10-13 — Print Designer's `before_request` copies a format's `pdf_generator` into the
+	# request, and frappe's `download_pdf` type-checks it against two literals, so every KATC
+	# format (`wkhtmltopdf-shrink`) answered HTTP 417. See `print_download.py`. No switch: with
+	# `wkhtmltopdf` / `chrome` the wrapper is a pass-through.
+	"frappe.utils.print_format.download_pdf": "yht_custom.print_download.download_pdf",
 }
 
 
