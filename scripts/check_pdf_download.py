@@ -31,7 +31,8 @@ try:
         head = open(out,"rb").read(5) if os.path.exists(out) else b""
         pages = ""
         if head.startswith(b"%PDF"):
-            p = subprocess.run(["pdfinfo",out],capture_output=True,text=True); pages = [l for l in p.stdout.splitlines() if l.startswith("Pages")]
+            from pypdf import PdfReader
+            pages = f"pages={len(PdfReader(out).pages)}"
         else:
             pages = open(out,errors="replace").read()[:160].replace("\n"," ") if os.path.exists(out) else ""
         print(f"{f.name:28} gen={f.pdf_generator or '-':20} {f.doc_type:15} {name:14} -> {r.stdout.strip()} {pages}")
