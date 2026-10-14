@@ -274,3 +274,100 @@ class TestDeliveryNoteHeadingOnTheClientsLayout(FrappeTestCase):
 	def test_an_anchor_behind_the_item_table_is_never_chosen(self):
 		order = ["customer", "items", "po_date"]
 		self.assertIsNone(meeting_1011._front_anchor("Delivery Note", order))
+
+
+class TestFieldsTheClientHadHidden(FrappeTestCase):
+	"""Live had Print As and Other Remarks hidden in Customize Form (2026-10-03); the client asked to see them."""
+
+	def _hide(self, doctype, fieldname):
+		name = frappe.db.get_value("Custom Field", {"dt": doctype, "fieldname": fieldname}, "name")
+		frappe.db.set_value("Custom Field", name, "hidden", 1)
+		frappe.clear_cache(doctype=doctype)
+		return name
+
+	def test_each_requested_field_is_unhidden(self):
+		for doctype, fieldname, _switch in meeting_1011.VISIBLE_FIELDS:
+			with self.subTest(doctype=doctype, field=fieldname):
+				self._hide(doctype, fieldname)
+				self.assertEqual(frappe.get_meta(doctype, cached=False).get_field(fieldname).hidden, 1)
+				meeting_1011.setup_requested_fields_visible()
+				frappe.clear_cache(doctype=doctype)
+				self.assertEqual(frappe.get_meta(doctype, cached=False).get_field(fieldname).hidden, 0)
+
+	def test_a_field_outside_the_list_stays_as_the_client_set_it(self):
+		name = self._hide("Delivery Note", "custom_other_remarks")
+		meeting_1011.setup_requested_fields_visible()
+		self.assertEqual(frappe.db.get_value("Custom Field", name, "hidden"), 1)
+
+	def test_it_waits_for_its_switch(self):
+		self._hide("Quotation", "custom_other_remarks")
+		with _off(R22):
+			res = meeting_1011.setup_requested_fields_visible()
+		self.assertTrue(any("Quotation.custom_other_remarks" in x for x in res["skipped"]))
+		self.assertEqual(
+			frappe.db.get_value("Custom Field", {"dt": "Quotation", "fieldname": "custom_other_remarks"}, "hidden"), 1
+		)
+
+	def test_quotation_has_a_front_page_anchor_for_other_remarks(self):
+		self.assertIn("Quotation", meeting_1011.OTHER_REMARKS_FRONT_ANCHORS)
+		meeting_1011.setup_other_remarks_front()
+		order = _fieldnames("Quotation")
+		self.assertLess(order.index(other_remarks.FIELDNAME), meeting_1011._front_boundary(order))
+
+	def test_the_step_is_registered_after_the_remarks_step(self):
+		from yht_custom import setup
+
+		steps = list(setup.PROVISIONING_STEPS)
+		self.assertGreater(steps.index("setup_requested_fields_visible"), steps.index("setup_other_remarks_front"))
+		self.assertTrue(callable(setup._imported("setup_requested_fields_visible")))
+
+
+class TestPrepaymentBlockOnlyOnReceive(FrappeTestCase):
+	"""'Collapse the prepayment invoice details when Pay is opted' — the client's UAT-vs-live finding."""
+
+	FLAG = "custom_prepayment_invoice"
+	DESC = "custom_prepayment_invoice_description"
+
+	def _cf(self, fieldname):
+		return frappe.db.get_value("Custom Field", {"dt": "Payment Entry", "fieldname": fieldname}, "name")
+
+	def _run(self):
+		from yht_custom import form_layout
+
+		frappe.clear_cache(doctype="Payment Entry")
+		return form_layout.setup_prepayment_block()
+
+	def test_blank_gates_are_filled_in_like_uat(self):
+		frappe.db.set_value("Custom Field", self._cf(self.FLAG), "depends_on", "")
+		frappe.db.set_value("Custom Field", self._cf(self.DESC), "depends_on", "")
+		self._run()
+		self.assertEqual(
+			frappe.db.get_value("Custom Field", self._cf(self.FLAG), "depends_on"),
+			'eval:doc.payment_type == "Receive"',
+		)
+		self.assertEqual(
+			frappe.db.get_value("Custom Field", self._cf(self.DESC), "depends_on"),
+			"eval:doc.custom_prepayment_invoice",
+		)
+
+	def test_an_expression_somebody_wrote_is_left_alone(self):
+		frappe.db.set_value("Custom Field", self._cf(self.FLAG), "depends_on", "eval:doc.company")
+		self._run()
+		self.assertEqual(frappe.db.get_value("Custom Field", self._cf(self.FLAG), "depends_on"), "eval:doc.company")
+
+	def test_the_three_tax_sections_carry_the_tick_and_it_is_not_stacked(self):
+		from yht_custom.form_layout import PE_TAX_GATED_SECTIONS
+
+		self._run()
+		self._run()
+		meta = frappe.get_meta("Payment Entry", cached=False)
+		for fieldname in PE_TAX_GATED_SECTIONS:
+			with self.subTest(section=fieldname):
+				expr = meta.get_field(fieldname).depends_on or ""
+				self.assertEqual(expr.count(self.FLAG), 1, expr)
+
+	def test_it_waits_for_its_switch(self):
+		with _off("oct08_r24_prepayment_block"):
+			from yht_custom import form_layout
+
+			self.assertIn("skipped", form_layout.setup_prepayment_block())

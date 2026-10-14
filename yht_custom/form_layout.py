@@ -914,4 +914,48 @@ def setup_prepayment_block() -> dict:
 	if meta.get_field("payment_type"):
 		_set_property("Payment Entry", "payment_type", "default", "Pay", "Text")
 		applied["payment_type.default"] = "Pay"
+
+	applied.update(_ensure_prepayment_gates(meta))
 	return applied
+
+
+def _ensure_prepayment_gates(meta) -> dict:
+	"""Show the prepayment block only where it applies — on Receive, and once the tick is on.
+
+	🔴 FOUND ON LIVE 2026-10-14 (the client: "payment entry opens as Pay, that is fine, but the
+	requirement was to collapse the prepayment invoice details when Pay is opted — it is in the
+	UAT"). The two Custom Fields carry their `depends_on` on UAT; on live the client's own admin
+	had cleared both to blank on 2026-10-03, and the three tax sections never received theirs
+	(`setup_payment_entry_tax_block` belongs to the 23-Sep batch, which is not on live). Only a
+	BLANK value is filled in: an expression somebody wrote on purpose is left alone, and the three
+	sections are combined with whatever they already carry, never overwritten.
+	"""
+	flag = meta.get_field(PE_PREPAYMENT_FLAG)
+	if not flag or flag.hidden or _section_of(meta, PE_PREPAYMENT_FLAG) in PE_TAX_GATED_SECTIONS:
+		# The tick must stay reachable, or the whole block is gone for good.
+		return {}
+
+	out = {}
+	for fieldname, expression in (
+		(PE_PREPAYMENT_FLAG, 'eval:doc.payment_type == "Receive"'),
+		("custom_prepayment_invoice_description", f"eval:doc.{PE_PREPAYMENT_FLAG}"),
+	):
+		name = frappe.db.get_value("Custom Field", {"dt": "Payment Entry", "fieldname": fieldname}, "name")
+		if name and not (frappe.db.get_value("Custom Field", name, "depends_on") or "").strip():
+			frappe.db.set_value("Custom Field", name, "depends_on", expression)
+			out[f"{fieldname}.depends_on"] = expression
+
+	for fieldname in PE_TAX_GATED_SECTIONS:
+		field = meta.get_field(fieldname)
+		if not field:
+			continue
+		current = field.depends_on or ""
+		if PE_PREPAYMENT_FLAG in current:
+			continue
+		combined = _combine_depends_on(current, PE_PREPAYMENT_FLAG)
+		_set_property("Payment Entry", fieldname, "depends_on", combined, "Code")
+		out[f"{fieldname}.depends_on"] = combined
+
+	if out:
+		frappe.clear_cache(doctype="Payment Entry")
+	return out

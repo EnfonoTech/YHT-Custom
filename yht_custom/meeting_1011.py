@@ -273,6 +273,7 @@ def setup_quotation_id_first() -> dict:
 #: "Additional Info" section of the More Info tab (Sales Invoice: field 223 of 225), so the
 #: client's UAT round reported it "missing". Purchase Order is created at the front already.
 OTHER_REMARKS_FRONT_ANCHORS = {
+	"Quotation": ("valid_till", "transaction_date", "party_name"),
 	"Sales Invoice": ("po_date", "po_no", "company"),
 	"Purchase Invoice": ("company", "supplier_name"),
 	"Purchase Receipt": ("supplier_delivery_note", "supplier_name"),
@@ -306,3 +307,39 @@ def setup_other_remarks_front() -> dict:
 	if skipped:
 		frappe.log_error(message="\n".join(skipped), title="yht_custom: other remarks front")
 	return {"moved": moved, "skipped": skipped}
+
+
+# ------------------------------------------- fields the client asked to SEE (rows 12 + 22)
+
+#: (doctype, fieldname, the switch that owns it). 🔴 FOUND ON LIVE 2026-10-14: the client's own admin
+#: had hidden these Custom Fields in Customize Form on 2026-10-03 ("Print As" is not shown on the
+#: Sales Order, "Other Remarks" is not shown on Quotation, Sales Invoice, Purchase Invoice or
+#: Purchase Receipt), so the deploy of rows 12 and 22 placed fields nobody could see. The client now
+#: asks for them, so they are un-hidden. Only these six; Sales Order, Delivery Note and the other
+#: doctypes that hold the same hidden Other Remarks field are left as the client set them.
+VISIBLE_FIELDS = (
+	("Sales Order", "custom_print_as", "oct08_r12_so_delivery_note"),
+	("Quotation", "custom_other_remarks", "oct11_r22_other_remarks_front"),
+	("Sales Invoice", "custom_other_remarks", "oct11_r22_other_remarks_front"),
+	("Purchase Invoice", "custom_other_remarks", "oct11_r22_other_remarks_front"),
+	("Purchase Receipt", "custom_other_remarks", "oct11_r22_other_remarks_front"),
+	("Purchase Order", "custom_other_remarks", "oct11_r22_other_remarks_front"),
+)
+
+
+def setup_requested_fields_visible() -> dict:
+	"""Un-hide the Custom Fields the client asked to see. Idempotent."""
+	shown, skipped = [], []
+	for doctype, fieldname, switch in VISIBLE_FIELDS:
+		if not features.enabled(switch):
+			skipped.append(f"{doctype}.{fieldname}: {switch} is off")
+			continue
+		name = frappe.db.get_value("Custom Field", {"dt": doctype, "fieldname": fieldname}, "name")
+		if not name:
+			skipped.append(f"{doctype}.{fieldname}: no such Custom Field")
+			continue
+		if cint(frappe.db.get_value("Custom Field", name, "hidden")):
+			frappe.db.set_value("Custom Field", name, "hidden", 0)
+			frappe.clear_cache(doctype=doctype)
+			shown.append(f"{doctype}.{fieldname}")
+	return {"shown": shown, "skipped": skipped}
