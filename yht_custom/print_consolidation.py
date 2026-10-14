@@ -275,6 +275,14 @@ def drop_stale_default_print_format_setters() -> dict:
 	return summary
 
 
+def _is_client_built(name, doctype) -> bool:
+	"""An enabled Print Format for `doctype` that is the client's own (`standard != Yes`)."""
+	if not name:
+		return False
+	info = frappe.db.get_value("Print Format", name, ["doc_type", "standard", "disabled"], as_dict=True)
+	return bool(info) and info.doc_type == doctype and info.standard != "Yes" and not info.disabled
+
+
 def check_client_defaults() -> dict:
 	"""Does each doctype default to the format the client asked for?
 
@@ -309,6 +317,19 @@ def check_client_defaults() -> dict:
 			}
 		elif effective in accepted:
 			rows[doctype] = {"expected": fmt, "effective": effective, "status": "OK", "reason": ""}
+		elif _is_client_built(effective, doctype):
+			# 🔴 The client is building the whole set of formats himself (Osaid, 2026-10-14: "we just
+			# need them editable even after being set as default"), so the default will keep moving
+			# between names we have never heard of. What this check guards is OUR code re-pointing a
+			# default; a default on an enabled format the CLIENT built (`standard = No`, same
+			# doctype) is their choice, not a regression. A format that is ours, missing or disabled
+			# still fails above and below.
+			rows[doctype] = {
+				"expected": fmt,
+				"effective": effective,
+				"status": "OK",
+				"reason": "client-built format (their own choice)",
+			}
 		else:
 			rows[doctype] = {
 				"expected": fmt,

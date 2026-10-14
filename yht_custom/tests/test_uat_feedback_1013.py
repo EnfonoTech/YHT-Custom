@@ -14,6 +14,7 @@ Nothing commits (gotcha 74); prints go through `printview.get_rendered_template(
 """
 
 import json
+from unittest import mock
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
@@ -216,3 +217,37 @@ class TestRow37PrinterIconHeading(FrappeTestCase):
 			with self.subTest(fmt=fmt), _off(R37):
 				doc.select_print_heading = heading
 				self.assertEqual(self._title(fmt, doc), old)
+
+
+class TestClientBuiltDefaultIsNotAFail(FrappeTestCase):
+	"""The client builds and re-points his own formats; `check_client_defaults` must not call that a regression."""
+
+	def _status(self, name):
+		from yht_custom import print_consolidation as pc
+		from yht_custom.tests.test_client_print_defaults import _setter
+
+		_setter("Delivery Note", name, "saheed@kathoomcompany.com")
+		frappe.clear_cache(doctype="Delivery Note")
+		with mock.patch("builtins.print"):
+			return pc.check_client_defaults()["Delivery Note"]
+
+	def test_an_enabled_client_built_format_of_that_doctype_is_ok(self):
+		from yht_custom.tests.test_client_print_defaults import _format
+
+		name = _format("_T-R35-CLIENT-BW", "Delivery Note")
+		row = self._status(name)
+		self.assertEqual(row["status"], "OK")
+		self.assertIn("client-built", row["reason"])
+
+	def test_one_of_ours_that_is_not_an_accepted_name_still_fails(self):
+		from yht_custom.tests.test_client_print_defaults import _format, _one_of_ours
+
+		_format("DELIVERY-NOTE W HEAD", "Delivery Note")  # so the SKIP branch does not answer
+		row = self._status(_one_of_ours())
+		self.assertEqual(row["status"], "FAIL")
+
+	def test_a_missing_format_still_fails(self):
+		from yht_custom.tests.test_client_print_defaults import _format
+
+		_format("DELIVERY-NOTE W HEAD", "Delivery Note")
+		self.assertEqual(self._status("_T-R35-NO-SUCH-FORMAT")["status"], "FAIL")
