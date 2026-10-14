@@ -65,7 +65,11 @@ FRONT_ANCHORS = {
 	"Quotation": ("valid_till", "transaction_date"),
 	"Sales Order": ("delivery_date", "transaction_date"),
 	"Sales Invoice": ("custom_payment_mode", "due_date", "posting_date"),
-	"Delivery Note": ("set_posting_time", "posting_date"),
+	# `po_date` is last: the client re-laid-out the LIVE Delivery Note so that its front page is
+	# Customer Details (customer, name, tax id | the customer's PO number and date) and the date
+	# fields sit behind the item table, leaving no earlier anchor. The heading goes under the PO
+	# date, in that second column (2026-10-14, "yes please" to the Delivery Note heading).
+	"Delivery Note": ("set_posting_time", "posting_date", "po_date"),
 }
 
 _ITEM_TABLE = ("items_section", "items")

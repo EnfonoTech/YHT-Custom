@@ -251,3 +251,26 @@ class TestClientBuiltDefaultIsNotAFail(FrappeTestCase):
 
 		_format("DELIVERY-NOTE W HEAD", "Delivery Note")
 		self.assertEqual(self._status("_T-R35-NO-SUCH-FORMAT")["status"], "FAIL")
+
+
+class TestDeliveryNoteHeadingOnTheClientsLayout(FrappeTestCase):
+	"""The live Delivery Note has no posting date on its front page; the heading goes under the PO date."""
+
+	LIVE_ORDER = [
+		"custom_section_break_ljol1", "custom_column_break_ivq6t", "customer", "customer_name", "tax_id",
+		"custom_column_break_nfypc", "po_no", "po_date", "custom_front_party_section", "customer_address",
+		"address_display", "custom_front_party_col", "contact_person", "contact_display",
+		"custom_front_team_section", "sales_team", "section_break1", "items",
+		"posting_date", "set_posting_time", "select_print_heading",
+	]
+
+	def test_the_anchor_on_the_clients_layout_is_the_po_date(self):
+		self.assertEqual(meeting_1011._front_anchor("Delivery Note", self.LIVE_ORDER), "po_date")
+
+	def test_the_standard_layout_still_uses_the_posting_date_anchors(self):
+		order = ["naming_series", "customer", "posting_date", "set_posting_time", "items"]
+		self.assertEqual(meeting_1011._front_anchor("Delivery Note", order), "set_posting_time")
+
+	def test_an_anchor_behind_the_item_table_is_never_chosen(self):
+		order = ["customer", "items", "po_date"]
+		self.assertIsNone(meeting_1011._front_anchor("Delivery Note", order))
