@@ -73,6 +73,16 @@ def _build():
 			if features.enabled(FEATURE):
 				self.buyer_additional_number = additional_number(address)
 
+	# 🔴 PICKLE NEEDS A NAME IT CAN FIND. `ksa_compliance.standard_doctypes.sales_invoice` queues the
+	# ZATCA submission with `enqueue(_submit_additional_fields, doc=<this document>,
+	# enqueue_after_commit=True)`, and rq pickles the arguments — a class is pickled BY REFERENCE
+	# (module + qualified name). Defined inside `_build`, its qualified name was
+	# `_build.<locals>.YHTSalesInvoiceAdditionalFields`, which no import can resolve:
+	# "Can't pickle local object", the enqueue raised AFTER the commit, the user saw a 500 on
+	# every Sales Invoice submit and the ZATCA job was never queued. Measured on live
+	# 2026-10-14 09:50 (KSIN-26-0741), the first invoice after the class came into use.
+	# The module-level assignment below gives the class exactly this name.
+	YHTSalesInvoiceAdditionalFields.__qualname__ = "YHTSalesInvoiceAdditionalFields"
 	return YHTSalesInvoiceAdditionalFields
 
 
