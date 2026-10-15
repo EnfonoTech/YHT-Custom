@@ -31,6 +31,11 @@ from yht_custom.meeting_1011 import (
 )
 from yht_custom.branch_purchase_order import setup_branch_purchase_order
 from yht_custom.meeting_1011_wednesday import setup_front_details, setup_valuation_column
+from yht_custom.meeting_1015 import (
+	setup_connected_numbers,
+	setup_opportunity_bulk_items,
+	setup_quotation_sales_team,
+)
 from yht_custom.session_year import setup_session_year
 from yht_custom.site_defaults import setup_site_defaults
 from yht_custom.setup_property_setters import setup_ignore_user_permissions
@@ -289,7 +294,11 @@ PROVISIONING_STEPS = (
 	"setup_branch_purchase_order", # row 29
 	# --- client meeting 2026-10-11, Wednesday batch (each behind its own switch) ---
 	"setup_valuation_column",      # row 13 (after setup_sales_assist_columns: it re-sets the grid widths)
+	# --- client meeting 2026-10-15 (each behind its own switch) ---
+	"setup_quotation_sales_team",  # row 42 (BEFORE setup_front_details: the front block adds a team section only where the table exists)
+	"setup_opportunity_bulk_items",  # row 43
 	"setup_front_details",         # row 30 (after the heading and the tick: it places against the front page)
+	"setup_connected_numbers",     # row 46 (after the front block: it places against the front page)
 	"setup_session_year",          # row 26
 	"setup_record_expense",        # row 33
 	"repair_mirrored_perm_flags",
@@ -450,6 +459,9 @@ def _imported(name):
 		"setup_branch_purchase_order": setup_branch_purchase_order,
 		"setup_valuation_column": setup_valuation_column,
 		"setup_front_details": setup_front_details,
+		"setup_quotation_sales_team": setup_quotation_sales_team,
+		"setup_opportunity_bulk_items": setup_opportunity_bulk_items,
+		"setup_connected_numbers": setup_connected_numbers,
 		"setup_session_year": setup_session_year,
 		"setup_record_expense": setup_record_expense,
 		"setup_unified_number": setup_unified_number,

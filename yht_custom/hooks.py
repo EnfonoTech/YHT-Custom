@@ -23,11 +23,13 @@ app_include_js = [
 	"/assets/yht_custom/js/grid_search_width.js?v=1",
 	"/assets/yht_custom/js/branch_warehouse.js?v=1",
 	# Rows 7 + 14 — rewrites the Item picker's query name; see the file header.
-	"/assets/yht_custom/js/item_search.js?v=1",
+	"/assets/yht_custom/js/item_search.js?v=2",
 	# Row 36 (2026-10-11) — the branch's default print format on the printer icon.
 	"/assets/yht_custom/js/branch_print_format.js?v=1",
 	# Row 26 (2026-10-11 Wednesday batch) — one-time fiscal-year pop-up after login.
 	"/assets/yht_custom/js/session_year.js?v=3",
+	# Row 40 (2026-10-15) — Payment Entry: the account locks once a Mode of Payment fills it.
+	"/assets/yht_custom/js/payment_entry_accounts.js?v=1",
 ]
 app_include_css = "/assets/yht_custom/css/yht_custom.css?v=8"
 
@@ -370,6 +372,22 @@ doc_events = _merge_events(doc_events, _DISCOUNT_EVENTS)
 doc_events = _merge_events(doc_events, _FISCAL_YEAR_EVENTS)
 doc_events = _merge_events(doc_events, _DELIVERY_RETURN_EVENTS)
 doc_events = _merge_events(doc_events, _DELIVERY_BACKLINK_EVENTS)
+
+# Row 46 (2026-10-15) — the connected documents' numbers on the front page, and row 42 — a
+# Quotation's sales team. Every handler is a no-op until its own switch is on for the site.
+_CONNECTED_EVENTS = {
+	"Sales Invoice": {
+		"validate": "yht_custom.connected_documents.set_invoice_numbers",
+		"on_submit": "yht_custom.connected_documents.after_invoice",
+		"on_cancel": "yht_custom.connected_documents.after_invoice",
+	},
+	"Delivery Note": {
+		"on_submit": "yht_custom.connected_documents.after_note",
+		"on_cancel": "yht_custom.connected_documents.after_note",
+	},
+	"Quotation": {"before_validate": "yht_custom.connected_documents.fill_quotation_sales_team"},
+}
+doc_events = _merge_events(doc_events, _CONNECTED_EVENTS)
 
 # --- opening invoice tool ----------------------------------------------
 # erpnext builds the invoice dict with no hook of any kind, so the controller

@@ -93,6 +93,13 @@ KNOWN = {
 	"oct11_r30_front_details": "Address, contact, PO and sales team on the front page of the selling documents and the KATC prints (row 30)",
 	"oct11_r32_doc_number_search": "Global search: a document-number-shaped text returns that series/number first (row 32)",
 	"oct11_r33_record_expense": "Record Expense / Expense Invoices entry points, expense print heading and printer-icon format (row 33)",
+	# --- client meeting 2026-10-15 (implementation meeting; rows 40, 42, 43, 45, 46, 48) ----
+	"oct15_r40_pe_account_lock": "Payment Entry: the account is read-only once a Mode of Payment fills it; no Bank Account lookup for users who cannot read it (row 40)",
+	"oct15_r42_quotation_sales_team": "Quotation gets a Sales Team table that fills from the customer (row 42)",
+	"oct15_r43_opportunity_bulk_items": "Opportunity items: Download / Upload buttons like Quotation (row 43)",
+	"oct15_r45_add_multiple_sort": "'Add Multiple' item pop-up uses the same item search and order as the item picker (row 45)",
+	"oct15_r46_connected_numbers": "Connected documents' numbers on the front page of Sales Invoice and Sales Order (row 46)",
+	"oct15_r48_print_pdf_default": "The toolbar Print PDF button opens the document's default / branch print format (row 48)",
 }
 
 #: Reads as "every known switch is on". Meant for `yht-test`.

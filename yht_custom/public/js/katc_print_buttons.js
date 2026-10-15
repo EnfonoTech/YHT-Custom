@@ -144,7 +144,32 @@ function katc_buttons_for(doctype) {
 }
 
 
+// Row 48 (meeting 2026-10-15) — "the Print PDF button must use the default format, the way the
+// printer icon does". The icon preselects `frm.meta.default_print_format`, the browser's own copy:
+// the branch's format from Branch Configuration (`branch_print_format.js`, row 36) where the user
+// has one, otherwise the document type's site default (the client's SALES-INVOICE, SALES-QUOTATION,
+// PURCHASE-ORDER, DELIVERY-NOTE …). The button now asks the same place. Behind its own switch;
+// with it off the button names its fixed KATC format as before.
+function katc_r48_on() {
+	return ((frappe.boot && frappe.boot.yht_features) || []).indexOf("oct15_r48_print_pdf_default") !== -1;
+}
+
+function katc_is_ours(format) {
+	return String(format || "").indexOf("KATC") === 0;
+}
+
+function katc_resolved_spec(frm, spec) {
+	if (!katc_r48_on()) return spec;
+	const chosen = frm.meta && frm.meta.default_print_format;
+	if (!chosen || chosen === spec.format) return spec;
+	const out = Object.assign({}, spec, { format: chosen });
+	// A format the client built handles its own letterhead; the KATC letterhead record is ours.
+	if (!katc_is_ours(chosen)) delete out.letterhead;
+	return out;
+}
+
 function katc_download(frm, spec) {
+	spec = katc_resolved_spec(frm, spec);
 	const args = {
 		doctype: frm.doc.doctype,
 		name: frm.doc.name,
@@ -159,6 +184,9 @@ function katc_download(frm, spec) {
 		// never on the print/PDF path.
 		language: "en",
 	};
+	// The "en" pin belongs to the KATC formats, which were laid out against it; a format the client
+	// built prints in the user's own language, as the printer icon does.
+	if (!katc_is_ours(spec.format)) delete args.language;
 	if (spec.letterhead) {
 		args.letterhead = spec.letterhead;
 	}

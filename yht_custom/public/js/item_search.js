@@ -50,3 +50,38 @@
 	set_custom_query.__yht_r07 = true;
 	proto.set_custom_query = set_custom_query;
 })();
+
+// Row 45 (meeting 2026-10-15) — the "Add Multiple" pop-up.
+//
+// 🔴 A THIRD PICKER THAT ROWS 7 + 14 NEVER REACHED. "Add Multiple" on an item grid is
+// `frappe.ui.form.LinkSelector`, not a Link control: it builds its own request, extends it with the
+// grid column's own `get_query` (which for the selling and buying item columns returns
+// `{query: "erpnext.controllers.queries.item_query", filters: …}`) and sends it through
+// `frappe.link_search`. `ControlLink.set_custom_query` is never called, so the pop-up kept upstream's
+// whole-string LIKE and Frappe's default order — "not sorted", in the client's words.
+//
+// `frappe.link_search` is the one function every such request passes through, so the query name is
+// rewritten there, exactly as above. Both halves must be on: this switch rewrites the name, and
+// `oct08_r07_item_search` makes the server function do the new work (it falls through to ERPNext
+// while that is off).
+(function () {
+	const UPSTREAM = "erpnext.controllers.queries.item_query";
+	const OURS = "yht_custom.item_search.item_query";
+
+	function on() {
+		const features = (frappe.boot && frappe.boot.yht_features) || [];
+		return features.includes("oct15_r45_add_multiple_sort") && features.includes("oct08_r07_item_search");
+	}
+
+	if (typeof frappe.link_search !== "function" || frappe.link_search.__yht_r45) return;
+	const upstream = frappe.link_search;
+
+	function link_search(doctype, args, callback, btn) {
+		if (args && args.query === UPSTREAM && on()) {
+			args.query = OURS;
+		}
+		return upstream.apply(this, arguments);
+	}
+	link_search.__yht_r45 = true;
+	frappe.link_search = link_search;
+})();
