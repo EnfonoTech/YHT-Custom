@@ -183,7 +183,7 @@ class TestRow26PromptOncePerLogin(FrappeTestCase):
 		self.assertLess(self.js.index("sessionStorage.setItem"), self.js.index("new frappe.ui.Dialog"))
 
 	def test_the_script_has_a_new_cache_bust_version(self):
-		self.assertIn("/assets/yht_custom/js/session_year.js?v=3", _source("hooks.py"))
+		self.assertIn("/assets/yht_custom/js/session_year.js?v=4", _source("hooks.py"))
 
 
 class TestRow37PrinterIconHeading(FrappeTestCase):

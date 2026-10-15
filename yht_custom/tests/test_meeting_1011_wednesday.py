@@ -223,7 +223,7 @@ class TestTheSwitchesAreRegistered(FrappeTestCase):
 		hooks = _source("hooks.py")
 		self.assertIn("price_assist.js?v=10", hooks)
 		self.assertIn("expense_invoice.js?v=6", hooks)
-		self.assertIn("session_year.js?v=3", hooks)
+		self.assertIn("session_year.js?v=4", hooks)
 		self.assertNotIn("price_assist.js?v=8", hooks)
 		self.assertNotIn("expense_invoice.js?v=5", hooks)
 		override = frappe.get_hooks("override_whitelisted_methods", app_name="yht_custom") or {}
@@ -866,7 +866,7 @@ class TestRow26NewFormYear(FrappeTestCase):
 			self.assertIn(f'"{doctype}"', source, doctype)
 
 	def test_the_cache_buster_was_bumped(self):
-		self.assertIn("session_year.js?v=3", (ROOT / "hooks.py").read_text())
+		self.assertIn("session_year.js?v=4", (ROOT / "hooks.py").read_text())
 
 
 class TestRow26Script(FrappeTestCase):
@@ -874,7 +874,7 @@ class TestRow26Script(FrappeTestCase):
 		self.js = _source("public/js/session_year.js")
 
 	def test_it_is_registered_with_a_version(self):
-		self.assertIn("/assets/yht_custom/js/session_year.js?v=3", _source("hooks.py"))
+		self.assertIn("/assets/yht_custom/js/session_year.js?v=4", _source("hooks.py"))
 
 	def test_it_is_inert_when_off_or_when_no_prompt_is_needed(self):
 		self.assertIn(R26, self.js)
