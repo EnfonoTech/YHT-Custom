@@ -1015,7 +1015,8 @@ class TestRow30Layout(FrappeTestCase):
 				meta = frappe.get_meta(doctype)
 				found = {f.fieldname: f.fieldtype for f in meta.fields if f.fieldname.startswith("custom_front_")}
 				want = dict(expected)
-				if doctype == "Quotation":
+				if doctype == "Quotation" and not meta.get_field("sales_team"):
+					# no team table on this site (row 42 not provisioned) -> no team section either
 					want.pop("custom_front_team_section")
 				self.assertEqual(found, want)
 
@@ -1026,10 +1027,14 @@ class TestRow30Layout(FrappeTestCase):
 				self.assertEqual(order.index("custom_front_team_section") + 1, order.index("sales_team"))
 				self.assertEqual(cint(frappe.get_meta(doctype).get_field("custom_front_team_section").collapsible), 1)
 
-	def test_quotation_gets_address_and_contact_only(self):
+	def test_quotation_has_no_po_fields_and_a_team_only_where_row_42_added_one(self):
+		"""Row 30 gave Quotation address and contact only, because ERPNext ships no sales team on it.
+		Row 42 (2026-10-15) adds the table, behind its own switch; the team section then follows it."""
 		meta = frappe.get_meta("Quotation")
-		for name in ("sales_team", "po_no", "po_date", "custom_front_team_section"):
+		for name in ("po_no", "po_date"):
 			self.assertIsNone(meta.get_field(name), name)
+		has_team = meta.get_field("sales_team") is not None
+		self.assertEqual(meta.get_field("custom_front_team_section") is not None, has_team)
 
 	def test_po_fields_are_on_the_front_of_the_three_documents_that_carry_them(self):
 		from yht_custom import meeting_1011
