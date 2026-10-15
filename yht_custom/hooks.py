@@ -395,11 +395,15 @@ doc_events = _merge_events(doc_events, _CONNECTED_EVENTS)
 # yht_custom/opening_invoice.py for why a doc_event cannot do this.
 override_doctype_class = {
 	"Opening Invoice Creation Tool": "yht_custom.opening_invoice.YHTOpeningInvoiceCreationTool",
-	# Row 28 (2026-10-11) — the buyer's Additional Number. A subclass and NOT a
-	# `doc_events` handler, on purpose: ksa_compliance builds the invoice XML, hash
-	# and QR inside the controller's own `before_insert`, and a doc_event runs after
-	# it. Inert until `oct11_r28_zatca_additional_number` is on; see `zatca_buyer`.
-	"Sales Invoice Additional Fields": "yht_custom.zatca_buyer.YHTSalesInvoiceAdditionalFields",
+	# Row 28 (2026-10-11) — the buyer's Additional Number — is NOT registered any more.
+	# The client closed it on 2026-10-15 ("not recommended, leave it as it is"). The subclass
+	# in `zatca_buyer.py` stays in the repo, switched off, for a future decision, and so that a
+	# background job pickled while it WAS registered can still be unpickled: a class is pickled by
+	# its module path. Registering it again is one line:
+	#     "Sales Invoice Additional Fields": "yht_custom.zatca_buyer.YHTSalesInvoiceAdditionalFields",
+	# and must be followed by a ZATCA-sandbox invoice and a check that a Sales Invoice submit queues
+	# its ZATCA job (the 2026-10-14 incident: a class swap is active whenever hooks reload,
+	# whatever its feature switch says).
 }
 
 

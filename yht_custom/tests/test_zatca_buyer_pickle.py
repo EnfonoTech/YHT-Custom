@@ -36,14 +36,15 @@ class TestTheOverrideClassCanBeQueued(FrappeTestCase):
 
 	def test_a_document_of_the_class_pickles_the_way_rq_does_it(self):
 		"""What `enqueue(..., doc=siaf)` does with its argument."""
-		doc = frappe.new_doc("Sales Invoice Additional Fields")
+		doc = zatca_buyer.YHTSalesInvoiceAdditionalFields({"doctype": "Sales Invoice Additional Fields"})
 		self.assertIsInstance(doc, zatca_buyer.YHTSalesInvoiceAdditionalFields)
 		restored = pickle.loads(pickle.dumps(doc))
 		self.assertIsInstance(restored, zatca_buyer.YHTSalesInvoiceAdditionalFields)
 
-	def test_the_hook_still_points_at_the_same_class(self):
+	def test_it_is_not_registered_so_a_submit_never_queues_it(self):
+		"""Closed by the client on 2026-10-15. The class stays importable so a job pickled while it was
+		registered can still be unpickled."""
 		hooked = (frappe.get_hooks("override_doctype_class", app_name="yht_custom") or {}).get(
 			"Sales Invoice Additional Fields"
 		)
-		target = hooked[-1] if isinstance(hooked, list) else hooked
-		self.assertIs(frappe.get_attr(target), zatca_buyer.YHTSalesInvoiceAdditionalFields)
+		self.assertFalse(hooked)

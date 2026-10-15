@@ -320,10 +320,11 @@ class TestZatcaBuyerAdditionalNumber(FrappeTestCase):
 		)
 
 	def _doc(self):
-		doc = frappe.new_doc("Sales Invoice Additional Fields")
-		return doc
+		# Built from the class directly: the override is no longer registered (row 28 was closed by
+		# the client on 2026-10-15), so `frappe.new_doc` returns the upstream class.
+		return zatca_buyer.YHTSalesInvoiceAdditionalFields({"doctype": "Sales Invoice Additional Fields"})
 
-	def test_the_doctype_class_is_ours_and_still_the_upstream_one(self):
+	def test_the_class_is_ours_and_still_the_upstream_one(self):
 		doc = self._doc()
 		self.assertIsInstance(doc, zatca_buyer.YHTSalesInvoiceAdditionalFields)
 		self.assertIsInstance(doc, zatca_buyer._base_class())
@@ -352,11 +353,13 @@ class TestZatcaBuyerAdditionalNumber(FrappeTestCase):
 			doc._set_buyer_address(self._address("9581"))
 			self.assertEqual(doc.buyer_additional_number, "not available for now")
 
-	def test_it_is_a_class_override_not_a_late_doc_event(self):
-		"""ksa_compliance builds the XML inside its own `before_insert`; a doc_event
-		would run after it, leaving the stored field disagreeing with the signed XML."""
+	def test_the_override_is_not_registered_any_more(self):
+		"""Row 28 was closed by the client on 2026-10-15; a class swap is active whenever hooks reload,
+		whatever its switch says (the 2026-10-14 ZATCA queueing incident), so it stays unregistered
+		until it is decided again. It was a class override and not a doc_event on purpose: ksa_compliance
+		builds the XML inside its own `before_insert`."""
 		hooks = frappe.get_hooks("override_doctype_class", app_name="yht_custom") or {}
-		self.assertIn("Sales Invoice Additional Fields", hooks)
+		self.assertNotIn("Sales Invoice Additional Fields", hooks)
 		events = frappe.get_hooks("doc_events", app_name="yht_custom") or {}
 		self.assertNotIn("Sales Invoice Additional Fields", events)
 
