@@ -99,6 +99,35 @@ $(document).on("app_ready", yht_custom.session_year.maybe_prompt);
 		"Sales Invoice", "Purchase Invoice", "Delivery Note", "Purchase Receipt",
 		"Payment Entry", "Journal Entry", "Sales Order", "Quotation",
 	];
+	// Row 26, "new also" (2026-10-15): a NEW document stays inside the chosen fiscal year. The server
+	// refuses anything else (`session_year.enforce_new_document_year`); this keeps the operator from
+	// reaching that refusal: a default date outside the year is moved to its nearest end, and the
+	// date picker only offers the year's own dates. `info.limit` is `null` unless the site has
+	// `oct15_r26_new_document_year` on and the user has chosen a year.
+	function limit_new_document_dates(frm) {
+		const info = (frappe.boot && frappe.boot.yht_session_year) || {};
+		const lim = info.limit;
+		if (!lim || !frm.is_new()) return;
+		const field = (lim.date_fields || {})[frm.doctype];
+		if (!field || !frm.fields_dict[field]) return;
+
+		const value = frm.doc[field];
+		if (value && (value < lim.start || value > lim.end)) {
+			frm.set_value(field, value > lim.end ? lim.end : lim.start);
+		}
+		const control = frm.fields_dict[field];
+		if (control.datepicker && control.datepicker.update) {
+			try {
+				control.datepicker.update({
+					minDate: frappe.datetime.str_to_obj(lim.start),
+					maxDate: frappe.datetime.str_to_obj(lim.end),
+				});
+			} catch (e) {
+				// The server rule still holds; only the courtesy is lost.
+			}
+		}
+	}
+
 	DOCTYPES.forEach((doctype) => {
 		frappe.ui.form.on(doctype, {
 			onload(frm) {
@@ -108,6 +137,10 @@ $(document).on("app_ready", yht_custom.session_year.maybe_prompt);
 					frm.doc.custom_fiscal_year = "";
 					frm.refresh_field("custom_fiscal_year");
 				}
+				limit_new_document_dates(frm);
+			},
+			refresh(frm) {
+				limit_new_document_dates(frm);
 			},
 		});
 	});

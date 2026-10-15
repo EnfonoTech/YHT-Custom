@@ -27,7 +27,7 @@ app_include_js = [
 	# Row 36 (2026-10-11) — the branch's default print format on the printer icon.
 	"/assets/yht_custom/js/branch_print_format.js?v=1",
 	# Row 26 (2026-10-11 Wednesday batch) — one-time fiscal-year pop-up after login.
-	"/assets/yht_custom/js/session_year.js?v=3",
+	"/assets/yht_custom/js/session_year.js?v=4",
 	# Row 40 (2026-10-15) — Payment Entry: the account locks once a Mode of Payment fills it.
 	"/assets/yht_custom/js/payment_entry_accounts.js?v=1",
 ]
@@ -388,6 +388,35 @@ _CONNECTED_EVENTS = {
 	"Quotation": {"before_validate": "yht_custom.connected_documents.fill_quotation_sales_team"},
 }
 doc_events = _merge_events(doc_events, _CONNECTED_EVENTS)
+
+# Row 26 ("new also", 2026-10-15) — a NEW document is dated inside the chosen fiscal year; Q&A 5 — the
+# standard Remarks edited after submit reaches the ledger wording. Both no-ops until their switch is on.
+_NEW_YEAR_EVENTS = {
+	doctype: {"before_insert": "yht_custom.session_year.enforce_new_document_year"}
+	for doctype in (
+		"Sales Invoice",
+		"Purchase Invoice",
+		"Delivery Note",
+		"Purchase Receipt",
+		"Payment Entry",
+		"Journal Entry",
+		"Sales Order",
+		"Quotation",
+	)
+}
+_REMARKS_EVENTS = {
+	doctype: {"on_update_after_submit": "yht_custom.remarks_editable.sync_ledger_wording"}
+	for doctype in (
+		"Sales Invoice",
+		"Purchase Invoice",
+		"Purchase Receipt",
+		"Payment Entry",
+		"Stock Entry",
+		"Journal Entry",
+	)
+}
+doc_events = _merge_events(doc_events, _NEW_YEAR_EVENTS)
+doc_events = _merge_events(doc_events, _REMARKS_EVENTS)
 
 # --- opening invoice tool ----------------------------------------------
 # erpnext builds the invoice dict with no hook of any kind, so the controller

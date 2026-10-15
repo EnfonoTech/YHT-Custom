@@ -25,6 +25,7 @@ masquerade as a choice.
 import json
 
 import frappe
+from frappe import _
 from frappe.utils import cint, cstr
 
 from yht_custom import features, fiscal_year
@@ -51,6 +52,14 @@ def chosen_year(user=None) -> str:
 	return year
 
 
+def year_range(year):
+	"""`(start, end)` ISO dates of a Fiscal Year, or `None`."""
+	row = frappe.db.get_value("Fiscal Year", year, ["year_start_date", "year_end_date"], as_dict=True)
+	if not row or not row.year_start_date or not row.year_end_date:
+		return None
+	return (str(row.year_start_date), str(row.year_end_date))
+
+
 def fiscal_year_choices() -> list:
 	"""Enabled Fiscal Years, newest first."""
 	return frappe.get_all(
@@ -71,8 +80,14 @@ def boot_value() -> dict:
 	year = chosen_year(user)
 	if year:
 		sync_saved_filters(user, year)
+	limit = None
+	if year and features.enabled("oct15_r26_new_document_year"):
+		limit = year_range(year)
 	return {
 		"enabled": True,
+		# The chosen year's dates, when new documents must stay inside it (row 26, "new also"):
+		# `{start, end, date_fields}` for `public/js/session_year.js`; `None` otherwise.
+		"limit": {"start": limit[0], "end": limit[1], "date_fields": fiscal_year.DATE_FIELD} if limit else None,
 		"choices": fiscal_year_choices(),
 		"current": list_defaults.default_fiscal_year(),
 		# Prompt until the user has a usable choice of their own.
@@ -179,3 +194,46 @@ def _grant_fiscal_year_read() -> dict:
 		_upsert_custom_docperm("Fiscal Year", role, {"read": 1, "select": 1, "report": 1})
 	frappe.clear_cache(doctype="Fiscal Year")
 	return {"mirrored": mirrored, "roles": [BRANCH_USER_ROLE, BRANCH_MANAGER_ROLE]}
+
+
+def enforce_new_document_year(doc, method=None):
+	"""`before_insert` — a NEW document must be dated inside the fiscal year chosen for the session.
+
+	Client, 2026-10-15 ("26 - new also"): choosing a year hides the other years' documents from the
+	lists (the filter) AND stops a new document from being dated in another one. This is the
+	boundary; the form's date picker is only the courtesy that keeps the operator from reaching it.
+
+	Not applied to: an amendment (it keeps its original document's date), an import or a patch, a
+	user who has chosen no year (nothing is enforced for them), a document without its date field.
+	A background job runs as a user with no chosen year, so it is never stopped. Behind
+	`oct15_r26_new_document_year` on top of the row-26 switch.
+	"""
+	if not features.enabled("oct15_r26_new_document_year"):
+		return
+	if doc.get("amended_from") or frappe.flags.in_import or frappe.flags.in_patch:
+		return
+	date_field = fiscal_year.DATE_FIELD.get(doc.doctype)
+	value = doc.get(date_field) if date_field else None
+	if not value:
+		return
+
+	year = chosen_year()
+	if not year:
+		return
+	limits = year_range(year)
+	if not limits:
+		return
+
+	from frappe.utils import formatdate, getdate
+
+	if not (getdate(limits[0]) <= getdate(value) <= getdate(limits[1])):
+		frappe.throw(
+			_("{0} {1} is outside the fiscal year you selected ({2}: {3} to {4}). Choose that year's date, or change the fiscal year in Session Defaults.").format(
+				_(doc.meta.get_label(date_field)),
+				formatdate(value),
+				year,
+				formatdate(limits[0]),
+				formatdate(limits[1]),
+			),
+			title=_("Date outside the selected fiscal year"),
+		)

@@ -99,6 +99,8 @@ KNOWN = {
 	"oct15_r43_opportunity_bulk_items": "Opportunity items: Download / Upload buttons like Quotation (row 43)",
 	"oct15_r45_add_multiple_sort": "'Add Multiple' item pop-up uses the same item search and order as the item picker (row 45)",
 	"oct15_r46_connected_numbers": "Connected documents' numbers on the front page of Sales Invoice and Sales Order (row 46)",
+	"oct15_r26_new_document_year": "A NEW document must be dated inside the fiscal year chosen for the session; the date picker is limited to it (row 26, 'new also')",
+	"oct15_std_remarks_editable": "Standard Remarks editable after submit on Sales / Purchase Invoice, Purchase Receipt, Payment Entry, Stock Entry and Journal Entry; the ledger wording follows (Q&A 5)",
 	"oct15_r48_print_pdf_default": "The toolbar Print PDF button opens the document's default / branch print format (row 48)",
 }
 
