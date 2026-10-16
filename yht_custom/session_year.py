@@ -129,9 +129,12 @@ def sync_saved_filters(user, year, add_missing=False) -> None:
 				# clause — carries saved filters with no year in them, and `list_view.js` prefers saved
 				# filters over our default, so the chosen year never reached the list. When the user
 				# CHOOSES a year (`add_missing`, from `apply_chosen_year`) the clause is added to a
-				# non-empty saved set; at plain boot it is still left alone, so a user who removes it
-				# afterwards keeps "all years" until they choose again.
-				if add_missing and not has_clause and filters:
+				# saved set — EMPTY ONES TOO: an empty saved set (`[]`, left behind when the user cleared the
+				# filter bar — Osaid's lists, 2026-10-16: "still not reflecting") is not "no setting", the
+				# list opens with exactly that and the default never applies. At plain boot the clause is
+				# still left alone, so a user who removes it afterwards keeps "all years" until they
+				# choose again.
+				if add_missing and not has_clause:
 					filters.append([doctype, fiscal_year.FIELDNAME, "=", year])
 					changed = True
 				if changed:

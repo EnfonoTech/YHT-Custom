@@ -242,6 +242,9 @@ def setup_quotation_id_first() -> dict:
 	if meta.get_field("customer_name"):
 		# The column only exists as a candidate when it is `in_list_view`.
 		_set_property("Quotation", "customer_name", "in_list_view", "1", "Check")
+		# 2026-10-16 — clearing the title field also removed the list's "Customer Name" search box (the
+		# title field is what Frappe offers as a search box); a standard filter brings it back.
+		_set_property("Quotation", "customer_name", "in_standard_filter", "1", "Check")
 
 	# 🔴 A List View Settings row the client (or an admin) already made is THEIR column set —
 	# the live Quotation list carries eight of them (ID, Status, Customer Name, Date, Total,

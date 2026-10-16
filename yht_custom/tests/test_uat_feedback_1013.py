@@ -75,6 +75,12 @@ class TestRow20QuotationColumns(FrappeTestCase):
 		self.assertEqual(frappe.get_meta("Quotation").get_field("customer_name").in_list_view, 1)
 		self.assertEqual(self._settings()[0], "customer_name")
 
+	def test_the_customer_name_is_a_search_box_in_the_list_filters(self):
+		"""2026-10-16 — with the title field cleared the list lost its customer search box."""
+		meeting_1011.setup_quotation_id_first()
+		frappe.clear_cache(doctype="Quotation")
+		self.assertEqual(frappe.get_meta("Quotation").get_field("customer_name").in_standard_filter, 1)
+
 	def test_the_other_columns_are_kept_in_order(self):
 		meeting_1011.setup_quotation_id_first()
 		self.assertEqual(

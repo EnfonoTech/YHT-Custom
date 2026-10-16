@@ -266,9 +266,16 @@ class TestChoosingAYearReachesSavedListFilters(FrappeTestCase):
 		clauses = [c for c in self._saved() if c[1] == "custom_fiscal_year"]
 		self.assertEqual(clauses, [[self.USER_DOCTYPE, "custom_fiscal_year", "=", "2025"]])
 
-	def test_an_empty_saved_set_is_left_to_the_default_filter(self):
+	def test_an_empty_saved_set_gets_the_clause_when_a_year_is_chosen(self):
+		"""2026-10-16 — Osaid's lists carry `[]` (the filter bar cleared once); the list opens with exactly that,
+		so the chosen year never reached them."""
 		self._save([])
 		session_year.sync_saved_filters("Administrator", "2025", add_missing=True)
+		self.assertEqual(self._saved(), [[self.USER_DOCTYPE, "custom_fiscal_year", "=", "2025"]])
+
+	def test_at_plain_boot_an_empty_saved_set_stays_empty(self):
+		self._save([])
+		session_year.sync_saved_filters("Administrator", "2025")
 		self.assertFalse(self._saved())
 
 	def test_the_wrapper_is_registered_and_passes_frappes_result_through(self):
