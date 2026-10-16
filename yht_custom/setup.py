@@ -636,6 +636,9 @@ ITEM_GROUP_CUSTOM_FIELDS = [
 ]
 
 
+FISCAL_YEAR_HINT = "Follows the document date."
+
+
 #: MoM — the fiscal year staff read on the document, and filter lists by. Derived
 #: from the document date on every save; see `yht_custom/fiscal_year.py` for why it
 #: must NEVER carry a fixed default.
@@ -653,7 +656,7 @@ def _fiscal_year_field(insert_after):
 			"no_copy": 1,
 			"in_standard_filter": 1,
 			"print_hide": 1,
-			"description": "Derived from the document date on every save. To change it, change the date.",
+			"description": FISCAL_YEAR_HINT,
 		}
 	]
 

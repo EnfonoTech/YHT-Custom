@@ -46,7 +46,11 @@ doctype_js = {
 	# Row 37 (2026-10-11) — `print_heading_front.js` pre-fills the Print Heading on the
 	# four selling documents; inert unless `oct11_r37_print_heading_front` is on.
 	"Delivery Note": ["public/js/katc_print_buttons.js", "public/js/print_heading_front.js"],
-	"Sales Order": ["public/js/katc_print_buttons.js", "public/js/print_heading_front.js"],
+	"Sales Order": [
+		"public/js/katc_print_buttons.js",
+		"public/js/print_heading_front.js",
+		"public/js/connected_documents.js",
+	],
 	# Create New Customer / Supplier — the button sits above the party field on the
 	# forms where an operator actually meets a new party. Ported from rmax_custom.
 	"Sales Invoice": [
@@ -54,6 +58,7 @@ doctype_js = {
 		"public/js/print_heading_front.js",
 		"public/js/create_customer.js",
 		"public/js/sales_return_delivery.js",
+		"public/js/connected_documents.js",
 	],
 	# Row 11 (2026-10-08) — Create > Sales Invoice / Delivery Note on a submitted
 	# Quotation; the file guards itself behind `oct08_r11_quotation_create`.
@@ -62,13 +67,19 @@ doctype_js = {
 		"public/js/print_heading_front.js",
 		"public/js/create_customer.js",
 		"public/js/quotation_create.js",
+		"public/js/connected_documents.js",
 	],
-	"Purchase Invoice": "public/js/create_supplier.js",
+	# Row 46 (2026-10-16) — the right-hand Connected Documents table (one file, all six documents).
+	"Purchase Invoice": ["public/js/create_supplier.js", "public/js/connected_documents.js"],
 	# CR-021 — the Purchase Order print joins the two-button set once CR-004's
 	# consolidation lands; before that the table has no entry for it and nothing
 	# is added.
-	"Purchase Order": ["public/js/create_supplier.js", "public/js/katc_print_buttons.js"],
-	"Purchase Receipt": "public/js/create_supplier.js",
+	"Purchase Order": [
+		"public/js/create_supplier.js",
+		"public/js/katc_print_buttons.js",
+		"public/js/connected_documents.js",
+	],
+	"Purchase Receipt": ["public/js/create_supplier.js", "public/js/connected_documents.js"],
 }
 # 🔴 THE LIST DEFAULT HAS TO COME FROM HERE, NOT FROM `app_include_js`. erpnext's
 # own list JS assigns `frappe.listview_settings["X"]` wholesale, and a doctype's

@@ -108,11 +108,7 @@ ANCHORS = {
 	"Purchase Order": ("order_confirmation_date", "supplier_name", "amended_from"),
 }
 
-DESCRIPTION = (
-	"A note only. It can be edited after the document is submitted and the change is "
-	"recorded in the activity log. It does not appear on the print, and it never reaches "
-	"the ledger."
-)
+DESCRIPTION = "A note only: not printed, never reaches the ledger. Editable after submit (logged)."
 
 
 def _field(insert_after):

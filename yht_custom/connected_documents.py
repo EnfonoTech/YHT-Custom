@@ -64,8 +64,23 @@ def _field(fieldname, label, insert_after):
 		"allow_on_submit": 1,
 		"no_copy": 1,
 		"print_hide": 1,
-		"description": "Filled in automatically from the connected documents.",
+		# The right-hand table shows these as links; the data stays for list columns, filters, reports.
+		"depends_on": "eval:0",
 	}
+
+
+#: 2026-10-16 — "show it as a table on the right side, click to open the document": one HTML field per
+#: document, rendered by `public/js/connected_documents.js` from the stored numbers. Placed at the end of
+#: the front page's third column (Delivery Note keeps its two approved fields, row 23, as they are).
+TABLE_FIELD = "custom_connected_documents"
+TABLE_ANCHORS = {
+	"Quotation": "custom_print_with_arabic",
+	"Sales Order": "skip_delivery_note",
+	"Sales Invoice": "amended_from",
+	"Purchase Order": "amended_from",
+	"Purchase Receipt": "return_against",
+	"Purchase Invoice": "amended_from",
+}
 
 
 #: doctype -> its fields, in front-page order.

@@ -386,3 +386,69 @@ import io
 def _quiet():
 	with contextlib.redirect_stdout(io.StringIO()):
 		yield
+
+
+class TestRow46ConnectedTable(FrappeTestCase):
+	"""2026-10-16 — "a table on the right side, click a number to open the document"."""
+
+	def setUp(self):
+		meeting_1015.setup_connected_numbers()
+		for dt in cd.TABLE_ANCHORS:
+			frappe.clear_cache(doctype=dt)
+
+	def test_one_html_field_per_document_on_the_front_page(self):
+		self.assertEqual(set(cd.TABLE_ANCHORS), set(cd.CUSTOM_FIELDS))
+		for doctype in cd.TABLE_ANCHORS:
+			with self.subTest(doctype=doctype):
+				order = _fieldnames(doctype)
+				self.assertIn(cd.TABLE_FIELD, order)
+				self.assertEqual(frappe.get_meta(doctype).get_field(cd.TABLE_FIELD).fieldtype, "HTML")
+				self.assertLess(order.index(cd.TABLE_FIELD), meeting_1011._front_boundary(order))
+
+	def test_the_numbers_stay_as_fields_but_leave_the_form(self):
+		for doctype, fields in cd.CUSTOM_FIELDS.items():
+			for name, _label in fields:
+				df = frappe.get_meta(doctype).get_field(name)
+				with self.subTest(doctype=doctype, field=name):
+					self.assertEqual(df.depends_on, "eval:0")
+					self.assertEqual(df.hidden, 0)  # hidden would drop it from the list-view column picker
+
+	def test_the_long_hints_are_short(self):
+		for doctype in cd.TABLE_ANCHORS:
+			for name in ("custom_fiscal_year", "custom_other_remarks"):
+				df = frappe.get_meta(doctype).get_field(name)
+				if df:
+					with self.subTest(doctype=doctype, field=name):
+						self.assertLess(len(df.description or ""), 90)
+
+	def test_it_is_idempotent(self):
+		before = {dt: _fieldnames(dt) for dt in cd.TABLE_ANCHORS}
+		again = meeting_1015.setup_connected_numbers()["table"]
+		self.assertEqual((again["placed"], again["hidden"], again["hints"]), ([], [], []))
+		for dt in cd.TABLE_ANCHORS:
+			self.assertEqual(_fieldnames(dt), before[dt])
+
+	def test_the_script_covers_exactly_the_stored_fields(self):
+		import re
+
+		from yht_custom import hooks
+
+		source = _source("public/js/connected_documents.js")
+		for doctype, fields in cd.CUSTOM_FIELDS.items():
+			with self.subTest(doctype=doctype):
+				self.assertIn("public/js/connected_documents.js", hooks.doctype_js[doctype])
+				block = re.search(r'"%s": \[(.*?)\n\t\t?\],?\n' % doctype, source, re.S)
+				self.assertTrue(block, f"{doctype} missing from the script's map")
+				for name, _label in fields:
+					self.assertIn(name, block.group(1))
+
+	def test_the_quotation_team_is_on_the_front_page(self):
+		meeting_1015.setup_quotation_sales_team()
+		from yht_custom.meeting_1011_wednesday import setup_front_details
+
+		setup_front_details()
+		frappe.clear_cache(doctype="Quotation")
+		order = _fieldnames("Quotation")
+		boundary = meeting_1011._front_boundary(order)
+		self.assertLess(order.index("sales_team"), boundary)
+		self.assertLess(order.index("custom_front_team_section"), order.index("sales_team"))

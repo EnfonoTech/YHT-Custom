@@ -130,6 +130,65 @@ def setup_connected_numbers() -> dict:
 			if name in order and place_after(doctype, name, previous):
 				placed.append(f"{doctype}.{name}")
 			previous = name
+	table = _setup_connected_table()
 	if skipped:
 		frappe.log_error(message="\n".join(skipped), title="yht_custom: connected numbers")
-	return {"created": {k: [f["fieldname"] for f in v] for k, v in to_create.items()}, "placed": placed, "skipped": skipped}
+	return {
+		"created": {k: [f["fieldname"] for f in v] for k, v in to_create.items()},
+		"placed": placed,
+		"skipped": skipped,
+		"table": table,
+	}
+
+
+def _setup_connected_table() -> dict:
+	"""The right-hand "Connected Documents" table, the numbers hidden behind it, and tidier hints.
+
+	The numbers stay as stored Data fields (list columns, filters, reports); on the form they are
+	hidden (`depends_on` eval:0 — a hidden field would drop out of the list-view column picker) and one
+	HTML field shows them as links. The two long hints under Fiscal Year and Other Remarks shrink so
+	the first two columns stop crowding the third.
+	"""
+	from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
+
+	from yht_custom.connected_documents import CUSTOM_FIELDS, TABLE_ANCHORS, TABLE_FIELD
+	from yht_custom.meeting_1011 import _front_boundary, _live_order, place_after
+	from yht_custom.other_remarks import DESCRIPTION as OTHER_REMARKS_HINT
+	from yht_custom.setup import FISCAL_YEAR_HINT
+
+	doctypes = [dt for dt in TABLE_ANCHORS if frappe.db.exists("DocType", dt)]
+	create_custom_fields(
+		{
+			dt: [
+				{
+					"fieldname": TABLE_FIELD,
+					"label": "Connected Documents",
+					"fieldtype": "HTML",
+					"insert_after": TABLE_ANCHORS[dt],
+					"print_hide": 1,
+				}
+			]
+			for dt in doctypes
+			if not frappe.get_meta(dt).has_field(TABLE_FIELD)
+		},
+		ignore_validate=True,
+	)
+	placed, hidden, hints = [], [], []
+	for dt in doctypes:
+		frappe.clear_cache(doctype=dt)
+		order = _live_order(dt)
+		anchor = TABLE_ANCHORS[dt]
+		if anchor in order and order.index(anchor) < _front_boundary(order) and place_after(dt, TABLE_FIELD, anchor):
+			placed.append(dt)
+		for name, _label in CUSTOM_FIELDS.get(dt, []):
+			cf = frappe.db.get_value("Custom Field", {"dt": dt, "fieldname": name}, ["name", "depends_on"], as_dict=True)
+			if cf and cf.depends_on != "eval:0":
+				frappe.db.set_value("Custom Field", cf.name, {"depends_on": "eval:0", "description": ""})
+				hidden.append(f"{dt}.{name}")
+		for name, hint in (("custom_fiscal_year", FISCAL_YEAR_HINT), ("custom_other_remarks", OTHER_REMARKS_HINT)):
+			cf = frappe.db.get_value("Custom Field", {"dt": dt, "fieldname": name}, ["name", "description"], as_dict=True)
+			if cf and cf.description != hint:
+				frappe.db.set_value("Custom Field", cf.name, "description", hint)
+				hints.append(f"{dt}.{name}")
+		frappe.clear_cache(doctype=dt)
+	return {"placed": placed, "hidden": hidden, "hints": hints}
