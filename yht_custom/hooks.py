@@ -137,6 +137,11 @@ override_whitelisted_methods = {
 	# format (`wkhtmltopdf-shrink`) answered HTTP 417. See `print_download.py`. No switch: with
 	# `wkhtmltopdf` / `chrome` the wrapper is a pass-through.
 	"frappe.utils.print_format.download_pdf": "yht_custom.print_download.download_pdf",
+	# Row 26 (2026-10-16) — choosing a fiscal year (login pop-up or Session Defaults dialog) also adds
+	# the year clause to saved list filters that lack one; Frappe's method unchanged with the switch off.
+	"frappe.core.doctype.session_default_settings.session_default_settings.set_session_default_values": (
+		"yht_custom.session_year.apply_chosen_year"
+	),
 }
 
 
@@ -387,6 +392,16 @@ _CONNECTED_EVENTS = {
 	},
 	"Quotation": {"before_validate": "yht_custom.connected_documents.fill_quotation_sales_team"},
 }
+# The rest of the chain (2026-10-16): Sales Order, Purchase Receipt and Purchase Invoice read their own
+# rows at validate and refresh the documents they point at on submit / cancel.
+for _doctype in ("Sales Order", "Purchase Receipt", "Purchase Invoice"):
+	_CONNECTED_EVENTS.setdefault(_doctype, {}).update(
+		{
+			"validate": "yht_custom.connected_documents.set_own_numbers",
+			"on_submit": "yht_custom.connected_documents.after_document",
+			"on_cancel": "yht_custom.connected_documents.after_document",
+		}
+	)
 doc_events = _merge_events(doc_events, _CONNECTED_EVENTS)
 
 # Row 26 ("new also", 2026-10-15) — a NEW document is dated inside the chosen fiscal year; Q&A 5 — the

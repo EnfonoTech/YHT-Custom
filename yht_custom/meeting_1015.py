@@ -84,8 +84,12 @@ def setup_quotation_sales_team() -> dict:
 
 #: Candidate anchors on the front page, in order, for the two connected-number fields.
 CONNECTED_ANCHORS = {
+	"Quotation": ("valid_till", "transaction_date", "party_name"),
 	"Sales Invoice": ("po_date", "po_no", "company_tax_id", "company"),
 	"Sales Order": ("po_date", "po_no", "customer_name", "customer"),
+	"Purchase Order": ("schedule_date", "transaction_date", "supplier_name"),
+	"Purchase Receipt": ("supplier_delivery_note", "posting_date", "supplier_name"),
+	"Purchase Invoice": ("bill_date", "bill_no", "posting_date", "supplier_name"),
 }
 
 
@@ -106,7 +110,7 @@ def setup_connected_numbers() -> dict:
 		meta = frappe.get_meta(doctype)
 		missing = [(n, label) for n, label in fields if not meta.has_field(n)]
 		if missing:
-			to_create[doctype] = [_field(n, label, "po_date") for n, label in missing]
+			to_create[doctype] = [_field(n, label, CONNECTED_ANCHORS[doctype][0]) for n, label in missing]
 	if to_create:
 		create_custom_fields(to_create, ignore_validate=True)
 

@@ -96,7 +96,7 @@ def boot_value() -> dict:
 	}
 
 
-def sync_saved_filters(user, year) -> None:
+def sync_saved_filters(user, year, add_missing=False) -> None:
 	"""Rewrite each fiscal-year list's saved year clause to `year`. Never raises.
 
 	Only the SESSION user's settings are reachable through frappe's user-settings API, and
@@ -117,16 +117,23 @@ def sync_saved_filters(user, year) -> None:
 				if not isinstance(filters, list):
 					continue
 				changed = False
+				has_clause = False
 				for clause in filters:
-					if (
-						isinstance(clause, list)
-						and len(clause) >= 4
-						and clause[1] == fiscal_year.FIELDNAME
-						and clause[2] == "="
-						and clause[3] != year
-					):
-						clause[3] = year
-						changed = True
+					if isinstance(clause, list) and len(clause) >= 4 and clause[1] == fiscal_year.FIELDNAME and clause[2] == "=":
+						has_clause = True
+						if clause[3] != year:
+							clause[3] = year
+							changed = True
+				# 🔴 THE CASE THE CLIENT HIT (2026-10-16: "I choose 2025 at login and the lists still show
+				# 2026"). A user whose list was opened BEFORE the year default existed — or who removed the
+				# clause — carries saved filters with no year in them, and `list_view.js` prefers saved
+				# filters over our default, so the chosen year never reached the list. When the user
+				# CHOOSES a year (`add_missing`, from `apply_chosen_year`) the clause is added to a
+				# non-empty saved set; at plain boot it is still left alone, so a user who removes it
+				# afterwards keeps "all years" until they choose again.
+				if add_missing and not has_clause and filters:
+					filters.append([doctype, fiscal_year.FIELDNAME, "=", year])
+					changed = True
 				if changed:
 					user_settings.update_user_settings(doctype, {"List": listing})
 			except Exception:
@@ -237,3 +244,29 @@ def enforce_new_document_year(doc, method=None):
 			),
 			title=_("Date outside the selected fiscal year"),
 		)
+
+
+def apply_chosen_year(default_values=None):
+	"""`set_session_default_values`, plus: the chosen year reaches the saved list filters.
+
+	Frappe's own method (the avatar menu's Session Defaults dialog AND our login pop-up both call it)
+	stores the choice and clears the user's cache. This wraps it through `override_whitelisted_methods`
+	(honoured by `handler.execute_cmd`, which is how both dialogs reach it) and, when the call carries a
+	`fiscal_year`, adds the year clause to the saved list filters that lack one. Behind the row-26
+	switch: with it off this is exactly Frappe's method.
+	"""
+	from frappe.core.doctype.session_default_settings.session_default_settings import (
+		set_session_default_values as _frappe_method,
+	)
+
+	result = _frappe_method(default_values)
+	if not features.enabled("oct11_r26_session_fiscal_year"):
+		return result
+	try:
+		values = json.loads(default_values) if isinstance(default_values, str) else (default_values or {})
+		year = cstr(values.get("fiscal_year")).strip()
+		if year and result == "success" and frappe.db.get_value("Fiscal Year", year, "disabled") is not None:
+			sync_saved_filters(frappe.session.user, year, add_missing=True)
+	except Exception:
+		frappe.log_error(title="YHT session year: apply chosen year", message=frappe.get_traceback())
+	return result

@@ -216,3 +216,79 @@ class TestStandardRemarksEditable(FrappeTestCase):
 			doc.remarks = "saved while the switch is off"
 			doc.save()
 		self.assertEqual(self._ledger(doc), before)
+
+
+class TestChoosingAYearReachesSavedListFilters(FrappeTestCase):
+	"""2026-10-16, the client: "I choose 2025 at login and the lists still show 2026"."""
+
+	USER_DOCTYPE = "Sales Invoice"
+
+	def _save(self, filters):
+		from frappe.model.utils import user_settings
+
+		user_settings.update_user_settings(self.USER_DOCTYPE, {"List": {"filters": filters}})
+
+	def _saved(self):
+		import json
+
+		from frappe.model.utils import user_settings
+
+		return (json.loads(user_settings.get_user_settings(self.USER_DOCTYPE)).get("List") or {}).get("filters")
+
+	def setUp(self):
+		frappe.set_user("Administrator")
+		self.before = None
+		try:
+			self.before = self._saved()
+		except Exception:
+			pass
+
+	def tearDown(self):
+		try:
+			self._save(self.before or [])
+		finally:
+			frappe.db.rollback()
+
+	def test_a_saved_set_without_a_year_gets_the_clause_when_a_year_is_chosen(self):
+		self._save([[self.USER_DOCTYPE, "docstatus", "=", "0"]])
+		session_year.sync_saved_filters("Administrator", "2025", add_missing=True)
+		self.assertIn([self.USER_DOCTYPE, "custom_fiscal_year", "=", "2025"], self._saved())
+		self.assertIn([self.USER_DOCTYPE, "docstatus", "=", "0"], self._saved())
+
+	def test_at_plain_boot_a_list_without_a_year_is_left_alone(self):
+		self._save([[self.USER_DOCTYPE, "docstatus", "=", "0"]])
+		session_year.sync_saved_filters("Administrator", "2025")
+		self.assertEqual(self._saved(), [[self.USER_DOCTYPE, "docstatus", "=", "0"]])
+
+	def test_an_existing_clause_is_rewritten_not_duplicated(self):
+		self._save([[self.USER_DOCTYPE, "custom_fiscal_year", "=", "2024"]])
+		session_year.sync_saved_filters("Administrator", "2025", add_missing=True)
+		clauses = [c for c in self._saved() if c[1] == "custom_fiscal_year"]
+		self.assertEqual(clauses, [[self.USER_DOCTYPE, "custom_fiscal_year", "=", "2025"]])
+
+	def test_an_empty_saved_set_is_left_to_the_default_filter(self):
+		self._save([])
+		session_year.sync_saved_filters("Administrator", "2025", add_missing=True)
+		self.assertFalse(self._saved())
+
+	def test_the_wrapper_is_registered_and_passes_frappes_result_through(self):
+		hooks = frappe.get_hooks("override_whitelisted_methods", app_name="yht_custom") or {}
+		key = "frappe.core.doctype.session_default_settings.session_default_settings.set_session_default_values"
+		self.assertIn(key, hooks)
+		with mock.patch(
+			"frappe.core.doctype.session_default_settings.session_default_settings.set_session_default_values",
+			return_value="success",
+		) as upstream, mock.patch.object(session_year, "sync_saved_filters") as sync:
+			result = session_year.apply_chosen_year('{"fiscal_year": "%s"}' % _year_with_dates().name)
+		self.assertEqual(result, "success")
+		upstream.assert_called_once()
+		sync.assert_called_once()
+		self.assertTrue(sync.call_args.kwargs.get("add_missing"))
+
+	def test_with_the_switch_off_it_is_exactly_frappes_method(self):
+		with mock.patch(
+			"frappe.core.doctype.session_default_settings.session_default_settings.set_session_default_values",
+			return_value="success",
+		), mock.patch.object(session_year, "sync_saved_filters") as sync, _off("oct11_r26_session_fiscal_year"):
+			self.assertEqual(session_year.apply_chosen_year('{"fiscal_year": "2025"}'), "success")
+		sync.assert_not_called()

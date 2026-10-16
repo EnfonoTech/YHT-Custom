@@ -25,6 +25,22 @@ Where each number is knowable:
   or a Sales Invoice submit/cancel refreshes it. A cancelled document drops off because only
   SUBMITTED, non-return documents are counted, and both events re-ask the same question.
 
+Extended on 2026-10-16 after the client's check ("this is for ALL invoice types, not just sales invoice and
+delivery note; if any invoice is connected with any other it should reflect the number"): the same two
+mechanisms now cover the whole chain, declared as data (`OWN_ROWS`, `BY_OTHERS`, `POINTS_AT`):
+
+    Quotation         <- Sales Order No
+    Sales Order       -> Quotation No;  <- Delivery Note No, Sales Invoice No
+    Delivery Note     -> Sales Order No, Sales Invoice No          (dn_links)
+    Sales Invoice     -> Sales Order No, Delivery Note No
+    Purchase Order    <- Purchase Receipt No, Purchase Invoice No
+    Purchase Receipt  -> Purchase Order No;  <- Purchase Invoice No
+    Purchase Invoice  -> Purchase Order No, Purchase Receipt No
+
+("->" is read from the document's own rows at validate; "<-" is refreshed from the other documents' rows
+when they are submitted or cancelled.) Returns are never listed: a credit note already carries
+`return_against` natively.
+
 Behind `oct15_r46_connected_numbers`: the fields are created by the site's own provisioning, the
 handlers do nothing until the switch is on, and nothing is ever written to a site that lacks a field.
 """
@@ -52,16 +68,62 @@ def _field(fieldname, label, insert_after):
 	}
 
 
-#: doctype -> its two fields, in front-page order.
+#: doctype -> its fields, in front-page order.
 CUSTOM_FIELDS = {
+	"Quotation": [
+		("custom_sales_order_no", "Sales Order No"),
+	],
+	"Sales Order": [
+		("custom_quotation_no", "Quotation No"),
+		("custom_delivery_note_no", "Delivery Note No"),
+		("custom_sales_invoice_no", "Sales Invoice No"),
+	],
 	"Sales Invoice": [
 		("custom_delivery_note_no", "Delivery Note No"),
 		("custom_sales_order_no", "Sales Order No"),
 	],
-	"Sales Order": [
-		("custom_delivery_note_no", "Delivery Note No"),
-		("custom_sales_invoice_no", "Sales Invoice No"),
+	"Purchase Order": [
+		("custom_purchase_receipt_no", "Purchase Receipt No"),
+		("custom_purchase_invoice_no", "Purchase Invoice No"),
 	],
+	"Purchase Receipt": [
+		("custom_purchase_order_no", "Purchase Order No"),
+		("custom_purchase_invoice_no", "Purchase Invoice No"),
+	],
+	"Purchase Invoice": [
+		("custom_purchase_order_no", "Purchase Order No"),
+		("custom_purchase_receipt_no", "Purchase Receipt No"),
+	],
+}
+
+#: Read from the document's OWN item rows at `validate`: fieldname -> the row field holding the other
+#: document's number. (Sales Invoice has its own handler, `set_invoice_numbers`: it also looks for notes
+#: raised later.)
+OWN_ROWS = {
+	"Sales Order": {"custom_quotation_no": "prevdoc_docname"},
+	"Purchase Receipt": {"custom_purchase_order_no": "purchase_order"},
+	"Purchase Invoice": {"custom_purchase_order_no": "purchase_order", "custom_purchase_receipt_no": "purchase_receipt"},
+}
+
+#: Refreshed from OTHER documents' rows that name this one: fieldname -> (other doctype, its item
+#: doctype, the item field holding this document's number).
+BY_OTHERS = {
+	"Quotation": {"custom_sales_order_no": ("Sales Order", "Sales Order Item", "prevdoc_docname")},
+	"Purchase Order": {
+		"custom_purchase_receipt_no": ("Purchase Receipt", "Purchase Receipt Item", "purchase_order"),
+		"custom_purchase_invoice_no": ("Purchase Invoice", "Purchase Invoice Item", "purchase_order"),
+	},
+	"Purchase Receipt": {
+		"custom_purchase_invoice_no": ("Purchase Invoice", "Purchase Invoice Item", "purchase_receipt"),
+	},
+}
+
+#: When a document of this type is submitted or cancelled, these documents are refreshed:
+#: doctype -> [(its item field naming the other document, the other doctype)].
+POINTS_AT = {
+	"Sales Order": [("prevdoc_docname", "Quotation")],
+	"Purchase Receipt": [("purchase_order", "Purchase Order")],
+	"Purchase Invoice": [("purchase_order", "Purchase Order"), ("purchase_receipt", "Purchase Receipt")],
 }
 
 
@@ -185,6 +247,87 @@ def after_note(doc, method=None):
 		refresh_invoice(invoice)
 
 
+# ------------------------------------------------------- the rest of the chain (2026-10-16)
+
+
+def _check(*names):
+	"""Table and column names cannot be bound as parameters; they come only from the maps above."""
+	known_docs = {d for _f, d in sum(POINTS_AT.values(), [])} | set(POINTS_AT) | set(BY_OTHERS) | set(OWN_ROWS)
+	known_children = {c for spec in BY_OTHERS.values() for (_d, c, _f) in spec.values()}
+	known_fields = {f for spec in BY_OTHERS.values() for (_d, _c, f) in spec.values()} | {
+		f for spec in OWN_ROWS.values() for f in spec.values()
+	}
+	for name in names:
+		assert name in known_docs | known_children | known_fields, f"{name} is not in the connected-documents maps"
+
+
+def _names_pointing_at(other_doctype, child_doctype, row_field, name):
+	"""Submitted, non-return documents of `other_doctype` whose item rows name `name`."""
+	_check(other_doctype, child_doctype, row_field)
+	returns = " AND d.is_return = 0" if frappe.get_meta(other_doctype).has_field("is_return") else ""
+	return frappe.db.sql(
+		f"""SELECT DISTINCT d.name FROM `tab{other_doctype}` d
+		INNER JOIN `tab{child_doctype}` i ON i.parent = d.name
+		WHERE i.`{row_field}` = %s AND d.docstatus = 1{returns}
+		ORDER BY d.creation""",
+		(name,),
+		pluck=True,
+	)
+
+
+def refresh_by_others(doctype, name) -> bool:
+	"""The fields of `doctype` that are read from other documents' rows."""
+	spec = BY_OTHERS.get(doctype)
+	if not spec or not name or not frappe.db.exists(doctype, name):
+		return False
+	values = {
+		fieldname: _joined(_names_pointing_at(other, child, row_field, name))
+		for fieldname, (other, child, row_field) in spec.items()
+	}
+	return _write(doctype, name, values)
+
+
+def _own_values(doctype, name):
+	"""The OWN-row fields of a stored document, read from its saved rows."""
+	meta = frappe.get_meta(doctype)
+	child = meta.get_field("items").options
+	values = {}
+	for fieldname, row_field in OWN_ROWS.get(doctype, {}).items():
+		_check(row_field)
+		values[fieldname] = _joined(
+			frappe.db.sql(
+				f"SELECT `{row_field}` FROM `tab{child}` WHERE parent = %s AND IFNULL(`{row_field}`, '') != '' ORDER BY idx",
+				(name,),
+				pluck=True,
+			)
+		)
+	return values
+
+
+def refresh_own(doctype, name) -> bool:
+	if doctype not in OWN_ROWS or not frappe.db.exists(doctype, name):
+		return False
+	return _write(doctype, name, _own_values(doctype, name))
+
+
+def set_own_numbers(doc, method=None):
+	"""`validate` on Sales Order, Purchase Receipt and Purchase Invoice — what the rows already say."""
+	if not features.enabled(FEATURE):
+		return
+	for fieldname, row_field in OWN_ROWS.get(doc.doctype, {}).items():
+		if doc.meta.has_field(fieldname):
+			doc.set(fieldname, _joined(r.get(row_field) for r in doc.get("items") or []))
+
+
+def after_document(doc, method=None):
+	"""`on_submit` / `on_cancel` — the documents this one points at count their connections again."""
+	if not features.enabled(FEATURE):
+		return
+	for row_field, target in POINTS_AT.get(doc.doctype, []):
+		for name in {cstr(r.get(row_field)).strip() for r in doc.get("items") or []} - {""}:
+			refresh_by_others(target, name)
+
+
 # ------------------------------------------------------- Quotation sales team
 
 
@@ -216,19 +359,34 @@ def fill_quotation_sales_team(doc, method=None):
 
 
 def backfill(commit: bool = False) -> dict:
-	"""Fill the fields on every existing submitted Sales Order and Sales Invoice.
+	"""Fill the fields on every existing submitted document of the chain.
 
 	    bench --site … execute yht_custom.connected_documents.backfill --kwargs "{'commit': True}"
 	"""
-	orders = frappe.get_all("Sales Order", filters={"docstatus": 1}, pluck="name", limit=0)
 	invoices = frappe.get_all("Sales Invoice", filters={"docstatus": 1, "is_return": 0}, pluck="name", limit=0)
+	orders = frappe.get_all("Sales Order", filters={"docstatus": 1}, pluck="name", limit=0)
 	changed = {"Sales Order": 0, "Sales Invoice": 0}
+	extra = {}
+	for doctype in set(OWN_ROWS) | set(BY_OTHERS):
+		if doctype in ("Sales Order",):
+			continue
+		extra[doctype] = frappe.get_all(doctype, filters={"docstatus": 1}, pluck="name", limit=0)
+		changed[doctype] = 0
 	if commit:
 		for name in orders:
-			changed["Sales Order"] += int(refresh_order(name))
+			changed["Sales Order"] += int(refresh_order(name)) + int(refresh_own("Sales Order", name))
 		for name in invoices:
 			changed["Sales Invoice"] += int(refresh_invoice(name))
+		for doctype, names in extra.items():
+			for name in names:
+				changed[doctype] += int(refresh_own(doctype, name)) + int(refresh_by_others(doctype, name))
 		frappe.db.commit()
-	summary = {"committed": bool(commit), "orders": len(orders), "invoices": len(invoices), "updated": changed}
+	summary = {
+		"committed": bool(commit),
+		"orders": len(orders),
+		"invoices": len(invoices),
+		**{doctype.lower().replace(" ", "_") + "s": len(names) for doctype, names in extra.items()},
+		"updated": changed,
+	}
 	print(frappe.as_json(summary, indent=1))
 	return summary

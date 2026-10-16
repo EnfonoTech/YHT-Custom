@@ -221,7 +221,134 @@ class TestRow46ConnectedNumbers(FrappeTestCase):
 		with _quiet():
 			summary = cd.backfill(commit=False)
 		self.assertFalse(summary["committed"])
-		self.assertEqual(summary["updated"], {"Sales Order": 0, "Sales Invoice": 0})
+		self.assertTrue(summary["updated"])
+		self.assertTrue(all(v == 0 for v in summary["updated"].values()), summary["updated"])
+
+
+class TestRow46WholeChain(FrappeTestCase):
+	"""2026-10-16 — "for ALL invoice types: if any is connected with any other, show the number"."""
+
+	def setUp(self):
+		meeting_1015.setup_connected_numbers()
+		for dt in cd.CUSTOM_FIELDS:
+			frappe.clear_cache(doctype=dt)
+
+	def test_every_document_of_the_chain_has_its_fields_on_the_front_page(self):
+		self.assertEqual(
+			set(cd.CUSTOM_FIELDS),
+			{"Quotation", "Sales Order", "Sales Invoice", "Purchase Order", "Purchase Receipt", "Purchase Invoice"},
+		)
+		for doctype, fields in cd.CUSTOM_FIELDS.items():
+			order = _fieldnames(doctype)
+			boundary = meeting_1011._front_boundary(order)
+			for name, _label in fields:
+				with self.subTest(doctype=doctype, field=name):
+					self.assertIn(name, order)
+					self.assertLess(order.index(name), boundary)
+
+	def test_the_maps_only_name_fields_that_exist(self):
+		for doctype, spec in cd.OWN_ROWS.items():
+			child = frappe.get_meta(doctype).get_field("items").options
+			for fieldname, row_field in spec.items():
+				self.assertTrue(frappe.get_meta(doctype).has_field(fieldname), f"{doctype}.{fieldname}")
+				self.assertTrue(frappe.get_meta(child).has_field(row_field), f"{child}.{row_field}")
+		for doctype, spec in cd.BY_OTHERS.items():
+			for fieldname, (other, child, row_field) in spec.items():
+				self.assertTrue(frappe.get_meta(doctype).has_field(fieldname), f"{doctype}.{fieldname}")
+				self.assertTrue(frappe.get_meta(child).has_field(row_field), f"{child}.{row_field}")
+
+	def _first(self, sql, *args):
+		rows = frappe.db.sql(sql, args, pluck=True)
+		if not rows:
+			self.skipTest("no such linked document on this site")
+		return rows[0]
+
+	def test_a_purchase_order_lists_its_receipts_and_invoices(self):
+		name = self._first(
+			"""SELECT i.purchase_order FROM `tabPurchase Invoice Item` i INNER JOIN `tabPurchase Invoice` d ON d.name = i.parent
+			WHERE d.docstatus = 1 AND d.is_return = 0 AND IFNULL(i.purchase_order, '') != '' LIMIT 1"""
+		)
+		cd.refresh_by_others("Purchase Order", name)
+		got = frappe.db.get_value("Purchase Order", name, ["custom_purchase_receipt_no", "custom_purchase_invoice_no"], as_dict=True)
+		self.assertEqual(
+			got.custom_purchase_invoice_no or "",
+			cd._joined(cd._names_pointing_at("Purchase Invoice", "Purchase Invoice Item", "purchase_order", name)),
+		)
+		self.assertTrue(got.custom_purchase_invoice_no)
+
+	def test_returns_are_never_listed(self):
+		name = self._first(
+			"""SELECT i.purchase_order FROM `tabPurchase Receipt Item` i INNER JOIN `tabPurchase Receipt` d ON d.name = i.parent
+			WHERE d.docstatus = 1 AND d.is_return = 1 AND IFNULL(i.purchase_order, '') != '' LIMIT 1"""
+		)
+		cd.refresh_by_others("Purchase Order", name)
+		listed = (frappe.db.get_value("Purchase Order", name, "custom_purchase_receipt_no") or "").split(", ")
+		returns = frappe.get_all("Purchase Receipt", filters={"is_return": 1, "name": ["in", [x for x in listed if x]]}, pluck="name")
+		self.assertEqual(returns, [])
+
+	def test_a_purchase_receipt_lists_its_invoices_and_reads_its_order(self):
+		name = self._first(
+			"""SELECT i.purchase_receipt FROM `tabPurchase Invoice Item` i INNER JOIN `tabPurchase Invoice` d ON d.name = i.parent
+			WHERE d.docstatus = 1 AND d.is_return = 0 AND IFNULL(i.purchase_receipt, '') != '' LIMIT 1"""
+		)
+		cd.refresh_by_others("Purchase Receipt", name)
+		self.assertTrue(frappe.db.get_value("Purchase Receipt", name, "custom_purchase_invoice_no"))
+		cd.refresh_own("Purchase Receipt", name)
+		order = frappe.db.sql(
+			"SELECT DISTINCT purchase_order FROM `tabPurchase Receipt Item` WHERE parent = %s AND IFNULL(purchase_order, '') != ''",
+			(name,),
+			pluck=True,
+		)
+		self.assertEqual(frappe.db.get_value("Purchase Receipt", name, "custom_purchase_order_no") or "", cd._joined(order))
+
+	def test_a_quotation_lists_the_orders_made_from_it(self):
+		name = self._first(
+			"""SELECT i.prevdoc_docname FROM `tabSales Order Item` i INNER JOIN `tabSales Order` d ON d.name = i.parent
+			WHERE d.docstatus = 1 AND IFNULL(i.prevdoc_docname, '') != '' LIMIT 1"""
+		)
+		cd.refresh_by_others("Quotation", name)
+		self.assertEqual(
+			frappe.db.get_value("Quotation", name, "custom_sales_order_no") or "",
+			cd._joined(cd._names_pointing_at("Sales Order", "Sales Order Item", "prevdoc_docname", name)),
+		)
+
+	def test_a_purchase_invoice_reads_its_own_rows_at_validate(self):
+		doc = frappe.new_doc("Purchase Invoice")
+		doc.append("items", {"purchase_order": "PO-A", "purchase_receipt": "PR-A"})
+		doc.append("items", {"purchase_order": "PO-A", "purchase_receipt": "PR-B"})
+		cd.set_own_numbers(doc)
+		self.assertEqual(doc.custom_purchase_order_no, "PO-A")
+		self.assertEqual(doc.custom_purchase_receipt_no, "PR-A, PR-B")
+
+	def test_a_sales_order_reads_its_quotation_at_validate(self):
+		doc = frappe.new_doc("Sales Order")
+		doc.append("items", {"prevdoc_docname": "SAL-QTN-1"})
+		cd.set_own_numbers(doc)
+		self.assertEqual(doc.custom_quotation_no, "SAL-QTN-1")
+
+	def test_the_handlers_are_registered_for_the_rest_of_the_chain(self):
+		events = frappe.get_hooks("doc_events", app_name="yht_custom")
+		for doctype in ("Sales Order", "Purchase Receipt", "Purchase Invoice"):
+			for event, path in (
+				("validate", "yht_custom.connected_documents.set_own_numbers"),
+				("on_submit", "yht_custom.connected_documents.after_document"),
+				("on_cancel", "yht_custom.connected_documents.after_document"),
+			):
+				with self.subTest(doctype=doctype, event=event):
+					handlers = events.get(doctype, {}).get(event)
+					handlers = handlers if isinstance(handlers, list) else [handlers]
+					self.assertIn(path, handlers)
+
+	def test_the_handlers_wait_for_their_switch(self):
+		doc = frappe.new_doc("Purchase Invoice")
+		doc.append("items", {"purchase_order": "PO-A"})
+		with _off("oct15_r46_connected_numbers"):
+			cd.set_own_numbers(doc)
+		self.assertFalse(doc.get("custom_purchase_order_no"))
+
+	def test_a_name_that_is_not_in_the_maps_cannot_reach_the_query(self):
+		with self.assertRaises(AssertionError):
+			cd._names_pointing_at("User", "Has Role", "role", "x")
 
 
 class TestJavaScriptContracts(FrappeTestCase):
