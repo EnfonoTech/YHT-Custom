@@ -12,6 +12,8 @@ Nothing commits (gotcha 74). The browser behaviour of rows 40 / 45 / 48 is check
 `scripts/ui_check_1015.py` against the real desk; the source tests here only pin the contract.
 """
 
+from unittest import mock
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
@@ -452,3 +454,61 @@ class TestRow46ConnectedTable(FrappeTestCase):
 		boundary = meeting_1011._front_boundary(order)
 		self.assertLess(order.index("sales_team"), boundary)
 		self.assertLess(order.index("custom_front_team_section"), order.index("sales_team"))
+
+
+class TestConnectedPayments(FrappeTestCase):
+	"""2026-10-16 — "payment entries linked should show in the Connected Documents table"."""
+
+	def _a_payment_against(self, doctype):
+		rows = frappe.db.sql(
+			"""select r.reference_name, r.parent from `tabPayment Entry Reference` r
+			join `tabPayment Entry` p on p.name = r.parent
+			where p.docstatus = 1 and r.reference_doctype = %s limit 1""",
+			doctype,
+			as_dict=True,
+		)
+		if not rows:
+			self.skipTest(f"no submitted Payment Entry against a {doctype} on this site")
+		return rows[0]
+
+	def test_the_payments_of_a_document_are_listed_with_what_was_allocated_to_it(self):
+		for doctype in cd.PAYMENT_AGAINST:
+			try:
+				row = self._a_payment_against(doctype)
+			except Exception:
+				continue
+			got = cd.linked_payments(doctype, row.reference_name)
+			with self.subTest(doctype=doctype):
+				self.assertIn(row.parent, [g["name"] for g in got])
+				entry = next(g for g in got if g["name"] == row.parent)
+				allocated = frappe.db.sql(
+					"""select sum(allocated_amount) from `tabPayment Entry Reference`
+					where parent = %s and reference_doctype = %s and reference_name = %s""",
+					(row.parent, doctype, row.reference_name),
+				)[0][0]
+				self.assertAlmostEqual(entry["allocated_amount"], float(allocated))
+
+	def test_a_cancelled_payment_is_not_listed(self):
+		row = self._a_payment_against("Sales Invoice")
+		frappe.db.set_value("Payment Entry", row.parent, "docstatus", 2, update_modified=False)
+		try:
+			self.assertNotIn(row.parent, [g["name"] for g in cd.linked_payments("Sales Invoice", row.reference_name)])
+		finally:
+			frappe.db.rollback()
+
+	def test_other_documents_and_unknown_names_return_nothing(self):
+		self.assertEqual(cd.linked_payments("Quotation", "KSSQ-26-0001"), [])
+		self.assertEqual(cd.linked_payments("Sales Invoice", ""), [])
+		self.assertEqual(cd.linked_payments("Sales Invoice", "NO-SUCH-INVOICE"), [])
+
+	def test_it_is_whitelisted_and_the_script_calls_it(self):
+		self.assertIn(cd.linked_payments, frappe.whitelisted)
+		source = _source("public/js/connected_documents.js")
+		self.assertIn("yht_custom.connected_documents.linked_payments", source)
+		for doctype in cd.PAYMENT_AGAINST:
+			self.assertIn(f'"{doctype}"', source)
+
+	def test_a_user_who_cannot_read_payment_entries_gets_nothing(self):
+		row = self._a_payment_against("Sales Invoice")
+		with mock.patch("frappe.has_permission", side_effect=lambda dt, *a, **k: dt != "Payment Entry"):
+			self.assertEqual(cd.linked_payments("Sales Invoice", row.reference_name), [])

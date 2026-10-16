@@ -40,6 +40,10 @@
 		],
 	};
 
+	// The documents a Payment Entry is made against: their payments are read live (the server method
+	// `linked_payments`), not stored, and shown under the same table.
+	const PAYMENT_DOCS = ["Sales Invoice", "Sales Order", "Purchase Invoice", "Purchase Order"];
+
 	function link(doctype, name) {
 		const route = "/app/" + frappe.router.slug(doctype) + "/" + encodeURIComponent(name);
 		return '<a href="' + route + '">' + frappe.utils.escape_html(name) + "</a>";
@@ -74,6 +78,15 @@
 				});
 		});
 
+		const payments = frm._yht_payments && frm._yht_payments.doc === frm.doc.name ? frm._yht_payments.rows : [];
+		payments.forEach(function (p) {
+			rows.push(
+				"<tr><td class='text-muted'>" + __("Payment Entry") + "</td><td>" + link("Payment Entry", p.name) +
+				" <span class='text-muted'>\u00b7 " + frappe.utils.escape_html(frappe.datetime.str_to_user(p.posting_date)) +
+				" \u00b7 " + frappe.utils.escape_html(format_currency(p.allocated_amount, p.currency)) + "</span></td></tr>"
+			);
+		});
+
 		const body = rows.length
 			? rows.join("")
 			: "<tr><td colspan='2' class='text-muted'>" + __("Nothing connected yet") + "</td></tr>";
@@ -84,7 +97,26 @@
 		);
 	}
 
+	function load_payments(frm) {
+		if (!frm.fields_dict[FIELD] || PAYMENT_DOCS.indexOf(frm.doctype) === -1 || frm.is_new() || !frm.doc.name) return;
+		const doc = frm.doc.name;
+		frappe.call({
+			method: "yht_custom.connected_documents.linked_payments",
+			args: { doctype: frm.doctype, name: doc },
+			callback: function (r) {
+				if (frm.doc.name !== doc) return;
+				frm._yht_payments = { doc: doc, rows: r.message || [] };
+				render(frm);
+			},
+		});
+	}
+
+	function refresh(frm) {
+		render(frm);
+		load_payments(frm);
+	}
+
 	Object.keys(MAP).forEach(function (doctype) {
-		frappe.ui.form.on(doctype, { refresh: render, onload_post_render: render });
+		frappe.ui.form.on(doctype, { refresh: refresh, onload_post_render: render });
 	});
 })();

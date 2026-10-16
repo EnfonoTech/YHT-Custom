@@ -46,7 +46,7 @@ handlers do nothing until the switch is on, and nothing is ever written to a sit
 """
 
 import frappe
-from frappe.utils import cstr
+from frappe.utils import cstr, flt
 
 from yht_custom import features
 from yht_custom.dn_links import _joined
@@ -368,6 +368,58 @@ def fill_quotation_sales_team(doc, method=None):
 		order_by="idx asc",
 	):
 		doc.append("sales_team", row)
+
+
+# ------------------------------------------------------------- payments
+
+
+#: The documents a Payment Entry is made AGAINST (its reference rows name them).
+PAYMENT_AGAINST = ("Sales Invoice", "Sales Order", "Purchase Invoice", "Purchase Order")
+
+
+@frappe.whitelist()
+def linked_payments(doctype: str, name: str) -> list:
+	"""The submitted Payment Entries paid against one document, for the Connected Documents table.
+
+	Read live, not stored: a payment is made and cancelled all day and the Payment Entry's own submit and
+	cancel would otherwise have to refresh this document too. Returns [] for a document or a Payment Entry
+	the caller may not read — never a name the caller could not open. One row per Payment Entry, with the
+	amount allocated TO THIS DOCUMENT (a receipt can settle several invoices).
+	"""
+	if doctype not in PAYMENT_AGAINST or not name:
+		return []
+	if not frappe.has_permission(doctype, "read", doc=name) or not frappe.has_permission("Payment Entry", "read"):
+		return []
+
+	allocated = {}
+	for row in frappe.get_all(
+		"Payment Entry Reference",
+		filters={"parenttype": "Payment Entry", "reference_doctype": doctype, "reference_name": name},
+		fields=["parent", "allocated_amount"],
+		limit_page_length=0,
+	):
+		allocated[row.parent] = flt(allocated.get(row.parent)) + flt(row.allocated_amount)
+	if not allocated:
+		return []
+
+	currency = frappe.db.get_value(doctype, name, "currency")
+	entries = frappe.get_list(
+		"Payment Entry",
+		filters={"name": ["in", list(allocated)], "docstatus": 1},
+		fields=["name", "posting_date", "payment_type"],
+		order_by="posting_date asc, creation asc",
+		limit_page_length=50,
+	)
+	return [
+		{
+			"name": e.name,
+			"posting_date": cstr(e.posting_date),
+			"payment_type": e.payment_type,
+			"allocated_amount": allocated[e.name],
+			"currency": currency,
+		}
+		for e in entries
+	]
 
 
 # ----------------------------------------------------------------- backfill
