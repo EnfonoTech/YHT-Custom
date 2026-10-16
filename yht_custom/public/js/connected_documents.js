@@ -45,7 +45,14 @@
 		return '<a href="' + route + '">' + frappe.utils.escape_html(name) + "</a>";
 	}
 
+	// Other Remarks is a note, three lines are plenty; its default box made the first column the tallest.
+	function shorten_remarks(frm) {
+		const remarks = frm.fields_dict.custom_other_remarks;
+		if (remarks && remarks.$input) remarks.$input.css({ height: "64px", minHeight: "64px" });
+	}
+
 	function render(frm) {
+		shorten_remarks(frm);
 		const df = frm.fields_dict[FIELD];
 		const spec = MAP[frm.doctype];
 		if (!df || !spec || !df.$wrapper) return;
