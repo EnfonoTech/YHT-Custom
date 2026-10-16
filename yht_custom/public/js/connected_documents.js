@@ -80,11 +80,7 @@
 
 		const payments = frm._yht_payments && frm._yht_payments.doc === frm.doc.name ? frm._yht_payments.rows : [];
 		payments.forEach(function (p) {
-			rows.push(
-				"<tr><td class='text-muted'>" + __("Payment Entry") + "</td><td>" + link("Payment Entry", p.name) +
-				" <span class='text-muted'>\u00b7 " + frappe.utils.escape_html(frappe.datetime.str_to_user(p.posting_date)) +
-				" \u00b7 " + frappe.utils.escape_html(format_currency(p.allocated_amount, p.currency)) + "</span></td></tr>"
-			);
+			rows.push("<tr><td class='text-muted'>" + __("Payment Entry") + "</td><td>" + link("Payment Entry", p.name) + "</td></tr>");
 		});
 
 		const body = rows.length
