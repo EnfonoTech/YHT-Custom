@@ -26,6 +26,18 @@ always runs before any `on_submit`, when EVERY line is category O. Result: no Sa
 no signing, no report. The ZATCA invoice counter and hash chain are only advanced by a generated e-invoice,
 so a skipped invoice cannot leave a gap in them.
 
+## When an invoice qualifies
+
+Either of two things, and never anything else:
+
+1. every line is category O, decided exactly as `ksa_compliance` does it (below); or
+2. the invoice HEADER's Sales Taxes template is category O (Tax Category 'Zero Rated') AND no tax is charged
+   (`total_taxes_and_charges` is 0). This is how the client enters these invoices: they pick the 'Zero Rated'
+   header, but ERPNext still fills each line's item tax template from the Item master (typically 'SALES VAT 15%'),
+   so the app classes the line S although nothing is charged — KSIN-26-0747 — and would report an invoice
+   that contradicts itself (BR-CO-17 / BR-S-09 warnings). What is charged decides, as the client put it:
+   "if tax is not calculated it is not kept in ZATCA".
+
 ## How a line's category is decided
 
 Exactly as `ksa_compliance.output_models.tax.create_tax_categories` does it, by calling the same
@@ -34,14 +46,13 @@ decides for all lines; otherwise each line uses its own item tax template (or th
 has none). An invoice with one line that is not O, a line with no category, or anything we cannot read is sent
 as before — the default is always "report it".
 
-Not covered, deliberately: an invoice whose header says "Zero Rated" but whose lines still carry the
-"SALES VAT 15%" item tax template (KSIN-26-0747) is classed S by the app and still goes to ZATCA.
+An invoice with real tax charged, a header that is not O and a mix of categories is reported as before.
 
 Behind `oct16_zatca_skip_out_of_scope`: off, nothing here runs.
 """
 
 import frappe
-from frappe.utils import cstr
+from frappe.utils import cstr, flt
 
 from yht_custom import features
 
@@ -78,8 +89,23 @@ def line_categories(doc):
 	return codes
 
 
+def header_is_out_of_scope_without_tax(doc) -> bool:
+	"""The header Sales Taxes template is category O and no tax is charged."""
+	from ksa_compliance.standard_doctypes.tax_category import map_tax_category
+
+	template = doc.get("taxes_and_charges")
+	if not template or flt(doc.get("total_taxes_and_charges")) != 0:
+		return False
+	tax_category = frappe.db.get_value("Sales Taxes and Charges Template", template, "tax_category")
+	return bool(tax_category) and map_tax_category(tax_category_id=tax_category).tax_category_code == OUT_OF_SCOPE
+
+
 def is_out_of_scope_only(doc) -> bool:
-	"""True when the invoice has lines and every one of them is category O."""
+	"""True when the invoice qualifies (see the module docstring)."""
+	if not doc.get("items"):
+		return False
+	if header_is_out_of_scope_without_tax(doc):
+		return True
 	codes = line_categories(doc)
 	return bool(codes) and all(code == OUT_OF_SCOPE for code in codes)
 
@@ -94,9 +120,14 @@ def skip_zatca_for_out_of_scope(doc, method=None):
 		from ksa_compliance.standard_doctypes.sales_invoice import ignore_additional_fields_for_invoice
 
 		ignore_additional_fields_for_invoice(doc.name)
+		frappe.msgprint(
+			"This invoice is not reported to ZATCA: it is 'Services outside scope of tax / Not subject to VAT' with no tax charged.",
+			alert=True,
+			indicator="orange",
+		)
 		doc.add_comment(
 			"Info",
-			"Not reported to ZATCA: every line is 'Services outside scope of tax / Not subject to VAT' "
+			"Not reported to ZATCA: the supply is 'Services outside scope of tax / Not subject to VAT' and no tax is charged "
 			"(ZATCA E-Invoicing Detailed Guideline, FAQ: no tax invoice is needed for such supplies).",
 		)
 	except Exception:

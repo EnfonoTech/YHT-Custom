@@ -16,8 +16,8 @@ from yht_custom import features, zatca_out_of_scope as oos
 from yht_custom.tests.test_meeting_1011_wednesday import _off
 
 
-def _doc(rows, template=None, name="TEST-OOS-0001"):
-	doc = frappe._dict(doctype="Sales Invoice", name=name, taxes_and_charges=template)
+def _doc(rows, template=None, name="TEST-OOS-0001", tax=0):
+	doc = frappe._dict(doctype="Sales Invoice", name=name, taxes_and_charges=template, total_taxes_and_charges=tax)
 	doc["items"] = [frappe._dict(item_tax_template=t) for t in rows]
 	doc.add_comment = mock.Mock()
 	return doc
@@ -68,14 +68,31 @@ class TestCategoryDecision(FrappeTestCase):
 		cats = _Cats(item_templates={"Zero Rated - KATC": "O", "SALES VAT 15% - KATC": "S"})
 		self.assertFalse(self._decide(_doc(["Zero Rated - KATC", "SALES VAT 15% - KATC"]), cats))
 
-	def test_the_ksin_26_0747_shape_is_still_reported(self):
-		"""Header says Zero Rated but the line carries the 15% item template: the app classes it S."""
+	def test_the_ksin_26_0747_shape_is_out_of_scope_by_what_is_charged(self):
+		"""Header says Zero Rated, no tax is charged, but the line carries the 15% item template (the app
+		would class it S and report an invoice that contradicts itself): the header and the nil tax decide."""
 		cats = _Cats(
 			item_templates={"SALES VAT 15% - KATC": "S"},
 			tax_categories={"Zero Rated": "O"},
 			template_tax_category={"Zero Rated - KATC": "Zero Rated"},
 		)
-		self.assertFalse(self._decide(_doc(["SALES VAT 15% - KATC"], template="Zero Rated - KATC"), cats))
+		self.assertTrue(self._decide(_doc(["SALES VAT 15% - KATC"], template="Zero Rated - KATC", tax=0), cats))
+
+	def test_a_zero_rated_header_with_tax_actually_charged_is_reported(self):
+		cats = _Cats(
+			item_templates={"SALES VAT 15% - KATC": "S"},
+			tax_categories={"Zero Rated": "O"},
+			template_tax_category={"Zero Rated - KATC": "Zero Rated"},
+		)
+		self.assertFalse(self._decide(_doc(["SALES VAT 15% - KATC"], template="Zero Rated - KATC", tax=0.15), cats))
+
+	def test_a_standard_header_with_no_tax_is_still_reported(self):
+		cats = _Cats(
+			item_templates={"SALES VAT 15% - KATC": "S"},
+			tax_categories={"Sales": "S"},
+			template_tax_category={"SALES VAT 15% - KATC": "Sales"},
+		)
+		self.assertFalse(self._decide(_doc(["SALES VAT 15% - KATC"], template="SALES VAT 15% - KATC", tax=0), cats))
 
 	def test_a_line_without_template_uses_the_header_category(self):
 		cats = _Cats(
