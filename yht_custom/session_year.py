@@ -246,6 +246,7 @@ def enforce_new_document_year(doc, method=None):
 		)
 
 
+@frappe.whitelist()
 def apply_chosen_year(default_values=None):
 	"""`set_session_default_values`, plus: the chosen year reaches the saved list filters.
 

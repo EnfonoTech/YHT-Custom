@@ -285,6 +285,17 @@ class TestChoosingAYearReachesSavedListFilters(FrappeTestCase):
 		sync.assert_called_once()
 		self.assertTrue(sync.call_args.kwargs.get("add_missing"))
 
+	def test_the_wrapper_is_whitelisted_the_way_the_original_is(self):
+		"""🔴 Found by the real-browser run, not by any unit test: without `@frappe.whitelist()` the desk got
+		"Function … is not whitelisted" and the login pop-up could not save. Calling the function directly,
+		as the other tests do, can never see that; this asserts what `handler.execute_cmd` checks."""
+		from frappe.core.doctype.session_default_settings.session_default_settings import (
+			set_session_default_values as original,
+		)
+
+		self.assertIn(session_year.apply_chosen_year, frappe.whitelisted)
+		self.assertEqual(session_year.apply_chosen_year in frappe.guest_methods, original in frappe.guest_methods)
+
 	def test_with_the_switch_off_it_is_exactly_frappes_method(self):
 		with mock.patch(
 			"frappe.core.doctype.session_default_settings.session_default_settings.set_session_default_values",
