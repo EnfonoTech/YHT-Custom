@@ -415,6 +415,11 @@ for _doctype in ("Sales Order", "Purchase Receipt", "Purchase Invoice"):
 	)
 doc_events = _merge_events(doc_events, _CONNECTED_EVENTS)
 
+# 2026-10-16 — an invoice that only covers "Not subject to VAT" supplies is not reported to ZATCA. Runs in
+# `before_submit`, ahead of ksa_compliance's own `on_submit`; a no-op until `oct16_zatca_skip_out_of_scope` is on.
+_ZATCA_SCOPE_EVENTS = {"Sales Invoice": {"before_submit": "yht_custom.zatca_out_of_scope.skip_zatca_for_out_of_scope"}}
+doc_events = _merge_events(doc_events, _ZATCA_SCOPE_EVENTS)
+
 # Row 26 ("new also", 2026-10-15) — a NEW document is dated inside the chosen fiscal year; Q&A 5 — the
 # standard Remarks edited after submit reaches the ledger wording. Both no-ops until their switch is on.
 _NEW_YEAR_EVENTS = {

@@ -102,6 +102,7 @@ KNOWN = {
 	"oct15_r26_new_document_year": "A NEW document must be dated inside the fiscal year chosen for the session; the date picker is limited to it (row 26, 'new also')",
 	"oct15_std_remarks_editable": "Standard Remarks editable after submit on Sales / Purchase Invoice, Purchase Receipt, Payment Entry, Stock Entry and Journal Entry; the ledger wording follows (Q&A 5)",
 	"oct15_r48_print_pdf_default": "The toolbar Print PDF button opens the document's default / branch print format (row 48)",
+	"oct16_zatca_skip_out_of_scope": "A Sales Invoice whose every line is 'Services outside scope of tax / Not subject to VAT' (ZATCA category O) is not sent to ZATCA (client, 2026-10-16)",
 }
 
 #: Reads as "every known switch is on". Meant for `yht-test`.
