@@ -512,3 +512,52 @@ class TestConnectedPayments(FrappeTestCase):
 		row = self._a_payment_against("Sales Invoice")
 		with mock.patch("frappe.has_permission", side_effect=lambda dt, *a, **k: dt != "Payment Entry"):
 			self.assertEqual(cd.linked_payments("Sales Invoice", row.reference_name), [])
+
+
+class TestConnectedReturns(FrappeTestCase):
+	"""2026-10-17 — "returns sales invoice is not showing" in the Connected Documents table."""
+
+	def _a_return(self, doctype):
+		rows = frappe.get_all(
+			doctype,
+			filters={"is_return": 1, "docstatus": 1, "return_against": ["is", "set"]},
+			fields=["name", "return_against"],
+			limit_page_length=1,
+		)
+		if not rows:
+			self.skipTest(f"no submitted return of a {doctype} on this site")
+		return rows[0]
+
+	def test_a_return_is_listed_under_the_document_it_reverses(self):
+		for doctype in cd.RETURN_OF:
+			try:
+				row = self._a_return(doctype)
+			except Exception:
+				continue
+			with self.subTest(doctype=doctype):
+				self.assertIn(row.name, [g["name"] for g in cd.linked_returns(doctype, row.return_against)])
+
+	def test_a_cancelled_return_is_not_listed(self):
+		row = self._a_return("Sales Invoice")
+		frappe.db.set_value("Sales Invoice", row.name, "docstatus", 2, update_modified=False)
+		try:
+			self.assertNotIn(row.name, [g["name"] for g in cd.linked_returns("Sales Invoice", row.return_against)])
+		finally:
+			frappe.db.rollback()
+
+	def test_other_documents_and_unknown_names_return_nothing(self):
+		self.assertEqual(cd.linked_returns("Quotation", "KSSQ-26-0001"), [])
+		self.assertEqual(cd.linked_returns("Sales Invoice", ""), [])
+		self.assertEqual(cd.linked_returns("Sales Invoice", "NO-SUCH-INVOICE"), [])
+
+	def test_it_is_whitelisted_and_the_script_calls_it(self):
+		self.assertIn(cd.linked_returns, frappe.whitelisted)
+		source = _source("public/js/connected_documents.js")
+		self.assertIn("yht_custom.connected_documents.linked_returns", source)
+		for doctype in cd.RETURN_OF:
+			self.assertIn(f'"{doctype}"', source)
+
+	def test_a_user_who_cannot_read_the_document_gets_nothing(self):
+		row = self._a_return("Sales Invoice")
+		with mock.patch("frappe.has_permission", return_value=False):
+			self.assertEqual(cd.linked_returns("Sales Invoice", row.return_against), [])

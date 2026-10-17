@@ -44,6 +44,14 @@
 	// `linked_payments`), not stored, and shown under the same table.
 	const PAYMENT_DOCS = ["Sales Invoice", "Sales Order", "Purchase Invoice", "Purchase Order"];
 
+	// The documents whose returns (credit / debit notes) are read live (`linked_returns`) and shown too.
+	const RETURN_DOCS = ["Sales Invoice", "Purchase Invoice", "Purchase Receipt"];
+	const RETURN_LABEL = {
+		"Sales Invoice": __("Return Sales Invoice"),
+		"Purchase Invoice": __("Return Purchase Invoice"),
+		"Purchase Receipt": __("Return Purchase Receipt"),
+	};
+
 	function link(doctype, name) {
 		const route = "/app/" + frappe.router.slug(doctype) + "/" + encodeURIComponent(name);
 		return '<a href="' + route + '">' + frappe.utils.escape_html(name) + "</a>";
@@ -83,6 +91,11 @@
 			rows.push("<tr><td class='text-muted'>" + __("Payment Entry") + "</td><td>" + link("Payment Entry", p.name) + "</td></tr>");
 		});
 
+		const returns = frm._yht_returns && frm._yht_returns.doc === frm.doc.name ? frm._yht_returns.rows : [];
+		returns.forEach(function (r) {
+			rows.push("<tr><td class='text-muted'>" + RETURN_LABEL[frm.doctype] + "</td><td>" + link(frm.doctype, r.name) + "</td></tr>");
+		});
+
 		const body = rows.length
 			? rows.join("")
 			: "<tr><td colspan='2' class='text-muted'>" + __("Nothing connected yet") + "</td></tr>";
@@ -107,9 +120,24 @@
 		});
 	}
 
+	function load_returns(frm) {
+		if (!frm.fields_dict[FIELD] || RETURN_DOCS.indexOf(frm.doctype) === -1 || frm.is_new() || !frm.doc.name) return;
+		const doc = frm.doc.name;
+		frappe.call({
+			method: "yht_custom.connected_documents.linked_returns",
+			args: { doctype: frm.doctype, name: doc },
+			callback: function (r) {
+				if (frm.doc.name !== doc) return;
+				frm._yht_returns = { doc: doc, rows: r.message || [] };
+				render(frm);
+			},
+		});
+	}
+
 	function refresh(frm) {
 		render(frm);
 		load_payments(frm);
+		load_returns(frm);
 	}
 
 	Object.keys(MAP).forEach(function (doctype) {

@@ -38,8 +38,8 @@ mechanisms now cover the whole chain, declared as data (`OWN_ROWS`, `BY_OTHERS`,
     Purchase Invoice  -> Purchase Order No, Purchase Receipt No
 
 ("->" is read from the document's own rows at validate; "<-" is refreshed from the other documents' rows
-when they are submitted or cancelled.) Returns are never listed: a credit note already carries
-`return_against` natively.
+when they are submitted or cancelled.) Returns are never STORED in these fields (a credit note already carries
+`return_against` natively); since 2026-10-17 the table also lists them, read live by `linked_returns`.
 
 Behind `oct15_r46_connected_numbers`: the fields are created by the site's own provisioning, the
 handlers do nothing until the switch is on, and nothing is ever written to a site that lacks a field.
@@ -420,6 +420,35 @@ def linked_payments(doctype: str, name: str) -> list:
 		}
 		for e in entries
 	]
+
+
+# -------------------------------------------------------------- returns
+
+
+#: Documents whose returns (credit / debit notes, receipt returns) are listed under the Connected
+#: Documents table. A return names the document it reverses in `return_against`.
+RETURN_OF = ("Sales Invoice", "Purchase Invoice", "Purchase Receipt")
+
+
+@frappe.whitelist()
+def linked_returns(doctype: str, name: str) -> list:
+	"""The submitted returns made against one document, for the Connected Documents table.
+
+	Read live like the payments: a return is made and cancelled after the original is submitted, and the
+	stored numbers deliberately never list returns (see the module docstring). Returns [] for a document
+	the caller may not read, and only names the caller may read are returned.
+	"""
+	if doctype not in RETURN_OF or not name:
+		return []
+	if not frappe.has_permission(doctype, "read", doc=name):
+		return []
+	return frappe.get_list(
+		doctype,
+		filters={"return_against": name, "is_return": 1, "docstatus": 1},
+		fields=["name", "posting_date"],
+		order_by="posting_date asc, creation asc",
+		limit_page_length=50,
+	)
 
 
 # ----------------------------------------------------------------- backfill
