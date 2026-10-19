@@ -1,0 +1,130 @@
+{
+ "actions": [],
+ "creation": "2026-10-19 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-10-19 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Yht Custom",
+ "name": "Inter Branch Sale Settings",
+ "owner": "Administrator",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "issingle": 1,
+ "editable_grid": 1,
+ "field_order": [
+  "help",
+  "company",
+  "section_accounts",
+  "receivable_account",
+  "clearing_account",
+  "margin_account",
+  "cost_center",
+  "column_defaults",
+  "price_list",
+  "from_warehouse",
+  "section_customers",
+  "customers"
+ ],
+ "fields": [
+  {
+   "fieldname": "help",
+   "fieldtype": "HTML",
+   "options": "<p>An <b>Inter Branch Sale</b> moves stock to another group entity that keeps its own books, at a selling price, without a Sales Invoice (nothing is reported to ZATCA). On submit it posts a <b>Stock Entry</b> (stock out at cost) and a <b>Journal Entry</b>: receivable from the customer at the selling price, the cost cleared, and the difference to the margin account.</p><p>Nothing can be submitted until every account below is set and the customer is in the list. <b>The accounts are the client's accountant's decision.</b> The margin account is an internal recharge, not turnover: exclude it from any revenue report.</p>"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_accounts",
+   "fieldtype": "Section Break",
+   "label": "Accounts"
+  },
+  {
+   "fieldname": "receivable_account",
+   "fieldtype": "Link",
+   "label": "Receivable Account",
+   "options": "Account",
+   "description": "A Receivable account (Debtors). The customer is posted as its party, so the amount shows in that customer's statement and ageing."
+  },
+  {
+   "fieldname": "clearing_account",
+   "fieldtype": "Link",
+   "label": "Inter-Branch Clearing Account",
+   "options": "Account",
+   "description": "Balance Sheet account the Stock Entry debits when the stock leaves. The Journal Entry clears it to zero, so it should always read nil."
+  },
+  {
+   "fieldname": "margin_account",
+   "fieldtype": "Link",
+   "label": "Inter-Branch Margin Account",
+   "options": "Account",
+   "description": "Income account for selling price minus cost. Not turnover."
+  },
+  {
+   "fieldname": "cost_center",
+   "fieldtype": "Link",
+   "label": "Cost Center",
+   "options": "Cost Center"
+  },
+  {
+   "fieldname": "column_defaults",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "price_list",
+   "fieldtype": "Link",
+   "label": "Default Price List",
+   "options": "Price List",
+   "description": "Selling price list read when an item has no rate typed in."
+  },
+  {
+   "fieldname": "from_warehouse",
+   "fieldtype": "Link",
+   "label": "Default Source Warehouse",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "section_customers",
+   "fieldtype": "Section Break",
+   "label": "Inter-Branch Customers"
+  },
+  {
+   "fieldname": "customers",
+   "fieldtype": "Table",
+   "label": "Customers Allowed For Inter Branch Sales",
+   "options": "Inter Branch Sale Customer",
+   "description": "Only these customers can be used. Create each one as a normal Customer (tick Is Internal Customer) first."
+  }
+ ],
+ "permissions": [
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Accounts Manager"
+  },
+  {
+   "read": 1,
+   "role": "Stock Manager"
+  },
+  {
+   "read": 1,
+   "role": "Sales Manager"
+  }
+ ]
+}

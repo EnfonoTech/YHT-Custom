@@ -1,0 +1,295 @@
+{
+ "actions": [],
+ "creation": "2026-10-19 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-10-19 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Yht Custom",
+ "name": "Inter Branch Sale",
+ "owner": "Administrator",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "is_submittable": 1,
+ "track_changes": 1,
+ "editable_grid": 1,
+ "autoname": "naming_series:",
+ "title_field": "customer_name",
+ "search_fields": "customer,customer_name",
+ "field_order": [
+  "naming_series",
+  "company",
+  "column_a",
+  "posting_date",
+  "posting_time",
+  "set_posting_time",
+  "section_party",
+  "customer",
+  "customer_name",
+  "column_b",
+  "from_warehouse",
+  "price_list",
+  "cost_center",
+  "section_items",
+  "items",
+  "section_totals",
+  "total_qty",
+  "column_c",
+  "total_amount",
+  "total_cost",
+  "margin",
+  "section_links",
+  "stock_entry",
+  "column_d",
+  "journal_entry",
+  "amended_from",
+  "remarks",
+  "status"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "KSIB-.YY.-.####",
+   "default": "KSIB-.YY.-.####",
+   "reqd": 1,
+   "set_only_once": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1,
+   "remember_last_selected_value": 1
+  },
+  {
+   "fieldname": "column_a",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "posting_date",
+   "fieldtype": "Date",
+   "label": "Posting Date",
+   "reqd": 1,
+   "default": "Today",
+   "no_copy": 1
+  },
+  {
+   "fieldname": "posting_time",
+   "fieldtype": "Time",
+   "label": "Posting Time",
+   "default": "Now",
+   "no_copy": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "set_posting_time",
+   "fieldtype": "Check",
+   "label": "Edit Posting Date and Time"
+  },
+  {
+   "fieldname": "section_party",
+   "fieldtype": "Section Break",
+   "label": "Customer"
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Inter-Branch Customer",
+   "options": "Customer",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "customer_name",
+   "fieldtype": "Data",
+   "label": "Customer Name",
+   "fetch_from": "customer.customer_name",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "column_b",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "from_warehouse",
+   "fieldtype": "Link",
+   "label": "Source Warehouse",
+   "options": "Warehouse",
+   "reqd": 1
+  },
+  {
+   "fieldname": "price_list",
+   "fieldtype": "Link",
+   "label": "Price List",
+   "options": "Price List"
+  },
+  {
+   "fieldname": "cost_center",
+   "fieldtype": "Link",
+   "label": "Cost Center",
+   "options": "Cost Center"
+  },
+  {
+   "fieldname": "section_items",
+   "fieldtype": "Section Break",
+   "label": "Items"
+  },
+  {
+   "fieldname": "items",
+   "fieldtype": "Table",
+   "label": "Items",
+   "options": "Inter Branch Sale Item",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_totals",
+   "fieldtype": "Section Break",
+   "label": "Totals"
+  },
+  {
+   "fieldname": "total_qty",
+   "fieldtype": "Float",
+   "label": "Total Qty",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_c",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "total_amount",
+   "fieldtype": "Currency",
+   "label": "Total (Selling)",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "total_cost",
+   "fieldtype": "Currency",
+   "label": "Total Cost",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "margin",
+   "fieldtype": "Currency",
+   "label": "Margin",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "section_links",
+   "fieldtype": "Section Break",
+   "label": "Posted Documents",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "stock_entry",
+   "fieldtype": "Link",
+   "label": "Stock Entry",
+   "options": "Stock Entry",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "column_d",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "journal_entry",
+   "fieldtype": "Link",
+   "label": "Journal Entry",
+   "options": "Journal Entry",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "options": "Inter Branch Sale",
+   "read_only": 1,
+   "no_copy": 1,
+   "print_hide": 1
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Draft\nSubmitted\nCancelled",
+   "default": "Draft",
+   "read_only": 1,
+   "no_copy": 1,
+   "in_standard_filter": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "Stock Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "email": 1,
+   "share": 1,
+   "create": 1,
+   "write": 1,
+   "submit": 1,
+   "cancel": 1
+  },
+  {
+   "role": "Sales Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "email": 1,
+   "share": 1,
+   "create": 1,
+   "write": 1,
+   "submit": 1,
+   "cancel": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "email": 1,
+   "share": 1,
+   "create": 1,
+   "write": 1,
+   "submit": 1,
+   "cancel": 1
+  },
+  {
+   "role": "System Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "email": 1,
+   "share": 1,
+   "create": 1,
+   "write": 1,
+   "submit": 1,
+   "cancel": 1,
+   "delete": 1
+  }
+ ]
+}

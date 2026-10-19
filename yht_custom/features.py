@@ -102,6 +102,8 @@ KNOWN = {
 	"oct15_r26_new_document_year": "A NEW document must be dated inside the fiscal year chosen for the session; the date picker is limited to it (row 26, 'new also')",
 	"oct15_std_remarks_editable": "Standard Remarks editable after submit on Sales / Purchase Invoice, Purchase Receipt, Payment Entry, Stock Entry and Journal Entry; the ledger wording follows (Q&A 5)",
 	"oct15_r48_print_pdf_default": "The toolbar Print PDF button opens the document's default / branch print format (row 48)",
+	# --- 2026-10-19: HELD, not agreed with the client; lives on feature/inter-branch-sale ---
+	"oct19_inter_branch_sale": "Inter Branch Sale: stock to another group entity at a selling price, Stock Entry + Journal Entry, nothing to ZATCA",
 }
 
 #: Reads as "every known switch is on". Meant for `yht-test`.
