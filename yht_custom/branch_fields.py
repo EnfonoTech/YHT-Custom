@@ -51,6 +51,9 @@ SCOPED_DOCTYPES = (
 	# accounting
 	"Payment Entry",
 	"Journal Entry Account",
+	# held feature (feature/inter-branch-sale): stock to a sister company
+	"Inter Branch Sale",
+	"Inter Branch Sale Item",
 	# masters that seed defaults onto the above
 	"Item Default",
 )
@@ -69,6 +72,7 @@ GUARDED_PARENTS = {
 	"Material Request": "items",
 	"Payment Entry": None,
 	"Journal Entry": "accounts",
+	"Inter Branch Sale": "items",
 }
 
 LINK_TARGETS = ("Warehouse", "Cost Center")

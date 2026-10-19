@@ -35,6 +35,11 @@ if (((frappe.boot && frappe.boot.yht_features) || []).indexOf("oct11_r29_branch_
 	ALLOWED_DOCTYPES.push("Purchase Order");
 }
 
+// Held feature (feature/inter-branch-sale) — the dashboard's Inter Branch Sale tile, under the same kind of switch.
+if (((frappe.boot && frappe.boot.yht_features) || []).indexOf("oct19_inter_branch_sale") !== -1) {
+	ALLOWED_DOCTYPES.push("Inter Branch Sale");
+}
+
 //: Single-segment routes a branch user legitimately lands on. Multi-segment routes
 //: (["query-report", "Stock Balance"], ["print", ...]) are handled by the branches below and
 //: do not need to appear here — but leaving them costs nothing and documents the intent.

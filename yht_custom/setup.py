@@ -80,6 +80,9 @@ BRANCH_USER_PERMISSIONS = [
 	{"parent": "Purchase Receipt", "read": 1, "write": 1, "create": 1, "submit": 1, "print": 1, "report": 1, "export": 1},
 	{"parent": "Purchase Invoice", "read": 1, "write": 1, "create": 1, "submit": 1, "print": 1, "report": 1, "export": 1},
 	{"parent": "Payment Entry", "read": 1, "write": 1, "create": 1, "submit": 1, "print": 1, "report": 1, "export": 1},
+	# Held feature (feature/inter-branch-sale): stock to a sister company at a selling price. `cancel` stays 0 as
+	# everywhere. The doctype is skipped on a site that does not have it (see setup_branch_user_permissions).
+	{"parent": "Inter Branch Sale", "read": 1, "write": 1, "create": 1, "submit": 1, "print": 1, "report": 1, "export": 1},
 	# --- masters they maintain ---
 	{"parent": "Customer", "read": 1, "write": 1, "create": 1, "print": 1, "email": 1, "report": 1, "export": 1},
 	{"parent": "Address", "read": 1, "write": 1, "create": 1, "print": 1, "report": 1, "export": 1},
