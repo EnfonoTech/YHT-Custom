@@ -5,7 +5,7 @@
  "engine": "InnoDB",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-10-19 12:00:00.000000",
+ "modified": "2026-10-19 15:00:00.000000",
  "modified_by": "Administrator",
  "module": "Yht Custom",
  "name": "Inter Branch Sale Settings",
@@ -33,7 +33,7 @@
   {
    "fieldname": "help",
    "fieldtype": "HTML",
-   "options": "<p>An <b>Inter Branch Sale</b> moves stock to another group entity that keeps its own books, at a selling price, without a Sales Invoice (nothing is reported to ZATCA). On submit it posts a <b>Stock Entry</b> (stock out at cost) and a <b>Journal Entry</b>: receivable from the customer at the selling price, the cost cleared, and the difference to the margin account.</p><p>Nothing can be submitted until every account below is set and the customer is in the list. <b>The accounts are the client's accountant's decision.</b> The margin account is an internal recharge, not turnover: exclude it from any revenue report.</p>"
+   "options": "<p>An <b>Inter Branch Sale</b> moves stock to another group entity that keeps its own books, at a selling price. No Sales Invoice is created. On submit it posts a <b>Stock Entry</b> (stock out at cost) and a <b>Journal Entry</b>: receivable from the customer at the selling price, the cost cleared, and the difference to the margin account.</p><p>Nothing can be submitted until every account below is set and the customer is in the list. <b>The accounts are the client's accountant's decision.</b> The margin account is an internal recharge, not turnover: exclude it from any revenue report.</p>"
   },
   {
    "fieldname": "company",
