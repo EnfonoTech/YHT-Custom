@@ -151,6 +151,13 @@ class TestSettingsGaps(FrappeTestCase):
 class TestEndToEnd(FrappeTestCase):
 	"""Real documents on a real site, inside the test's transaction."""
 
+	@classmethod
+	def tearDownClass(cls):
+		super().tearDownClass()
+		# The test saves the settings and reads them through the cache; the rollback does not clear a cached
+		# document, so without this the site would keep serving the test's accounts.
+		frappe.clear_document_cache("Inter Branch Sale Settings", "Inter Branch Sale Settings")
+
 	def setUp(self):
 		super().setUp()
 		self.company = frappe.db.get_value("Company", {}, "name")
