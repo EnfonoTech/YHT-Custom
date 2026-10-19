@@ -177,6 +177,10 @@ class TestEndToEnd(FrappeTestCase):
 			("clearing", "Test IB Clearing", "Asset", None, None),
 			("margin", "Test IB Margin", "Income", None, None),
 		):
+			existing = frappe.db.exists("Account", f"{name} - {abbr}")  # the class shares one transaction
+			if existing:
+				self.accounts[key] = existing
+				continue
 			parent = frappe.db.get_value("Account", {"company": self.company, "root_type": root, "is_group": 1}, "name")
 			acc = frappe.get_doc({"doctype": "Account", "account_name": name, "company": self.company, "parent_account": parent, "root_type": root, "account_type": account_type or ""}).insert(ignore_permissions=True)
 			self.accounts[key] = acc.name
