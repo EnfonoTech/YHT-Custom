@@ -41,13 +41,19 @@ does NOT keep the doctype off a site: the DocType arrives with the next `migrate
 Returns (cancel works), a print format, a report, Branch User permissions and branch scoping (roles today: Stock
 Manager, Sales Manager, Accounts Manager, System Manager), a payable side (not needed while the receivers keep their own books).
 
-## Tests
+## Tests and UAT (2026-10-19)
 
-`yht_custom/tests/test_inter_branch_sale.py`. The pure parts (posting arithmetic, structure, settings gaps) pass under a
-stub locally. `TestEndToEnd` (real Stock Entry + Journal Entry, cancel, refusals) has **not been run on a site**: it needs the
-branch checked out on the box, which is allowed only on the user's say-so (live and UAT share one apps directory).
+`yht_custom/tests/test_inter_branch_sale.py`: **22 of 22 pass on yht-test**, including the real Stock Entry and Journal Entry,
+cancel, and the refusals. Run with `--skip-before-tests` (see memory `bench-run-tests-deletes-item-price`).
 
-## To test on yht-test later
+Demo on yht-test (placeholders, NOT the accountant's choice): Receivable `1004001 - CUSTOMERS - RECEIVABLES - KATC`,
+Clearing `Inter-Branch Clearing - KATC`, Margin `Inter-Branch Margin - KATC`, customers CU0022 and CU0419; documents
+`KSIB-26-0001..0006`. Video: `docs/inter-branch-sale-demo-2026-10-19.mp4` (outside the repo, in the YHT Trading folder).
 
-Check the branch out on the box for the run and restore the deploy branch afterwards; `bench --site yht-test migrate`
-(live must NOT migrate while it is checked out), set `yht_features` to `["all"]` on yht-test (already so), then run the module.
+The box was checked out onto this branch for the run and restored to `pipeline/meeting-1011-wednesday`. yht-test now holds the
+doctypes without the code: do not migrate it while the box is on the deploy branch (memory `held-feature-doctypes-orphaned-on-yht-test`).
+
+## To test again
+
+Check the branch out on the box (SHA-gated), `reload_doc` the four doctypes on yht-test, QUIT the web workers, run the module,
+then restore the deploy branch. Never migrate live while it is checked out.
