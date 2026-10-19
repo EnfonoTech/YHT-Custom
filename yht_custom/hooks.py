@@ -165,6 +165,8 @@ permission_query_conditions = {
 	"Quotation": "yht_custom.branch_filters.quotation_query",
 	"Payment Entry": "yht_custom.branch_filters.payment_entry_query",
 	"Stock Entry": "yht_custom.branch_filters.stock_entry_query",
+	# Held feature (feature/inter-branch-sale): the doctype only exists where it was loaded.
+	"Inter Branch Sale": "yht_custom.branch_filters.inter_branch_sale_query",
 	"Material Request": "yht_custom.branch_filters.material_request_query",
 	# Row 29 (2026-10-11) — returns "" until `oct11_r29_branch_purchase_order` is on.
 	"Purchase Order": "yht_custom.branch_purchase_order.purchase_order_query",
@@ -443,6 +445,11 @@ _REMARKS_EVENTS = {
 }
 doc_events = _merge_events(doc_events, _NEW_YEAR_EVENTS)
 doc_events = _merge_events(doc_events, _REMARKS_EVENTS)
+
+# Held feature (feature/inter-branch-sale): a branch user may only sell from their own warehouses. Only the scope guard,
+# not the cost-centre override or the branch series: the document has its own series and takes its cost centre from
+# Inter Branch Sale Settings.
+doc_events = _merge_events(doc_events, {"Inter Branch Sale": {"validate": "yht_custom.branch_guard.validate_branch_scope"}})
 
 # --- opening invoice tool ----------------------------------------------
 # erpnext builds the invoice dict with no hook of any kind, so the controller

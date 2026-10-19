@@ -195,6 +195,11 @@ def stock_entry_query(user):
 	).format(wh=wh, user=frappe.db.escape(user))
 
 
+def inter_branch_sale_query(user):
+	"""Held feature: a branch user sees the sales that leave their own warehouses, or that they or a colleague raised."""
+	return _warehouse_or_owner("Inter Branch Sale", ["from_warehouse"], "Inter Branch Sale Item", user)
+
+
 def quotation_query(user):
 	"""Scope quotations by the warehouse on their ITEM rows.
 

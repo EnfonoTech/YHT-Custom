@@ -176,6 +176,15 @@ const ACTIONS = [
 		mode: "list",
 		feature: "oct11_r29_branch_purchase_order",
 	},
+	// Held feature (feature/inter-branch-sale) — shown only on a site with `oct19_inter_branch_sale`.
+	{
+		icon: "truck",
+		label: "Inter Branch Sale",
+		desc: "Stock to a sister company",
+		doctype: "Inter Branch Sale",
+		mode: "list",
+		feature: "oct19_inter_branch_sale",
+	},
 	// Row 33 (2026-10-11) — shown only on a site with `oct11_r33_record_expense`. The first is
 	// intercepted (`data-yht-expense`) so the flag reaches the form through route options; the
 	// second is a filtered list (no "+": the thing it would create is not what it shows).
@@ -350,6 +359,8 @@ const CAN_CREATE = [
 	// Row 29 — a branch user can raise (not approve) a Purchase Order; the tile that
 	// carries it is itself behind the feature switch.
 	"Purchase Order",
+	// Held feature — the tile that carries it is itself behind the feature switch.
+	"Inter Branch Sale",
 ];
 
 function action_card(a) {
