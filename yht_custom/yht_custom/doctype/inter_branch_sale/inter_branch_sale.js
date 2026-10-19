@@ -11,6 +11,18 @@ frappe.ui.form.on("Inter Branch Sale", {
 		});
 	},
 	refresh(frm) {
+		if (frm.is_new() && !frm._ib_defaulted) {
+			frm._ib_defaulted = true;
+			frappe.call({
+				method: "yht_custom.yht_custom.doctype.inter_branch_sale.inter_branch_sale.get_defaults",
+				callback(r) {
+					const d = r.message || {};
+					["company", "cost_center", "from_warehouse", "price_list"].forEach(function (f) {
+						if (d[f] && !frm.doc[f]) frm.set_value(f, d[f]);
+					});
+				},
+			});
+		}
 		frappe.call({
 			method: "yht_custom.yht_custom.doctype.inter_branch_sale.inter_branch_sale.get_inter_branch_customers",
 			callback(r) { frm._ib_customers = r.message || []; },

@@ -285,3 +285,16 @@ def get_inter_branch_customers() -> list:
 	from yht_custom.yht_custom.doctype.inter_branch_sale_settings.inter_branch_sale_settings import allowed_customers
 
 	return allowed_customers()
+
+
+@frappe.whitelist()
+def get_defaults() -> dict:
+	"""What a new document starts with, from the settings, so the form is filled when it opens and not only on save."""
+	frappe.has_permission("Inter Branch Sale", "read", throw=True)
+	settings = frappe.get_cached_doc(SETTINGS)
+	return {
+		"company": settings.company,
+		"cost_center": settings.cost_center,
+		"from_warehouse": settings.get("from_warehouse"),
+		"price_list": settings.get("price_list"),
+	}

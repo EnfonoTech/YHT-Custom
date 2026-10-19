@@ -110,11 +110,11 @@ class TestStructure(FrappeTestCase):
 		self.assertEqual(deleters, {"System Manager"})
 
 	def test_the_script_calls_methods_that_are_whitelisted(self):
-		for fn in (ibs.get_item_rates, ibs.get_inter_branch_customers):
+		for fn in (ibs.get_item_rates, ibs.get_inter_branch_customers, ibs.get_defaults):
 			self.assertIn(fn, frappe.whitelisted)
 		with open(os.path.join(DOCTYPE_DIR, "inter_branch_sale", "inter_branch_sale.js")) as f:
 			source = f.read()
-		for name in ("get_item_rates", "get_inter_branch_customers"):
+		for name in ("get_item_rates", "get_inter_branch_customers", "get_defaults"):
 			self.assertIn("inter_branch_sale." + name, source)
 
 	def test_a_sale_waits_for_its_switch(self):
