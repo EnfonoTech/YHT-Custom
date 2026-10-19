@@ -110,6 +110,8 @@ KNOWN = {
 	# --- client answers of 2026-10-27 (WhatsApp, Q5 and Q6) ---
 	"oct27_no_quick_customer": "No quick Customer creation anywhere; a customer is made only on the full Customer form (Q5)",
 	"oct27_print_preview": "The toolbar Print PDF buttons open the browser's print preview instead of downloading the server PDF (Q6)",
+	# --- 2026-10-19: HELD, not agreed with the client; lives on feature/inter-branch-sale ---
+	"oct19_inter_branch_sale": "Inter Branch Sale: stock to another group entity at a selling price, Stock Entry + Journal Entry, nothing to ZATCA",
 }
 
 #: Reads as "every known switch is on". Meant for `yht-test`.
