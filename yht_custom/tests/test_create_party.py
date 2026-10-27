@@ -36,7 +36,18 @@ def _address(**overrides):
 
 
 class TestCreateCustomer(FrappeTestCase):
+    """The one-call creation path itself, so it runs with Q5's block (`oct27_no_quick_customer`) off;
+    the block has its own tests in `test_meeting_1027`."""
+
+    def setUp(self):
+        from yht_custom.meeting_1027 import NO_QUICK_CUSTOMER
+        from yht_custom.tests.test_meeting_1011_wednesday import _off
+
+        self._switch = _off(NO_QUICK_CUSTOMER)
+        self._switch.start()
+
     def tearDown(self):
+        self._switch.stop()
         frappe.set_user("Administrator")
         frappe.db.rollback()
 
