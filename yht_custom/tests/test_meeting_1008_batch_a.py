@@ -455,9 +455,15 @@ class TestSalesOrderPrintsAsDeliveryNote(FrappeTestCase):
 		from yht_custom import setup
 
 		self.assertEqual(setup.DEFAULT_PRINT_FORMATS["Sales Order"], "KATC Sales Order")
+		# A format the client built and chose themselves is kept (gotcha 122): on live, saheed@ set
+		# Sales Order to their own SALES-ORDER on 2026-10-25. Without such a choice, the router is the default.
+		client = frappe.db.get_value(
+			"Property Setter", {"doc_type": "Sales Order", "property": "default_print_format"}, "value"
+		)
+		client_built = client and frappe.db.get_value("Print Format", {"name": client, "disabled": 0, "standard": "No"})
 		setup.setup_default_print_formats()
 		frappe.clear_cache(doctype="Sales Order")
-		self.assertEqual(frappe.get_meta("Sales Order").default_print_format, "KATC Sales Order")
+		self.assertEqual(frappe.get_meta("Sales Order").default_print_format, client if client_built else "KATC Sales Order")
 
 
 # --------------------------------------------------------------------- row 16

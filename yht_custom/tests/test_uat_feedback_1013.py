@@ -291,16 +291,35 @@ class TestFieldsTheClientHadHidden(FrappeTestCase):
 		frappe.clear_cache(doctype=doctype)
 		return name
 
+	@staticmethod
+	def _client_hid_it_since(doctype, fieldname):
+		"""A `hidden` Property Setter from Customize Form, e.g. Sales Order Print As (saheed@, 2026-10-25).
+		It sits above the Custom Field flag, so the client's later choice wins over our un-hide."""
+		return frappe.db.exists(
+			"Property Setter", {"doc_type": doctype, "field_name": fieldname, "property": "hidden", "value": "1"}
+		)
+
 	def test_each_requested_field_is_unhidden(self):
-		# With the 2026-10-26 reversal off, as on the live site today. The reversal itself is pinned in
+		# With the 2026-10-26 reversal off. The reversal itself is pinned in
 		# test_meeting_1027.TestOtherRemarksHidden.
 		for doctype, fieldname, _switch in meeting_1011.VISIBLE_FIELDS:
 			with self.subTest(doctype=doctype, field=fieldname), _off("oct27_other_remarks_hidden"):
-				self._hide(doctype, fieldname)
+				name = self._hide(doctype, fieldname)
 				self.assertEqual(frappe.get_meta(doctype, cached=False).get_field(fieldname).hidden, 1)
 				meeting_1011.setup_requested_fields_visible()
 				frappe.clear_cache(doctype=doctype)
-				self.assertEqual(frappe.get_meta(doctype, cached=False).get_field(fieldname).hidden, 0)
+				# Our flag is always cleared; what the form shows also depends on the client's own setter.
+				self.assertEqual(frappe.db.get_value("Custom Field", name, "hidden"), 0)
+				expected = 1 if self._client_hid_it_since(doctype, fieldname) else 0
+				self.assertEqual(frappe.get_meta(doctype, cached=False).get_field(fieldname).hidden, expected)
+
+	def test_a_field_the_client_hid_again_is_left_hidden(self):
+		"""The step must never delete or flip a client's Property Setter."""
+		with _off("oct27_other_remarks_hidden"):
+			before = frappe.get_all("Property Setter", {"property": "hidden"}, ["name", "value", "modified"], order_by="name")
+			meeting_1011.setup_requested_fields_visible()
+			after = frappe.get_all("Property Setter", {"property": "hidden"}, ["name", "value", "modified"], order_by="name")
+		self.assertEqual(after, before)
 
 	def test_a_field_outside_the_list_stays_as_the_client_set_it(self):
 		name = self._hide("Delivery Note", "custom_other_remarks")
