@@ -292,8 +292,10 @@ class TestFieldsTheClientHadHidden(FrappeTestCase):
 		return name
 
 	def test_each_requested_field_is_unhidden(self):
+		# With the 2026-10-26 reversal off, as on the live site today. The reversal itself is pinned in
+		# test_meeting_1027.TestOtherRemarksHidden.
 		for doctype, fieldname, _switch in meeting_1011.VISIBLE_FIELDS:
-			with self.subTest(doctype=doctype, field=fieldname):
+			with self.subTest(doctype=doctype, field=fieldname), _off("oct27_other_remarks_hidden"):
 				self._hide(doctype, fieldname)
 				self.assertEqual(frappe.get_meta(doctype, cached=False).get_field(fieldname).hidden, 1)
 				meeting_1011.setup_requested_fields_visible()
