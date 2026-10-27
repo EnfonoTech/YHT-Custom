@@ -355,11 +355,15 @@ def setup_print_headings() -> dict:
 	from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
 	created = []
-	for heading in ARABIC:
+	# The client added a mandatory `custom_print_heading_arabic` to Print Heading on live (seen 2026-10-28,
+	# when the test copy's migrate failed on it). Fill it from our own Arabic title when the field exists.
+	has_arabic = frappe.get_meta("Print Heading").has_field("custom_print_heading_arabic")
+	for heading, arabic in ARABIC.items():
 		if not frappe.db.exists("Print Heading", heading):
-			frappe.get_doc({"doctype": "Print Heading", "print_heading": heading}).insert(
-				ignore_permissions=True
-			)
+			values = {"doctype": "Print Heading", "print_heading": heading}
+			if has_arabic:
+				values["custom_print_heading_arabic"] = arabic
+			frappe.get_doc(values).insert(ignore_permissions=True)
 			created.append(heading)
 
 	note_fields = {}
