@@ -337,6 +337,11 @@ def setup_requested_fields_visible() -> dict:
 		if not features.enabled(switch):
 			skipped.append(f"{doctype}.{fieldname}: {switch} is off")
 			continue
+		# The client asked for Other Remarks back off the forms on 2026-10-26; un-hiding it here
+		# would undo `meeting_1027.setup_other_remarks_hidden` on every migrate.
+		if fieldname == "custom_other_remarks" and features.enabled("oct27_other_remarks_hidden"):
+			skipped.append(f"{doctype}.{fieldname}: hidden again by oct27_other_remarks_hidden")
+			continue
 		name = frappe.db.get_value("Custom Field", {"dt": doctype, "fieldname": fieldname}, "name")
 		if not name:
 			skipped.append(f"{doctype}.{fieldname}: no such Custom Field")

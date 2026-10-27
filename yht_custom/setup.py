@@ -36,6 +36,12 @@ from yht_custom.meeting_1015 import (
 	setup_opportunity_bulk_items,
 	setup_quotation_sales_team,
 )
+from yht_custom.meeting_1027 import (
+	setup_attention_hidden,
+	setup_cash_hides_due_date,
+	setup_company_tax_id_hidden,
+	setup_other_remarks_hidden,
+)
 from yht_custom.remarks_editable import setup_standard_remarks_editable
 from yht_custom.session_year import setup_session_year
 from yht_custom.site_defaults import setup_site_defaults
@@ -303,6 +309,11 @@ PROVISIONING_STEPS = (
 	"setup_standard_remarks_editable",  # Q&A 5
 	"setup_session_year",          # row 26
 	"setup_record_expense",        # row 33
+	# --- client sheet, escalated 2026-10-26 (each behind its own switch; hide only, no data touched) ---
+	"setup_other_remarks_hidden",  # row 22 undone (AFTER setup_requested_fields_visible, which skips it while on)
+	"setup_cash_hides_due_date",
+	"setup_company_tax_id_hidden",
+	"setup_attention_hidden",      # after ensure_attention_field created it
 	"repair_mirrored_perm_flags",
 	"run_dashboard_reports_inline",
 	"setup_hr",
@@ -467,6 +478,10 @@ def _imported(name):
 		"setup_standard_remarks_editable": setup_standard_remarks_editable,
 		"setup_session_year": setup_session_year,
 		"setup_record_expense": setup_record_expense,
+		"setup_other_remarks_hidden": setup_other_remarks_hidden,
+		"setup_cash_hides_due_date": setup_cash_hides_due_date,
+		"setup_company_tax_id_hidden": setup_company_tax_id_hidden,
+		"setup_attention_hidden": setup_attention_hidden,
 		"setup_unified_number": setup_unified_number,
 		"setup_print_headings": setup_print_headings,
 		"setup_delivery_note_links": setup_delivery_note_links,

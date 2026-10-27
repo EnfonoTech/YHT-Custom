@@ -102,6 +102,11 @@ KNOWN = {
 	"oct15_r26_new_document_year": "A NEW document must be dated inside the fiscal year chosen for the session; the date picker is limited to it (row 26, 'new also')",
 	"oct15_std_remarks_editable": "Standard Remarks editable after submit on Sales / Purchase Invoice, Purchase Receipt, Payment Entry, Stock Entry and Journal Entry; the ledger wording follows (Q&A 5)",
 	"oct15_r48_print_pdf_default": "The toolbar Print PDF button opens the document's default / branch print format (row 48)",
+	# --- client sheet, escalated 2026-10-26 (each a form-only change, no data touched) ---
+	"oct27_other_remarks_hidden": "Other Remarks hidden on all twelve doctypes; its text is kept (row 22 undone)",
+	"oct27_cash_hides_due_date": "Sales Invoice: Payment Due Date hidden while Payment Mode is Cash",
+	"oct27_company_tax_id_hidden": "Sales Invoice: the company's own Tax ID hidden from the form",
+	"oct27_attention_hidden": "Attention field hidden from the Address & Contact block of the four selling documents",
 }
 
 #: Reads as "every known switch is on". Meant for `yht-test`.
