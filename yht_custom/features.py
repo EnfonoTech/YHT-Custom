@@ -107,6 +107,9 @@ KNOWN = {
 	"oct27_cash_hides_due_date": "Sales Invoice: Payment Due Date hidden while Payment Mode is Cash",
 	"oct27_company_tax_id_hidden": "Sales Invoice: the company's own Tax ID hidden from the form",
 	"oct27_attention_hidden": "Attention field hidden from the Address & Contact block of the four selling documents",
+	# --- client answers of 2026-10-27 (WhatsApp, Q5 and Q6) ---
+	"oct27_no_quick_customer": "No quick Customer creation anywhere; a customer is made only on the full Customer form (Q5)",
+	"oct27_print_preview": "The toolbar Print PDF buttons open the browser's print preview instead of downloading the server PDF (Q6)",
 }
 
 #: Reads as "every known switch is on". Meant for `yht-test`.

@@ -154,6 +154,10 @@ function katc_r48_on() {
 	return ((frappe.boot && frappe.boot.yht_features) || []).indexOf("oct15_r48_print_pdf_default") !== -1;
 }
 
+function katc_preview_on() {
+	return ((frappe.boot && frappe.boot.yht_features) || []).indexOf("oct27_print_preview") !== -1;
+}
+
 function katc_is_ours(format) {
 	return String(format || "").indexOf("KATC") === 0;
 }
@@ -190,10 +194,20 @@ function katc_download(frm, spec) {
 	if (spec.letterhead) {
 		args.letterhead = spec.letterhead;
 	}
+	// Q6 (2026-10-27): "the client-side print preview should come up". /printview renders the same format
+	// in the browser and `trigger_print=1` opens the browser's print preview. The page reads `_lang`, not
+	// `language` (the reverse of download_pdf, see above).
+	if (katc_preview_on()) {
+		if (args.language) {
+			args._lang = args.language;
+			delete args.language;
+		}
+		args.trigger_print = 1;
+	}
 	const query = Object.keys(args)
 		.map((key) => `${encodeURIComponent(key)}=${encodeURIComponent(args[key])}`)
 		.join("&");
-	window.open(`/api/method/frappe.utils.print_format.download_pdf?${query}`);
+	window.open(katc_preview_on() ? `/printview?${query}` : `/api/method/frappe.utils.print_format.download_pdf?${query}`);
 }
 
 function katc_add_buttons(frm) {

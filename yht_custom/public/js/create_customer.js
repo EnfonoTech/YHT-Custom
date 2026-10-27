@@ -55,7 +55,8 @@ yht.create_customer.add_button = function (frm, opts) {
 	// object survives a save, so refresh has to REMOVE it, not merely skip adding
 	// another. Behind a switch because this file is served to both sites from one
 	// app directory; off, the previous rule (gone only on submit) still applies.
-	const gone = yht_r10_on() ? !frm.is_new() : frm.doc.docstatus !== 0;
+	// Q5 (2026-10-27): no quick creation at all; a customer is made on the full Customer form.
+	const gone = yht_no_quick_customer() || (yht_r10_on() ? !frm.is_new() : frm.doc.docstatus !== 0);
 	if (gone) {
 		$existing.remove();
 		return;
@@ -74,6 +75,10 @@ yht.create_customer.add_button = function (frm, opts) {
 	});
 	$wrapper.before($btn);
 };
+
+function yht_no_quick_customer() {
+	return ((frappe.boot && frappe.boot.yht_features) || []).includes("oct27_no_quick_customer");
+}
 
 function yht_r10_on() {
 	return ((frappe.boot && frappe.boot.yht_features) || []).includes("oct08_r10_new_customer_button");

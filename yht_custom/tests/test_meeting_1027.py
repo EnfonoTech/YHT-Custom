@@ -160,3 +160,38 @@ class TestAttentionHidden(FrappeTestCase):
 	def test_it_waits_for_its_switch(self):
 		with _off(meeting_1027.ATTENTION):
 			self.assertIn("skipped", meeting_1027.setup_attention_hidden())
+
+
+class TestNoQuickCustomer(FrappeTestCase):
+	"""Q5 of 2026-10-27: a customer is made on the full Customer form only."""
+
+	def test_the_switches_are_known(self):
+		for name in (meeting_1027.NO_QUICK_CUSTOMER, "oct27_print_preview"):
+			with self.subTest(switch=name):
+				self.assertIn(name, features.KNOWN)
+
+	def test_customer_opens_its_full_form(self):
+		meeting_1027.setup_no_quick_customer()
+		frappe.clear_cache(doctype="Customer")
+		self.assertEqual(frappe.get_meta("Customer", cached=False).quick_entry, 0)
+
+	def test_both_quick_create_endpoints_refuse(self):
+		from yht_custom.api import customer, party
+
+		with self.assertRaises(frappe.ValidationError):
+			customer.create_customer_with_address(customer_name="ZQXTEST quick customer", mobile_no="0500000000")
+		with self.assertRaises(frappe.ValidationError):
+			party.create_party(doctype="Customer", party_name="ZQXTEST quick customer")
+		self.assertFalse(frappe.db.exists("Customer", {"customer_name": "ZQXTEST quick customer"}))
+
+	def test_supplier_quick_create_is_not_blocked(self):
+		with self.assertRaises(Exception) as caught:
+			from yht_custom.api import party
+
+			party.create_party(doctype="Supplier", party_name="")  # refused for the empty name, not the switch
+		self.assertNotIn("Customer Form", str(caught.exception))
+
+	def test_it_waits_for_its_switch(self):
+		with _off(meeting_1027.NO_QUICK_CUSTOMER):
+			self.assertIn("skipped", meeting_1027.setup_no_quick_customer())
+			meeting_1027.assert_quick_customer_allowed()  # must not raise

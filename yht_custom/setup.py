@@ -38,6 +38,7 @@ from yht_custom.meeting_1015 import (
 )
 from yht_custom.meeting_1027 import (
 	setup_attention_hidden,
+	setup_no_quick_customer,
 	setup_cash_hides_due_date,
 	setup_company_tax_id_hidden,
 	setup_other_remarks_hidden,
@@ -314,6 +315,7 @@ PROVISIONING_STEPS = (
 	"setup_cash_hides_due_date",
 	"setup_company_tax_id_hidden",
 	"setup_attention_hidden",      # after ensure_attention_field created it
+	"setup_no_quick_customer",     # Q5 of 2026-10-27: Customer opens its full form
 	"repair_mirrored_perm_flags",
 	"run_dashboard_reports_inline",
 	"setup_hr",
@@ -482,6 +484,7 @@ def _imported(name):
 		"setup_cash_hides_due_date": setup_cash_hides_due_date,
 		"setup_company_tax_id_hidden": setup_company_tax_id_hidden,
 		"setup_attention_hidden": setup_attention_hidden,
+		"setup_no_quick_customer": setup_no_quick_customer,
 		"setup_unified_number": setup_unified_number,
 		"setup_print_headings": setup_print_headings,
 		"setup_delivery_note_links": setup_delivery_note_links,

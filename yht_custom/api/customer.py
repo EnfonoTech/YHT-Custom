@@ -160,6 +160,9 @@ def create_customer_with_address(
     country: str | None = None,
 ):
     """Create the Customer, its Address and its Contact in one call."""
+    from yht_custom.meeting_1027 import assert_quick_customer_allowed
+
+    assert_quick_customer_allowed()
     if not frappe.has_permission("Customer", "create"):
         raise frappe.PermissionError(_("Not permitted to create a Customer"))
 

@@ -26,6 +26,7 @@ serves the live site and UAT from one `apps/yht_custom` (gotcha 106).
 """
 
 import frappe
+from frappe import _
 
 from yht_custom import features
 from yht_custom.form_layout import _set_property
@@ -34,6 +35,7 @@ OTHER_REMARKS = "oct27_other_remarks_hidden"
 CASH_DUE_DATE = "oct27_cash_hides_due_date"
 COMPANY_TAX_ID = "oct27_company_tax_id_hidden"
 ATTENTION = "oct27_attention_hidden"
+NO_QUICK_CUSTOMER = "oct27_no_quick_customer"
 
 #: Written once so the step and its test cannot disagree about the condition.
 DUE_DATE_DEPENDS_ON = 'eval:doc.custom_payment_mode!=="Cash"'
@@ -98,3 +100,29 @@ def setup_attention_hidden() -> dict:
 
 	hidden = [dt for dt in DOCTYPES if _hide_custom_field(dt, FIELDNAME)]
 	return {"hidden": hidden}
+
+
+def quick_customer_blocked() -> bool:
+	"""Q5 (2026-10-27): a customer is created on the full Customer form only, where every B2B check runs."""
+	return features.enabled(NO_QUICK_CUSTOMER)
+
+
+def assert_quick_customer_allowed():
+	"""Called by the two one-call creation endpoints; they are public HTTP methods, so the switch is enforced here."""
+	if quick_customer_blocked():
+		frappe.throw(
+			_("Quick customer creation is switched off. Create the customer from the Customer form."),
+			title=_("Use the Customer Form"),
+		)
+
+
+def setup_no_quick_customer() -> dict:
+	"""Customer opens its full form from every "Create a new Customer" (Link pickers, list + Add).
+
+	`quick_entry` is a DocType property, so one Property Setter does it, and deleting that setter undoes it.
+	"""
+	if not quick_customer_blocked():
+		return {"skipped": f"{NO_QUICK_CUSTOMER} is off for this site"}
+	_set_property("Customer", None, "quick_entry", "0", "Check", for_doctype=True)
+	frappe.clear_cache(doctype="Customer")
+	return {"Customer.quick_entry": 0}

@@ -118,6 +118,10 @@ def create_party(
 	doctype = cstr(doctype).strip()
 	if doctype not in SUPPORTED:
 		frappe.throw(_("Unsupported party type"))
+	if doctype == "Customer":
+		from yht_custom.meeting_1027 import assert_quick_customer_allowed
+
+		assert_quick_customer_allowed()
 
 	# Every @frappe.whitelist() is a public HTTP endpoint. This is the boundary.
 	if not frappe.has_permission(doctype, "create"):

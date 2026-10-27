@@ -289,6 +289,11 @@ function render(page, d) {
 	page.body.off("click.yht-dialog").on("click.yht-dialog", "[data-yht-dialog]", function (e) {
 		e.preventDefault();
 		const doctype = $(this).attr("data-yht-dialog");
+		// Q5 (2026-10-27): the tile opens the full Customer form, not a quick dialog.
+		if (feature_on("oct27_no_quick_customer")) {
+			frappe.new_doc(doctype);
+			return;
+		}
 		if (window.yht && yht.simple_party) yht.simple_party.open(doctype);
 	});
 
