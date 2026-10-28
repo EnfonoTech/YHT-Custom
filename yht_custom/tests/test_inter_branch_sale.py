@@ -32,26 +32,19 @@ def _json(name):
 
 
 class TestPosting(FrappeTestCase):
-	def test_a_sale_above_cost_credits_the_margin(self):
-		rows = ibs.posting_rows(150, 100)
-		self.assertEqual(rows, [("receivable", 150.0, 0.0), ("clearing", 0.0, 100.0), ("margin", 0.0, 50.0)])
+	"""The Journal Entry is the sale side of a Sales Invoice: receivable and income, both at the selling price."""
 
-	def test_a_sale_below_cost_debits_the_margin(self):
-		self.assertEqual(ibs.posting_rows(80, 100)[-1], ("margin", 20.0, 0.0))
+	def test_receivable_and_income_at_the_selling_price(self):
+		self.assertEqual(ibs.posting_rows(150), [("receivable", 150.0, 0.0), ("income", 0.0, 150.0)])
 
-	def test_a_sale_at_cost_has_no_margin_leg(self):
-		self.assertEqual([leg for leg, _d, _c in ibs.posting_rows(100, 100)], ["receivable", "clearing"])
+	def test_no_clearing_or_margin_leg(self):
+		self.assertEqual([leg for leg, _d, _c in ibs.posting_rows(80)], ["receivable", "income"])
 
 	def test_the_entry_always_balances(self):
-		for amount, cost in ((150, 100), (80, 100), (100, 100), (33.335, 21.114), (0.01, 0.02), (1234567.89, 999999.99)):
-			rows = ibs.posting_rows(amount, cost)
-			with self.subTest(amount=amount, cost=cost):
+		for amount in (150, 80, 33.335, 0.01, 1234567.89):
+			rows = ibs.posting_rows(amount)
+			with self.subTest(amount=amount):
 				self.assertAlmostEqual(sum(d for _l, d, _c in rows), sum(c for _l, _d, c in rows), places=2)
-
-	def test_the_receivable_is_the_selling_price_and_the_clearing_is_the_cost(self):
-		rows = dict((leg, (d, c)) for leg, d, c in ibs.posting_rows(250.5, 200.25))
-		self.assertEqual(rows["receivable"], (250.5, 0.0))
-		self.assertEqual(rows["clearing"], (0.0, 200.25))
 
 
 class TestStructure(FrappeTestCase):
@@ -125,7 +118,7 @@ class TestStructure(FrappeTestCase):
 
 class TestSettingsGaps(FrappeTestCase):
 	def _settings(self, **kw):
-		base = {"company": "C", "receivable_account": "R", "clearing_account": "K", "margin_account": "M", "cost_center": "CC", "customers": [frappe._dict(customer="CU1")]}
+		base = {"company": "C", "receivable_account": "R", "cogs_account": "K", "income_account": "M", "cost_center": "CC", "customers": [frappe._dict(customer="CU1")]}
 		base.update(kw)
 		return frappe._dict(base)
 
@@ -164,8 +157,8 @@ def _make_fixtures(self):
 	self.accounts = {}
 	for key, name, root, account_type, parent_type in (
 		("receivable", "Test IB Receivable", "Asset", "Receivable", None),
-		("clearing", "Test IB Clearing", "Asset", None, None),
-		("margin", "Test IB Margin", "Income", None, None),
+		("cogs", "Test IB COGS", "Expense", "Cost of Goods Sold", None),
+		("income", "Test IB Income", "Income", None, None),
 	):
 		existing = frappe.db.exists("Account", f"{name} - {abbr}")  # the class shares one transaction
 		if existing:
@@ -176,7 +169,7 @@ def _make_fixtures(self):
 		self.accounts[key] = acc.name
 	cc = frappe.db.get_value("Cost Center", {"company": self.company, "is_group": 0}, "name")
 	settings = frappe.get_doc("Inter Branch Sale Settings")
-	settings.update({"company": self.company, "receivable_account": self.accounts["receivable"], "clearing_account": self.accounts["clearing"], "margin_account": self.accounts["margin"], "cost_center": cc})
+	settings.update({"company": self.company, "receivable_account": self.accounts["receivable"], "cogs_account": self.accounts["cogs"], "income_account": self.accounts["income"], "cost_center": cc})
 	settings.set("customers", [{"customer": self.customer}])
 	settings.save(ignore_permissions=True)
 	frappe.get_cached_doc("Inter Branch Sale Settings").reload()
@@ -218,8 +211,21 @@ class TestEndToEnd(FrappeTestCase):
 		receivable = next(a for a in je.accounts if a.account == self.accounts["receivable"])
 		self.assertEqual(receivable.party, self.customer)
 		self.assertAlmostEqual(receivable.debit_in_account_currency, doc.total_amount, places=2)
-		clearing = frappe.db.sql("select sum(debit)-sum(credit) from `tabGL Entry` where account=%s and is_cancelled=0", self.accounts["clearing"])[0][0]
-		self.assertAlmostEqual(flt(clearing), 0.0, places=2)
+		income = next(a for a in je.accounts if a.account == self.accounts["income"])
+		self.assertAlmostEqual(income.credit_in_account_currency, doc.total_amount, places=2)
+		# The cost side is the Stock Entry's, as on a Sales Invoice with Update Stock: Dr COGS at the ledger cost.
+		cogs = frappe.db.sql(
+			"select sum(debit)-sum(credit) from `tabGL Entry` where voucher_no=%s and account=%s and is_cancelled=0",
+			(doc.stock_entry, self.accounts["cogs"]),
+		)[0][0]
+		self.assertAlmostEqual(flt(cogs), doc.total_cost, places=2)
+		self.assertAlmostEqual(doc.margin, flt(doc.total_amount - doc.total_cost, 2), places=2)
+
+	def test_the_cost_of_goods_account_must_be_an_expense_account(self):
+		settings = frappe.get_doc("Inter Branch Sale Settings")
+		settings.cogs_account = self.accounts["income"]
+		with self.assertRaises(frappe.ValidationError):
+			settings.save(ignore_permissions=True)
 
 	def test_cancel_reverses_both_documents(self):
 		with mock.patch.object(features, "enabled", return_value=True):

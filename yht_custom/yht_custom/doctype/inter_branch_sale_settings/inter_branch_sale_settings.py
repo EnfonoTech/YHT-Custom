@@ -17,8 +17,8 @@ from frappe.utils import cstr
 REQUIRED = {
 	"company": "Company",
 	"receivable_account": "Receivable Account",
-	"clearing_account": "Inter-Branch Clearing Account",
-	"margin_account": "Inter-Branch Margin Account",
+	"cogs_account": "Cost of Goods Sold Account",
+	"income_account": "Sales Income Account",
 	"cost_center": "Cost Center",
 }
 
@@ -37,8 +37,8 @@ class InterBranchSaleSettings(Document):
 		company = self.company
 		checks = (
 			("receivable_account", {"account_type": "Receivable", "is_group": 0}, _("must be a Receivable account")),
-			("clearing_account", {"root_type": ["in", ["Asset", "Liability"]], "is_group": 0}, _("must be a Balance Sheet account")),
-			("margin_account", {"root_type": "Income", "is_group": 0}, _("must be an Income account")),
+			("cogs_account", {"root_type": "Expense", "is_group": 0}, _("must be an Expense account")),
+			("income_account", {"root_type": "Income", "is_group": 0}, _("must be an Income account")),
 		)
 		for field, filters, message in checks:
 			name = self.get(field)

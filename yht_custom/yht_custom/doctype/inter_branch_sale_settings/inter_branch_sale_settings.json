@@ -5,7 +5,7 @@
  "engine": "InnoDB",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-10-19 15:00:00.000000",
+ "modified": "2026-10-27 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "Yht Custom",
  "name": "Inter Branch Sale Settings",
@@ -20,8 +20,8 @@
   "company",
   "section_accounts",
   "receivable_account",
-  "clearing_account",
-  "margin_account",
+  "cogs_account",
+  "income_account",
   "cost_center",
   "column_defaults",
   "price_list",
@@ -33,7 +33,7 @@
   {
    "fieldname": "help",
    "fieldtype": "HTML",
-   "options": "<p>An <b>Inter Branch Sale</b> moves stock to another group entity that keeps its own books, at a selling price. No Sales Invoice is created. On submit it posts a <b>Stock Entry</b> (stock out at cost) and a <b>Journal Entry</b>: receivable from the customer at the selling price, the cost cleared, and the difference to the margin account.</p><p>Nothing can be submitted until every account below is set and the customer is in the list. <b>The accounts are the client's accountant's decision.</b> The margin account is an internal recharge, not turnover: exclude it from any revenue report.</p>"
+   "options": "<p>An <b>Inter Branch Sale</b> moves stock to another group entity that keeps its own books, at a selling price. It posts the same way a Sales Invoice with stock would, but without VAT and without ZATCA: a <b>Stock Entry</b> (stock out at cost, debited to Cost of Goods Sold) and a <b>Journal Entry</b> (receivable from the customer, credited to sales income, both at the selling price).</p><p>Nothing can be submitted until every account below is set and the customer is in the list. <b>The accounts are the client's accountant's decision.</b></p>"
   },
   {
    "fieldname": "company",
@@ -55,18 +55,18 @@
    "description": "A Receivable account (Debtors). The customer is posted as its party, so the amount shows in that customer's statement and ageing."
   },
   {
-   "fieldname": "clearing_account",
+   "fieldname": "cogs_account",
    "fieldtype": "Link",
-   "label": "Inter-Branch Clearing Account",
+   "label": "Cost of Goods Sold Account",
    "options": "Account",
-   "description": "Balance Sheet account the Stock Entry debits when the stock leaves. The Journal Entry clears it to zero, so it should always read nil."
+   "description": "Expense account the Stock Entry debits with the stock's cost, as a Sales Invoice with Update Stock would."
   },
   {
-   "fieldname": "margin_account",
+   "fieldname": "income_account",
    "fieldtype": "Link",
-   "label": "Inter-Branch Margin Account",
+   "label": "Sales Income Account",
    "options": "Account",
-   "description": "Income account for selling price minus cost. Not turnover."
+   "description": "Income account the Journal Entry credits with the selling price."
   },
   {
    "fieldname": "cost_center",

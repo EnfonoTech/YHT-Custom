@@ -5,16 +5,16 @@
 
 The other group entities (Jeddah, Jubail, Yanbu, Al Badr, Waqt Al Enjaz) are not branches of this site; they
 are customers carrying the company's VAT number. A sale to them must not be reported to ZATCA, so it is not
-a Sales Invoice. It is one document that posts, on submit and in the same transaction:
+a Sales Invoice. It posts what a Sales Invoice with Update Stock would, minus the VAT, on submit and in the
+same transaction:
 
-* a **Stock Entry** (Material Issue): the stock leaves the warehouse at cost, the debit going to the
-  Inter-Branch Clearing account instead of a P&L difference account;
-* a **Journal Entry**: Dr Receivable (party = the customer) at the selling price, Cr Clearing at cost, and the
-  difference to the Inter-Branch Margin account (a debit if it was sold below cost).
+* a **Stock Entry** (Material Issue): the stock leaves the warehouse at cost, debited to the Cost of Goods
+  Sold account (Dr COGS / Cr Stock);
+* a **Journal Entry**: Dr Receivable (party = the customer) / Cr Sales Income, both at the selling price.
 
-Net effect: receivable at selling price, stock out at cost, margin booked, Clearing nets to zero. The cost is
-read back from the Stock Ledger, not from the draft, so the Journal Entry always agrees with the stock value
-ERPNext actually posted.
+The margin is not posted anywhere: it is income minus cost of goods sold, exactly as for an ordinary sale. The
+cost is read back from the Stock Ledger, so `total_cost` and `margin` on the document agree with what ERPNext
+actually posted.
 
 Behind `oct19_inter_branch_sale`, and it cannot be submitted until Inter Branch Sale Settings names every
 account (the accounts are the client's accountant's decision, nothing is defaulted). Nothing is sent to ZATCA:
@@ -32,20 +32,13 @@ FEATURE = "oct19_inter_branch_sale"
 SETTINGS = "Inter Branch Sale Settings"
 
 
-def posting_rows(total_amount: float, total_cost: float) -> list:
-	"""The Journal Entry legs as (leg, debit, credit); balanced by construction.
+def posting_rows(total_amount: float) -> list:
+	"""The Journal Entry legs as (leg, debit, credit): the sale at its selling price, as a Sales Invoice posts it.
 
-	Pure arithmetic, no database, so the rounding and the sign of the margin are testable on their own.
+	The cost side is the Stock Entry's (Dr COGS / Cr Stock), so it never appears here.
 	"""
 	total_amount = flt(total_amount, 2)
-	total_cost = flt(total_cost, 2)
-	margin = flt(total_amount - total_cost, 2)
-	rows = [("receivable", total_amount, 0.0), ("clearing", 0.0, total_cost)]
-	if margin > 0:
-		rows.append(("margin", 0.0, margin))
-	elif margin < 0:
-		rows.append(("margin", -margin, 0.0))
-	return rows
+	return [("receivable", total_amount, 0.0), ("income", 0.0, total_amount)]
 
 
 class InterBranchSale(Document):
@@ -172,7 +165,7 @@ class InterBranchSale(Document):
 					"uom": row.uom,
 					"conversion_factor": 1,
 					"s_warehouse": row.warehouse,
-					"expense_account": settings.clearing_account,
+					"expense_account": settings.cogs_account,
 					"cost_center": self.cost_center or settings.cost_center,
 				},
 			)
@@ -192,15 +185,14 @@ class InterBranchSale(Document):
 			)
 		accounts = {
 			"receivable": settings.receivable_account,
-			"clearing": settings.clearing_account,
-			"margin": settings.margin_account,
+			"income": settings.income_account,
 		}
 		je = frappe.new_doc("Journal Entry")
 		je.voucher_type = "Journal Entry"
 		je.company = self.company
 		je.posting_date = self.posting_date
 		je.user_remark = _("Inter Branch Sale {0} to {1}").format(self.name, self.customer_name or self.customer)
-		for leg, debit, credit in posting_rows(self.total_amount, cost):
+		for leg, debit, credit in posting_rows(self.total_amount):
 			row = {
 				"account": accounts[leg],
 				"debit_in_account_currency": debit,

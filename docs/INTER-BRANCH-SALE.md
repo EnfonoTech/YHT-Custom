@@ -14,22 +14,24 @@ On submit, one transaction:
 
 | Document | Posts |
 |---|---|
-| Stock Entry (Material Issue) | stock out at cost; the debit goes to the **Inter-Branch Clearing** account |
-| Journal Entry | Dr **Receivable** (party = the customer) at selling price; Cr **Clearing** at cost; the difference to the **Margin** account (a debit when sold below cost) |
+| Stock Entry (Material Issue) | Dr **Cost of Goods Sold** / Cr Stock, at cost |
+| Journal Entry | Dr **Receivable** (party = the customer) / Cr **Sales Income**, at selling price |
 
-Net: receivable at selling price, stock out at cost, margin booked, Clearing nets to zero. The cost is read from the
-Stock Ledger the Stock Entry wrote, so the Journal Entry always matches the stock value. Cancel reverses the Journal
-Entry, then the Stock Entry.
+**Redesigned 2026-10-27 (user decision: "mirror the Sales Invoice"):** the same GL a Sales Invoice with Update Stock
+posts, minus the VAT row. The 10-19 version's Clearing and Margin accounts are gone; the margin is simply income minus
+COGS, as for any sale. `total_cost` / `margin` on the document are read back from the Stock Ledger. Cancel reverses the
+Journal Entry, then the Stock Entry.
 
 ## Setup (Inter Branch Sale Settings) — nothing submits until all of it is set
 
-1. Company, Receivable Account (Receivable type), Clearing Account (Balance Sheet), Margin Account (Income), Cost Center.
+1. Company, Receivable Account (Receivable type), Cost of Goods Sold Account (Expense), Sales Income Account (Income), Cost Center.
 2. Optional defaults: price list, source warehouse.
 3. The customers allowed. Create each as a normal Customer first (tick **Is Internal Customer**).
 
-**Open, for the client's accountant (nothing is defaulted in code):** which account carries the receivable; which account
-takes the margin (an internal recharge, **not turnover**, so exclude it from revenue reports); whether any VAT applies
-(assumed none, the customers carry the company's own VAT number); whether selling above cost is right at all.
+**Decided by the client (Osaid, WhatsApp 2026-10-28):** "all normal accounts as sales only VAT will be excluded in the
+entries". So the Sales Income and Cost of Goods Sold accounts are the company's normal ones (on this site the Company's
+Default Income Account and Default Cost of Goods Sold Account), and no VAT row is posted. Still set in the Settings form,
+not in code, so the accountant can change them without a deploy.
 
 ## Gate
 
