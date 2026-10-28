@@ -35,6 +35,32 @@ def _address(**overrides):
     }
 
 
+def _needs_a_full_address(test):
+    """Skip a test that saves a B2B address while the site requires Address fields the dialog never asks for.
+
+    The client made three Address fields mandatory on live in Customize Form
+    (National Address Full Data, Short Address, Additional Number; 22 Sep and
+    1 Oct 2026) and, asked on 28 Oct, chose not to add them to the quick dialog:
+    a B2B party is created from its own form instead. On such a site these
+    tests cannot pass by construction, and on one without those settings they run.
+    """
+    import functools
+
+    @functools.wraps(test)
+    def wrapper(self, *args, **kwargs):
+        meta = frappe.get_meta("Address")
+        extra = sorted(
+            f.fieldname
+            for f in meta.fields
+            if f.reqd and f.fieldname.startswith("custom_") and f.fieldname not in _address()
+        )
+        if extra:
+            self.skipTest("Address requires fields this test does not fill: " + ", ".join(extra))
+        return test(self, *args, **kwargs)
+
+    return wrapper
+
+
 class TestCreateCustomer(FrappeTestCase):
     """The one-call creation path itself, so it runs with Q5's block (`oct27_no_quick_customer`) off;
     the block has its own tests in `test_meeting_1027`."""
@@ -80,6 +106,7 @@ class TestCreateCustomer(FrappeTestCase):
         contact = frappe.get_doc("Contact", out["contact"])
         self.assertEqual(contact.phone_nos[0].phone, "0500000001")
 
+    @_needs_a_full_address
     def test_b2b_writes_both_vat_fields(self):
         """ksa_compliance reads the custom field; the rest of erpnext reads tax_id."""
         out = customer_api.create_customer_with_address(
@@ -121,6 +148,7 @@ class TestCreateCustomer(FrappeTestCase):
                 **_address(custom_area=""),
             )
 
+    @_needs_a_full_address
     def test_a_duplicate_vat_is_refused(self):
         customer_api.create_customer_with_address(
             customer_name="_ZZ VAT Holder",
@@ -138,6 +166,7 @@ class TestCreateCustomer(FrappeTestCase):
                 **_address(),
             )
 
+    @_needs_a_full_address
     def test_a_manager_may_allow_a_duplicate_with_a_reason(self):
         customer_api.create_customer_with_address(
             customer_name="_ZZ VAT Holder 2",
@@ -204,6 +233,7 @@ class TestCreateSupplier(FrappeTestCase):
         self.assertEqual(doc.supplier_type, "Individual")
         self.assertFalse(doc.tax_id)
 
+    @_needs_a_full_address
     def test_b2b_supplier_uses_the_core_tax_id(self):
         """There is no custom_vat_registration_number on Supplier here."""
         self.assertIsNone(frappe.get_meta("Supplier").get_field("custom_vat_registration_number"))
