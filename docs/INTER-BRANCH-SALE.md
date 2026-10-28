@@ -59,3 +59,18 @@ doctypes without the code: do not migrate it while the box is on the deploy bran
 
 Check the branch out on the box (SHA-gated), `reload_doc` the four doctypes on yht-test, QUIT the web workers, run the module,
 then restore the deploy branch. Never migrate live while it is checked out.
+
+## Re-test after the client's answer (2026-10-28)
+
+Settings on yht-test: Receivable `1004001 - CUSTOMERS - RECEIVABLES - KATC`, Cost of Goods Sold `Cost of Goods Sold - KATC`
+(the account 3,459 invoice and 2,464 delivery rows of 2026 actually post to; the Company default `40102` is used far less),
+Sales Income `Sales - KATC`, cost centre `2 - Kathoom Alkhobar Trading Company - KATC`, customer CU0022 only (the one ticked
+Internal; 8 more carry the company's own VAT number, which ones count is the client's call). Module: **29 of 29** on yht-test.
+Browser, as branch user abdulla@ (`scripts/ui_check_inter_branch_sale.py`): dashboard tile, new form, create + submit
+`KSIB-26-0001` (5.00 against cost 1.72), cancel refused. GL: SE Dr COGS 1.72 / Cr Stock In Hand 1.72; JE Dr Receivable 5.00
+(party CU0022) / Cr Sales 5.00; 0 tax rows, nothing to ZATCA.
+
+⚠️ **The box is checked out on `feature/inter-branch-sale` @ `2b06878`** (= deploy head `fa72f71` + this feature), so yht-test
+keeps working code. Live is unaffected (switch absent, 0 Inter Branch Sale doctypes, prints identical before/after). **Never
+migrate live while on it**: that creates the doctypes there. Going live = merge into the deploy branch + the switch + a
+migrate, in the window, after the client signs off on test.
